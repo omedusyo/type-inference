@@ -68,216 +68,171 @@ n4val =
 
 pair0 =
     -- (x, y)
-    Tuple { fst = x, snd = y }
+    Pair x y
 
 
 pair1 =
     -- (x, x)
-    Tuple { fst = x, snd = x }
+    Pair x x
 
 
 id =
     -- \x -> x
-    Abstraction { var = "x", body = VarUse "x" }
+    Abstraction "x" (VarUse "x")
 
 
 dup =
     -- \x -> (x, x)
-    Abstraction { var = "x", body = Tuple { fst = VarUse "x", snd = VarUse "x" } }
+    Abstraction "x" (Pair (VarUse "x") (VarUse "x"))
 
 
 twist =
     --  \tuple -> (tuple.snd, tuple.fst)
     Abstraction
-        { var = "tuple"
-        , body =
-            Tuple
-                { fst = Snd (VarUse "tuple")
-                , snd = Fst (VarUse "tuple")
-                }
-        }
+        "tuple"
+        (Pair (Snd (VarUse "tuple")) (Fst (VarUse "tuple")))
 
 
 apply =
     --  \f x -> f x
-    Abstraction
-        { var = "f"
-        , body =
-            Abstraction
-                { var = "x"
-                , body =
-                    Application { fn = VarUse "f", arg = VarUse "x" }
-                }
-        }
+    Abstraction "f"
+        (Abstraction "x"
+            (Application (VarUse "f") (VarUse "x"))
+        )
 
 
 pairing =
     -- \x y -> (x, y)
-    Abstraction
-        { var = "x"
-        , body =
-            Abstraction
-                { var = "y"
-                , body =
-                    Tuple { fst = VarUse "x", snd = VarUse "y" }
-                }
-        }
+    Abstraction "x"
+        (Abstraction "y"
+            (Pair (VarUse "x") (VarUse "y"))
+        )
 
 
 curry =
     -- \f x y -> f (x, y)
-    Abstraction
-        { var = "f"
-        , body =
-            Abstraction
-                { var = "x"
-                , body =
-                    Abstraction
-                        { var = "y"
-                        , body =
-                            Application
-                                { fn = VarUse "f"
-                                , arg =
-                                    Tuple { fst = VarUse "x", snd = VarUse "y" }
-                                }
-                        }
-                }
-        }
+    Abstraction "f"
+        (Abstraction "x"
+            (Abstraction "y"
+                (Application
+                    (VarUse "f")
+                    (Pair (VarUse "x") (VarUse "y"))
+                )
+            )
+        )
 
 
 uncurry =
     -- \f p -> (f (fst p)) (snd p)
-    Abstraction
-        { var = "f"
-        , body =
-            Abstraction
-                { var = "p"
-                , body =
-                    Application
-                        { fn =
-                            Application
-                                { fn = VarUse "f"
-                                , arg = Fst (VarUse "p")
-                                }
-                        , arg = Snd (VarUse "p")
-                        }
-                }
-        }
+    Abstraction "f"
+        (Abstraction "p"
+            (Application
+                (Application
+                    (VarUse "f")
+                    (Fst (VarUse "p"))
+                )
+                (Snd (VarUse "p"))
+            )
+        )
 
 
 apply0 =
-    Application { fn = apply, arg = dup }
+    Application apply dup
 
 
 apply1 =
-    Application { fn = apply0, arg = n0 }
+    Application apply0 n0
 
 
 evalAt0 =
-    Abstraction { var = "f", body = Application { fn = VarUse "f", arg = n0 } }
+    Abstraction "f" (Application (VarUse "f") n0)
 
 
 succ0 =
-    Abstraction { var = "n", body = NatSucc (VarUse "n") }
+    Abstraction "n" (NatSucc (VarUse "n"))
 
 
 case0 =
     -- \z -> case z of Left x -> x + 1, Right y -> y
-    Abstraction
-        { var = "z"
-        , body =
-            Case
-                { arg = VarUse "z"
-                , leftVar = "x"
-                , leftBody = NatSucc (VarUse "x")
-                , rightVar = "y"
-                , rightBody = VarUse "y"
-                }
-        }
+    Abstraction "z"
+        (Case
+            { arg = VarUse "z"
+            , leftVar = "x"
+            , leftBody = NatSucc (VarUse "x")
+            , rightVar = "y"
+            , rightBody = VarUse "y"
+            }
+        )
 
 
 add =
     -- Addition
     -- \x y -> x + y
-    Abstraction
-        { var = "x"
-        , body =
-            Abstraction
-                { var = "y"
-                , body =
-                    NatLoop
-                        { base = VarUse "x"
-                        , loop =
-                            { indexVar = "i"
-                            , stateVar = "s"
-                            , body = NatSucc (VarUse "s")
-                            }
-                        , arg = VarUse "y"
-                        }
+    Abstraction "x"
+        (Abstraction "y"
+            (NatLoop
+                { base = VarUse "x"
+                , loop =
+                    { indexVar = "i"
+                    , stateVar = "s"
+                    , body = NatSucc (VarUse "s")
+                    }
+                , arg = VarUse "y"
                 }
-        }
+            )
+        )
 
 
 mul =
     -- Multiplication
     -- \x y -> x * y
-    Abstraction
-        { var = "x"
-        , body =
-            Abstraction
-                { var = "y"
-                , body =
-                    NatLoop
-                        { base = n0
-                        , loop =
-                            { indexVar = "i"
-                            , stateVar = "s"
-                            , body = Application { fn = Application { fn = add, arg = VarUse "x" }, arg = VarUse "s" }
-                            }
-                        , arg = VarUse "y"
-                        }
+    Abstraction "x"
+        (Abstraction "y"
+            (NatLoop
+                { base = n0
+                , loop =
+                    { indexVar = "i"
+                    , stateVar = "s"
+                    , body = Application (Application add (VarUse "x")) (VarUse "s")
+                    }
+                , arg = VarUse "y"
                 }
-        }
+            )
+        )
 
 
 exp =
     -- Multiplication
     -- \x y -> x ^ y
-    Abstraction
-        { var = "x"
-        , body =
-            Abstraction
-                { var = "y"
-                , body =
-                    NatLoop
-                        { base = n1
-                        , loop =
-                            { indexVar = "i"
-                            , stateVar = "s"
-                            , body = Application { fn = Application { fn = mul, arg = VarUse "x" }, arg = VarUse "s" }
-                            }
-                        , arg = VarUse "y"
-                        }
+    Abstraction "x"
+        (Abstraction "y"
+            (NatLoop
+                { base = n1
+                , loop =
+                    { indexVar = "i"
+                    , stateVar = "s"
+                    , body = Application (Application mul (VarUse "x")) (VarUse "s")
+                    }
+                , arg = VarUse "y"
                 }
-        }
+            )
+        )
 
 
 sumTerm =
     -- Sum
     -- \N -> (N - 1) + ... + 2 + 3 + 1 + 0
-    Abstraction
-        { var = "N"
-        , body =
-            NatLoop
-                { base = n0
-                , loop =
-                    { indexVar = "j"
-                    , stateVar = "sum"
-                    , body = Application { fn = Application { fn = add, arg = VarUse "j" }, arg = VarUse "sum" }
-                    }
-                , arg = VarUse "N"
+    Abstraction "N"
+        (NatLoop
+            { base = n0
+            , loop =
+                { indexVar = "j"
+                , stateVar = "sum"
+                , body = Application (Application add (VarUse "j")) (VarUse "sum")
                 }
-        }
+            , arg = VarUse "N"
+            }
+        )
 
 
 

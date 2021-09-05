@@ -12,15 +12,16 @@ type LambdaTerm
       VarUse VarName
       -- ==Cartesian Product==
       -- intro
-    | Tuple { fst : LambdaTerm, snd : LambdaTerm }
+    | Pair LambdaTerm LambdaTerm
       -- elim
     | Fst LambdaTerm
     | Snd LambdaTerm
       -- ==Function Space==
       -- intro
-    | Abstraction { var : VarName, body : LambdaTerm }
+    | Abstraction VarName LambdaTerm
       -- elim
-    | Application { fn : LambdaTerm, arg : LambdaTerm }
+      -- first arg is FunctionExpression, the second is the ArgumentExpression
+    | Application LambdaTerm LambdaTerm
       -- ==Coproduct==
       -- intro
     | Left LambdaTerm
@@ -36,11 +37,8 @@ type LambdaTerm
       -- Booleans
     | BoolTrue
     | BoolFalse
-    | IfThenElse
-        { arg : LambdaTerm
-        , leftBody : LambdaTerm
-        , rightBody : LambdaTerm
-        }
+      -- first is the TestExpression then LeftBranch then RightBranch
+    | IfThenElse LambdaTerm LambdaTerm LambdaTerm
       --==Natural Number Object==
       -- intro
     | NatZero
@@ -62,7 +60,7 @@ type LambdaTerm
 
 type LambdaVal
     = -- ==Cartesian Product==
-      TupleVal { fst : LambdaVal, snd : LambdaVal }
+      PairVal LambdaVal LambdaVal
       -- ==Function Space==
     | Closure { env : LambdaEnv, var : VarName, body : LambdaTerm }
       -- ==Coproduct==
@@ -87,11 +85,6 @@ type LambdaType
     | Arrow LambdaType LambdaType
     | LambdaBool
     | LambdaNat
-      -- forall alpha (... alpha ...)
-    | Forall
-        { name : VarName
-        , body : LambdaType
-        }
 
 
 type alias LambdaEnv =
@@ -134,7 +127,7 @@ extend varName term env =
 
 type EvalError
     = UndefinedVar String
-    | ExpectedTuple
+    | ExpectedPair
     | ExpectedFunction
     | ExpectedLeftRight
     | ExpectedBoolean
@@ -163,7 +156,7 @@ eval env term =
                 Nothing ->
                     Err [ UndefinedVar varName ]
 
-        Tuple { fst, snd } ->
+        Pair fst snd ->
             let
                 evaledFstResult =
                     eval env fst
@@ -175,7 +168,7 @@ eval env term =
             -- TODO: I guess there are multiple possibilities...?
             case ( evaledFstResult, evaledSndResult ) of
                 ( Ok evaledFst, Ok evaledSnd ) ->
-                    Ok (TupleVal { fst = evaledFst, snd = evaledSnd })
+                    Ok (PairVal evaledFst evaledSnd)
 
                 ( Err errFst, Ok evaledSnd ) ->
                     Err errFst
@@ -194,11 +187,11 @@ eval env term =
             case evaledTermResult of
                 Ok evaledTerm ->
                     case evaledTerm of
-                        TupleVal { fst, snd } ->
+                        PairVal fst _ ->
                             Ok fst
 
                         _ ->
-                            Err [ ExpectedTuple ]
+                            Err [ ExpectedPair ]
 
                 Err err ->
                     Err err
@@ -211,19 +204,19 @@ eval env term =
             case evaledTermResult of
                 Ok evaledTerm ->
                     case evaledTerm of
-                        TupleVal { fst, snd } ->
+                        PairVal _ snd ->
                             Ok snd
 
                         _ ->
-                            Err [ ExpectedTuple ]
+                            Err [ ExpectedPair ]
 
                 Err err ->
                     Err err
 
-        Abstraction { var, body } ->
+        Abstraction var body ->
             Ok (Closure { env = env, var = var, body = body })
 
-        Application { fn, arg } ->
+        Application fn arg ->
             let
                 fnEvaledResult =
                     eval env fn
@@ -309,7 +302,7 @@ eval env term =
         BoolFalse ->
             Ok FalseVal
 
-        IfThenElse { arg, leftBody, rightBody } ->
+        IfThenElse arg leftBody rightBody ->
             let
                 argEvaledResult =
                     eval env arg
@@ -398,7 +391,7 @@ showTerm term =
         VarUse varname ->
             String.concat [ "$", varname ]
 
-        Tuple { fst, snd } ->
+        Pair fst snd ->
             String.concat [ "(", showTerm fst, ", ", showTerm snd, ")" ]
 
         Fst term1 ->
@@ -407,10 +400,10 @@ showTerm term =
         Snd term1 ->
             String.concat [ showTerm term1, ".1" ]
 
-        Abstraction { var, body } ->
+        Abstraction var body ->
             String.concat [ "lam(", var, " -> ", showTerm body, ")" ]
 
-        Application { fn, arg } ->
+        Application fn arg ->
             String.concat [ "[", showTerm fn, " ", showTerm arg, "]" ]
 
         Left term1 ->
@@ -440,7 +433,7 @@ showTerm term =
         BoolFalse ->
             "False"
 
-        IfThenElse { arg, leftBody, rightBody } ->
+        IfThenElse arg leftBody rightBody ->
             String.concat
                 [ "if("
                 , showTerm arg
@@ -498,9 +491,6 @@ showType type0 =
 
         LambdaNat ->
             "Nat"
-
-        _ ->
-            Debug.todo ""
 
 
 newTypeVar : Int -> ( Int, LambdaType )
@@ -595,9 +585,6 @@ expandType type0 eqs0 =
 
         LambdaNat ->
             LambdaNat
-
-        _ ->
-            Debug.todo ""
 
 
 unification : LambdaType -> LambdaType -> Equations -> Maybe ( Equations, LambdaType )
@@ -710,10 +697,6 @@ unification type0Unexpanded type1Unexpanded eqs0 =
         ( LambdaNat, _ ) ->
             Nothing
 
-        -- TODO: Forall? maybe just don't have Forall?
-        _ ->
-            Debug.todo ""
-
 
 
 -- TODO: abstract
@@ -736,7 +719,7 @@ infer term n context0 eqs0 =
                     in
                     Ok ( ( m, context0 |> extendContext varname typeVar, eqs0 ), typeVar )
 
-        Tuple { fst, snd } ->
+        Pair fst snd ->
             let
                 typeFstResult =
                     infer fst n context0 eqs0
@@ -821,7 +804,7 @@ infer term n context0 eqs0 =
                                 Err [ ExpectedProductType ]
                     )
 
-        Abstraction { var, body } ->
+        Abstraction var body ->
             -- TODO
             let
                 ( m, typeVar ) =
@@ -843,7 +826,7 @@ infer term n context0 eqs0 =
                         Ok ( ( k, context2, eqs1 ), Arrow typeVar typeBody )
                     )
 
-        Application { fn, arg } ->
+        Application fn arg ->
             let
                 typeFnResult =
                     infer fn n context0 eqs0
@@ -978,7 +961,7 @@ infer term n context0 eqs0 =
         BoolFalse ->
             Ok ( ( n, context0, eqs0 ), LambdaBool )
 
-        IfThenElse { arg, leftBody, rightBody } ->
+        IfThenElse arg leftBody rightBody ->
             let
                 typeArgResult =
                     infer arg n context0 eqs0
@@ -1139,7 +1122,7 @@ showFinalInfer term =
 showVal : LambdaVal -> String
 showVal val =
     case val of
-        TupleVal { fst, snd } ->
+        PairVal fst snd ->
             String.concat [ "(", showVal fst, ", ", showVal snd, ")" ]
 
         LeftVal val1 ->
