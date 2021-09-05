@@ -729,13 +729,11 @@ infer term n context0 eqs0 =
                     (\( ( m, context1, eqs1 ), typeFst ) ->
                         let
                             typeSndResult =
-                                -- TODO: Should I here use context0 and not context1 here?
                                 infer snd m context1 eqs1
                         in
                         typeSndResult
                             |> Result.andThen
                                 (\( ( k, context2, eqs2 ), typeSnd ) ->
-                                    -- TODO: Should I merge contexts... `context1` and `context2`?
                                     Ok ( ( k, context2, eqs2 ), Product typeFst typeSnd )
                                 )
                     )
@@ -805,7 +803,6 @@ infer term n context0 eqs0 =
                     )
 
         Abstraction var body ->
-            -- TODO
             let
                 ( m, typeVar ) =
                     newTypeVar n
@@ -815,12 +812,9 @@ infer term n context0 eqs0 =
             in
             typeBodyResult
                 |> Result.andThen
-                    -- TODO: q. is this correct? Shou;d I return `context0` here and not the context of `typeBodyResult`?
-                    --       a. I should return `typeBodyResult` without the binding `var : typeVar`
                     (\( ( k, context1, eqs1 ), typeBody ) ->
                         let
                             context2 =
-                                -- TODO: remove binding `var : typeVar` from `context1`
                                 context1 |> popVarFromContext var
                         in
                         Ok ( ( k, context2, eqs1 ), Arrow typeVar typeBody )
