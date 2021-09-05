@@ -79,11 +79,11 @@ type NatValue
     | NatSuccValue NatValue
 
 
-type LambdaType
+type Type
     = VarType Int
-    | Product LambdaType LambdaType
-    | Sum LambdaType LambdaType
-    | Arrow LambdaType LambdaType
+    | Product Type Type
+    | Sum Type Type
+    | Arrow Type Type
     | LambdaBool
     | LambdaNat
 
@@ -469,7 +469,7 @@ showTerm term =
                 ]
 
 
-showType : LambdaType -> String
+showType : Type -> String
 showType type0 =
     case type0 of
         VarType n ->
@@ -494,7 +494,7 @@ showType type0 =
             "Nat"
 
 
-newTypeVar : Int -> ( Int, LambdaType )
+newTypeVar : Int -> ( Int, Type )
 newTypeVar n =
     ( n + 1, VarType n )
 
@@ -505,7 +505,7 @@ newTypeVar n =
 
 
 type alias Context =
-    Dict TermVarName (List LambdaType)
+    Dict TermVarName (List Type)
 
 
 popVarFromContext : String -> Context -> Context
@@ -515,13 +515,13 @@ popVarFromContext varName context0 =
         context0
 
 
-lookupType : TermVarName -> Context -> Maybe LambdaType
+lookupType : TermVarName -> Context -> Maybe Type
 lookupType varName context0 =
     AssocList.get varName context0
         |> Maybe.andThen List.head
 
 
-pushVarToContext : TermVarName -> LambdaType -> Context -> Context
+pushVarToContext : TermVarName -> Type -> Context -> Context
 pushVarToContext varName type0 context0 =
     AssocList.update varName
         (\maybeBinding ->
@@ -536,7 +536,7 @@ pushVarToContext varName type0 context0 =
 
 
 type alias Equations =
-    Dict Int LambdaType
+    Dict Int Type
 
 
 emptyEquations : Equations
@@ -544,17 +544,17 @@ emptyEquations =
     AssocList.empty
 
 
-lookupEquations : Int -> Equations -> Maybe LambdaType
+lookupEquations : Int -> Equations -> Maybe Type
 lookupEquations =
     AssocList.get
 
 
-extendEquations : Int -> LambdaType -> Equations -> Equations
+extendEquations : Int -> Type -> Equations -> Equations
 extendEquations varname type0 eqs =
     AssocList.insert varname type0 eqs
 
 
-expandType : LambdaType -> Equations -> LambdaType
+expandType : Type -> Equations -> Type
 expandType type0 eqs0 =
     -- This can loop on itself
     -- TODO: implement cycle detection
@@ -587,7 +587,7 @@ expandType type0 eqs0 =
             LambdaNat
 
 
-unification : LambdaType -> LambdaType -> Equations -> Maybe ( Equations, LambdaType )
+unification : Type -> Type -> Equations -> Maybe ( Equations, Type )
 unification type0Unexpanded type1Unexpanded eqs0 =
     let
         type0 =
@@ -701,10 +701,10 @@ unification type0Unexpanded type1Unexpanded eqs0 =
 
 -- TODO: abstract
 -- type alias State =
---     Int -> Context -> Result (List TypeError) ( Int, LambdaType )
+--     Int -> Context -> Result (List TypeError) ( Int, Type )
 
 
-infer : Term -> Int -> Context -> Equations -> Result (List TypeError) ( ( Int, Context, Equations ), LambdaType )
+infer : Term -> Int -> Context -> Equations -> Result (List TypeError) ( ( Int, Context, Equations ), Type )
 infer term n context0 eqs0 =
     case term of
         VarUse varname ->
@@ -1086,7 +1086,7 @@ infer term n context0 eqs0 =
                     )
 
 
-infer0 : Term -> Result (List TypeError) ( Equations, LambdaType )
+infer0 : Term -> Result (List TypeError) ( Equations, Type )
 infer0 term =
     infer term 0 emptyEnvironment emptyEquations
         |> Result.map
