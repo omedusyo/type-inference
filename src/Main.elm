@@ -145,6 +145,8 @@ type TypeError
     = ExpectedProductType
     | ExpectedArrowType
     | ExpectedNatType
+    | ExpectedSumType
+    | ExpectedMatchingTypesInCaseBranches
     | ExpectedBoolType
     | ExpectedMatchingTypesInIfThenElseBranches
 
@@ -906,7 +908,58 @@ infer term n context0 eqs0 =
             typeArgResult
                 |> Result.andThen
                     (\( ( m, context1, eqs1 ), typeArg ) ->
-                        Debug.todo ""
+                        let
+                            ( k1, leftTypeVar ) =
+                                newTypeVar m
+
+                            ( k2, rightTypeVar ) =
+                                newTypeVar k1
+
+                            maybeEqs2 =
+                                eqs1 |> unification (Sum leftTypeVar rightTypeVar) typeArg
+                        in
+                        case maybeEqs2 of
+                            Just ( eqs2, sumType ) ->
+                                case sumType of
+                                    Sum leftType rightType ->
+                                        let
+                                            typeLeftBodyResult =
+                                                infer leftBody k2 (context1 |> extendContext leftVar leftType) eqs2
+                                        in
+                                        typeLeftBodyResult
+                                            |> Result.andThen
+                                                (\( ( k3, context2, eqs3 ), typeLeftBody ) ->
+                                                    let
+                                                        context3 =
+                                                            context2 |> popContext leftVar
+
+                                                        typeRightBodyResult =
+                                                            infer rightBody k3 (context3 |> extendContext rightVar rightType) eqs3
+                                                    in
+                                                    typeRightBodyResult
+                                                        |> Result.andThen
+                                                            (\( ( k4, context4, eqs4 ), typeRightBody ) ->
+                                                                let
+                                                                    context5 =
+                                                                        context4 |> popContext rightVar
+
+                                                                    maybeEqs5 =
+                                                                        eqs4 |> unification typeLeftBody typeRightBody
+                                                                in
+                                                                case maybeEqs5 of
+                                                                    Just ( eqs5, typeResult ) ->
+                                                                        Ok ( ( k4, context5, eqs5 ), typeResult )
+
+                                                                    Nothing ->
+                                                                        Err [ ExpectedMatchingTypesInCaseBranches ]
+                                                            )
+                                                )
+
+                                    _ ->
+                                        Err [ ExpectedSumType ]
+
+                            Nothing ->
+                                Err [ ExpectedSumType ]
                     )
 
         BoolTrue ->
