@@ -264,18 +264,18 @@ exp =
 
 sumTerm =
     -- Sum
-    -- \x -> (x - 1) + ... + 2 + 3 + 1 + 0
+    -- \N -> (N - 1) + ... + 2 + 3 + 1 + 0
     Abstraction
-        { var = "x"
+        { var = "N"
         , body =
             NatLoop
                 { base = n0
                 , loop =
-                    { indexVar = "i"
-                    , stateVar = "s"
-                    , body = Application { fn = Application { fn = add, arg = VarUse "i" }, arg = VarUse "s" }
+                    { indexVar = "j"
+                    , stateVar = "sum"
+                    , body = Application { fn = Application { fn = add, arg = VarUse "j" }, arg = VarUse "sum" }
                     }
-                , arg = VarUse "x"
+                , arg = VarUse "N"
                 }
         }
 

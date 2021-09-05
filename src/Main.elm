@@ -149,6 +149,7 @@ type TypeError
     | ExpectedMatchingTypesInCaseBranches
     | ExpectedBoolType
     | ExpectedMatchingTypesInIfThenElseBranches
+    | ExpectedBaseUnifiesWithLoopBodyType
 
 
 eval : LambdaEnv -> LambdaTerm -> Result (List EvalError) LambdaVal
@@ -1036,8 +1037,61 @@ infer term n context0 eqs0 =
                                 Err [ ExpectedNatType ]
                     )
 
-        _ ->
-            Debug.todo ""
+        NatLoop { base, loop, arg } ->
+            let
+                baseTypeResult =
+                    infer base n context0 eqs0
+            in
+            baseTypeResult
+                |> Result.andThen
+                    (\( ( m, context1, eqs1 ), baseType ) ->
+                        let
+                            argTypeResult =
+                                infer arg m context1 eqs1
+                        in
+                        argTypeResult
+                            |> Result.andThen
+                                (\( ( k1, context2, eqs2 ), argType ) ->
+                                    let
+                                        maybeEqs3 =
+                                            eqs2 |> unification argType LambdaNat
+                                    in
+                                    case maybeEqs3 of
+                                        Just ( eqs3, _ ) ->
+                                            let
+                                                typeLoopBodyResult =
+                                                    infer loop.body
+                                                        k1
+                                                        (context2
+                                                            |> extendContext loop.indexVar LambdaNat
+                                                            |> extendContext loop.stateVar baseType
+                                                        )
+                                                        eqs3
+                                            in
+                                            typeLoopBodyResult
+                                                |> Result.andThen
+                                                    (\( ( k2, context3, eqs4 ), typeLoopBody ) ->
+                                                        let
+                                                            context4 =
+                                                                context3
+                                                                    |> popContext loop.stateVar
+                                                                    |> popContext loop.indexVar
+
+                                                            maybeEqs5 =
+                                                                eqs4 |> unification typeLoopBody baseType
+                                                        in
+                                                        case maybeEqs5 of
+                                                            Just ( eqs5, stateType ) ->
+                                                                Ok ( ( k2, context4, eqs5 ), stateType )
+
+                                                            Nothing ->
+                                                                Err [ ExpectedBaseUnifiesWithLoopBodyType ]
+                                                    )
+
+                                        Nothing ->
+                                            Err [ ExpectedNatType ]
+                                )
+                    )
 
 
 infer0 : LambdaTerm -> Result (List TypeError) ( Equations, LambdaType )
