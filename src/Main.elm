@@ -79,8 +79,12 @@ type NatValue
     | NatSuccValue NatValue
 
 
+type alias TypeVarName =
+    Int
+
+
 type Type
-    = VarType Int
+    = VarType TypeVarName
     | Product Type Type
     | Sum Type Type
     | Arrow Type Type
@@ -494,7 +498,7 @@ showType type0 =
             "Nat"
 
 
-newTypeVar : Int -> ( Int, Type )
+newTypeVar : TypeVarName -> ( TypeVarName, Type )
 newTypeVar n =
     ( n + 1, VarType n )
 
@@ -536,7 +540,7 @@ pushVarToContext varName type0 context0 =
 
 
 type alias Equations =
-    Dict Int Type
+    Dict TypeVarName Type
 
 
 emptyEquations : Equations
@@ -544,12 +548,12 @@ emptyEquations =
     AssocList.empty
 
 
-lookupEquations : Int -> Equations -> Maybe Type
+lookupEquations : TypeVarName -> Equations -> Maybe Type
 lookupEquations =
     AssocList.get
 
 
-extendEquations : Int -> Type -> Equations -> Equations
+extendEquations : TypeVarName -> Type -> Equations -> Equations
 extendEquations varname type0 eqs =
     AssocList.insert varname type0 eqs
 
@@ -701,10 +705,10 @@ unification type0Unexpanded type1Unexpanded eqs0 =
 
 -- TODO: abstract
 -- type alias State =
---     Int -> Context -> Result (List TypeError) ( Int, Type )
+--     TypeVarName -> Context -> Result (List TypeError) ( TypeVarName, Type )
 
 
-infer : Term -> Int -> Context -> Equations -> Result (List TypeError) ( ( Int, Context, Equations ), Type )
+infer : Term -> TypeVarName -> Context -> Equations -> Result (List TypeError) ( ( TypeVarName, Context, Equations ), Type )
 infer term n context0 eqs0 =
     case term of
         VarUse varname ->
