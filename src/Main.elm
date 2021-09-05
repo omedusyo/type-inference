@@ -1153,7 +1153,7 @@ showValue val =
             "False"
 
         NatValue natVal ->
-            showNatVal natVal
+            showNatValue natVal
 
 
 natValToInt : NatValue -> Int
@@ -1175,13 +1175,13 @@ intToNatTerm n =
         NatSucc (intToNatTerm (n - 1))
 
 
-showNatVal : NatValue -> String
-showNatVal natVal =
+showNatValue : NatValue -> String
+showNatValue natVal =
     -- case natVal of
     --     NatZeroVal ->
     --         "Z"
     --     NatSuccVal val1 ->
-    --         String.concat [ "S(", showNatVal val1, ")" ]
+    --         String.concat [ "S(", showNatValue val1, ")" ]
     natValToInt natVal
         |> String.fromInt
 
