@@ -39,33 +39,6 @@ n4 =
     NatSucc n3
 
 
-env0 =
-    emptyEnv
-        |> extend "X" (NatVal n0val)
-        |> extend "X" (NatVal n1val)
-        |> extend "Y" (NatVal n2val)
-
-
-n0val =
-    NatZeroVal
-
-
-n1val =
-    NatSuccVal n0val
-
-
-n2val =
-    NatSuccVal n1val
-
-
-n3val =
-    NatSuccVal n2val
-
-
-n4val =
-    NatSuccVal n3val
-
-
 pair0 =
     -- (x, y)
     Pair x y
@@ -233,11 +206,3 @@ sumTerm =
             , arg = VarUse "N"
             }
         )
-
-
-
--- inference
--- \p -> p.0
--- p : '0
--- p.0 : '1 where p : ('1, '2)
--- \p -> p.0 :

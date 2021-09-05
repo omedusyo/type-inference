@@ -3,79 +3,80 @@ module Main exposing (..)
 import AssocList exposing (Dict)
 
 
-type alias VarName =
+type alias TermVarName =
+    -- TODO: We assume that variables range over lambda values, so maybe it would be better to call this ValueVarName?
     String
 
 
-type LambdaTerm
+type Term
     = -- ==Variables==
-      VarUse VarName
+      VarUse TermVarName
       -- ==Cartesian Product==
       -- intro
-    | Pair LambdaTerm LambdaTerm
+    | Pair Term Term
       -- elim
-    | Fst LambdaTerm
-    | Snd LambdaTerm
+    | Fst Term
+    | Snd Term
       -- ==Function Space==
       -- intro
-    | Abstraction VarName LambdaTerm
+    | Abstraction TermVarName Term
       -- elim
       -- first arg is FunctionExpression, the second is the ArgumentExpression
-    | Application LambdaTerm LambdaTerm
+    | Application Term Term
       -- ==Coproduct==
       -- intro
-    | Left LambdaTerm
-    | Right LambdaTerm
+    | Left Term
+    | Right Term
       -- elim
     | Case
-        { arg : LambdaTerm
-        , leftVar : VarName
-        , leftBody : LambdaTerm
-        , rightVar : VarName
-        , rightBody : LambdaTerm
+        { arg : Term
+        , leftVar : TermVarName
+        , leftBody : Term
+        , rightVar : TermVarName
+        , rightBody : Term
         }
       -- Booleans
     | BoolTrue
     | BoolFalse
       -- first is the TestExpression then LeftBranch then RightBranch
-    | IfThenElse LambdaTerm LambdaTerm LambdaTerm
+    | IfThenElse Term Term Term
       --==Natural Number Object==
       -- intro
     | NatZero
-    | NatSucc LambdaTerm
+    | NatSucc Term
       -- elim
       -- f : Nat -> X
       -- f 0 = ....
       -- f (n + 1) = you can use `f n` here
     | NatLoop
-        { base : LambdaTerm
+        { base : Term
         , loop :
-            { indexVar : VarName
-            , stateVar : VarName -- <- this should be interpreted as `f n`
-            , body : LambdaTerm
+            { indexVar : TermVarName
+            , stateVar : TermVarName -- <- this should be interpreted as `f n`
+            , body : Term
             }
-        , arg : LambdaTerm
+        , arg : Term
         }
 
 
-type LambdaVal
+type Value
     = -- ==Cartesian Product==
-      PairVal LambdaVal LambdaVal
+      PairValue Value Value
       -- ==Function Space==
-    | Closure { env : LambdaEnv, var : VarName, body : LambdaTerm }
+    | Closure { env : TermEnvironment, var : TermVarName, body : Term }
       -- ==Coproduct==
-    | LeftVal LambdaVal
-    | RightVal LambdaVal
+    | LeftValue Value
+    | RightValue Value
       -- Booleans
-    | TrueVal
-    | FalseVal
+    | TrueValue
+    | FalseValue
       --==Natural Number Object==
-    | NatVal NatVal
+    | NatValue NatValue
 
 
-type NatVal
-    = NatZeroVal
-    | NatSuccVal NatVal
+type NatValue
+    = NatZeroValue
+    | NatSuccValue NatValue
 
 
 type LambdaType
@@ -87,32 +88,32 @@ type LambdaType
     | LambdaNat
 
 
-type alias LambdaEnv =
-    -- we have `List LambdaTerm` because of shadowing of variables
-    Dict VarName (List LambdaVal)
+type alias TermEnvironment =
+    -- We have `List Value` instead of `Value` because of shadowing of variables
+    Dict TermVarName (List Value)
 
 
-emptyEnv =
+emptyEnvironment =
     AssocList.empty
 
 
-lookup : VarName -> LambdaEnv -> Maybe LambdaVal
-lookup varName env =
+lookupEnvironment : TermVarName -> TermEnvironment -> Maybe Value
+lookupEnvironment varName env =
     case AssocList.get varName env of
-        Just lambdaTerms ->
-            case lambdaTerms of
+        Just terms ->
+            case terms of
                 [] ->
                     Nothing
 
-                lambdaTerm :: _ ->
-                    Just lambdaTerm
+                term0 :: _ ->
+                    Just term0
 
         Nothing ->
             Nothing
 
 
-extend : VarName -> LambdaVal -> LambdaEnv -> LambdaEnv
-extend varName term env =
+extendEnvironment : TermVarName -> Value -> TermEnvironment -> TermEnvironment
+extendEnvironment varName term env =
     AssocList.update varName
         (\maybeBinding ->
             case maybeBinding of
@@ -145,11 +146,11 @@ type TypeError
     | ExpectedBaseUnifiesWithLoopBodyType
 
 
-eval : LambdaEnv -> LambdaTerm -> Result (List EvalError) LambdaVal
+eval : TermEnvironment -> Term -> Result (List EvalError) Value
 eval env term =
     case term of
         VarUse varName ->
-            case lookup varName env of
+            case lookupEnvironment varName env of
                 Just result ->
                     Ok result
 
@@ -168,7 +169,7 @@ eval env term =
             -- TODO: I guess there are multiple possibilities...?
             case ( evaledFstResult, evaledSndResult ) of
                 ( Ok evaledFst, Ok evaledSnd ) ->
-                    Ok (PairVal evaledFst evaledSnd)
+                    Ok (PairValue evaledFst evaledSnd)
 
                 ( Err errFst, Ok evaledSnd ) ->
                     Err errFst
@@ -187,7 +188,7 @@ eval env term =
             case evaledTermResult of
                 Ok evaledTerm ->
                     case evaledTerm of
-                        PairVal fst _ ->
+                        PairValue fst _ ->
                             Ok fst
 
                         _ ->
@@ -204,7 +205,7 @@ eval env term =
             case evaledTermResult of
                 Ok evaledTerm ->
                     case evaledTerm of
-                        PairVal _ snd ->
+                        PairValue _ snd ->
                             Ok snd
 
                         _ ->
@@ -231,7 +232,7 @@ eval env term =
                         Ok argEvaled ->
                             let
                                 newEnv =
-                                    extend var argEvaled closure.env
+                                    extendEnvironment var argEvaled closure.env
                             in
                             eval newEnv body
 
@@ -251,7 +252,7 @@ eval env term =
             in
             case evaledTermResult of
                 Ok evaledTerm ->
-                    Ok (LeftVal evaledTerm)
+                    Ok (LeftValue evaledTerm)
 
                 Err err ->
                     Err err
@@ -263,7 +264,7 @@ eval env term =
             in
             case evaledTermResult of
                 Ok evaledTerm ->
-                    Ok (RightVal evaledTerm)
+                    Ok (RightValue evaledTerm)
 
                 Err err ->
                     Err err
@@ -276,17 +277,17 @@ eval env term =
             case argEvaledResult of
                 Ok argEvaled ->
                     case argEvaled of
-                        LeftVal val ->
+                        LeftValue val ->
                             let
                                 newEnv =
-                                    extend leftVar val env
+                                    extendEnvironment leftVar val env
                             in
                             eval newEnv leftBody
 
-                        RightVal val ->
+                        RightValue val ->
                             let
                                 newEnv =
-                                    extend rightVar val env
+                                    extendEnvironment rightVar val env
                             in
                             eval newEnv rightBody
 
@@ -297,10 +298,10 @@ eval env term =
                     Err errs
 
         BoolTrue ->
-            Ok TrueVal
+            Ok TrueValue
 
         BoolFalse ->
-            Ok FalseVal
+            Ok FalseValue
 
         IfThenElse arg leftBody rightBody ->
             let
@@ -310,10 +311,10 @@ eval env term =
             case argEvaledResult of
                 Ok argEvaled ->
                     case argEvaled of
-                        TrueVal ->
+                        TrueValue ->
                             eval env leftBody
 
-                        FalseVal ->
+                        FalseValue ->
                             eval env rightBody
 
                         _ ->
@@ -323,7 +324,7 @@ eval env term =
                     Err errs
 
         NatZero ->
-            Ok (NatVal NatZeroVal)
+            Ok (NatValue NatZeroValue)
 
         NatSucc term1 ->
             let
@@ -333,8 +334,8 @@ eval env term =
             case term1EvaledResult of
                 Ok argEvaled ->
                     case argEvaled of
-                        NatVal natVal ->
-                            Ok (NatVal (NatSuccVal natVal))
+                        NatValue natVal ->
+                            Ok (NatValue (NatSuccValue natVal))
 
                         _ ->
                             Err [ ExpectedNat ]
@@ -351,14 +352,14 @@ eval env term =
             case argEvaledResult of
                 Ok argEvaled ->
                     case argEvaled of
-                        NatVal natVal ->
+                        NatValue natVal ->
                             let
                                 evalNatLoop natVal0 =
                                     case natVal0 of
-                                        NatZeroVal ->
+                                        NatZeroValue ->
                                             eval env base
 
-                                        NatSuccVal natVal1 ->
+                                        NatSuccValue natVal1 ->
                                             let
                                                 prevResult =
                                                     evalNatLoop natVal1
@@ -368,8 +369,8 @@ eval env term =
                                                     let
                                                         newEnv =
                                                             env
-                                                                |> extend loop.indexVar (NatVal natVal1)
-                                                                |> extend loop.stateVar prevVal
+                                                                |> extendEnvironment loop.indexVar (NatValue natVal1)
+                                                                |> extendEnvironment loop.stateVar prevVal
                                                     in
                                                     eval newEnv loop.body
 
@@ -385,7 +386,7 @@ eval env term =
                     Err errs
 
 
-showTerm : LambdaTerm -> String
+showTerm : Term -> String
 showTerm term =
     case term of
         VarUse varname ->
@@ -504,7 +505,7 @@ newTypeVar n =
 
 
 type alias Context =
-    Dict VarName (List LambdaType)
+    Dict TermVarName (List LambdaType)
 
 
 popVarFromContext : String -> Context -> Context
@@ -514,15 +515,14 @@ popVarFromContext varName context0 =
         context0
 
 
-lookupType : VarName -> Context -> Maybe LambdaType
+lookupType : TermVarName -> Context -> Maybe LambdaType
 lookupType varName context0 =
     AssocList.get varName context0
         |> Maybe.andThen List.head
 
 
-extendContext : VarName -> LambdaType -> Context -> Context
-extendContext varName type0 context0 =
-    -- TODO: rename to pushVarToContext
+pushVarToContext : TermVarName -> LambdaType -> Context -> Context
+pushVarToContext varName type0 context0 =
     AssocList.update varName
         (\maybeBinding ->
             case maybeBinding of
@@ -539,13 +539,13 @@ type alias Equations =
     Dict Int LambdaType
 
 
-emptyEqs : Equations
-emptyEqs =
+emptyEquations : Equations
+emptyEquations =
     AssocList.empty
 
 
-lookupTypeVar : Int -> Equations -> Maybe LambdaType
-lookupTypeVar =
+lookupEquations : Int -> Equations -> Maybe LambdaType
+lookupEquations =
     AssocList.get
 
 
@@ -562,7 +562,7 @@ expandType type0 eqs0 =
         VarType n ->
             let
                 maybeType1 =
-                    lookupTypeVar n eqs0
+                    lookupEquations n eqs0
             in
             case maybeType1 of
                 Just type1 ->
@@ -704,7 +704,7 @@ unification type0Unexpanded type1Unexpanded eqs0 =
 --     Int -> Context -> Result (List TypeError) ( Int, LambdaType )
 
 
-infer : LambdaTerm -> Int -> Context -> Equations -> Result (List TypeError) ( ( Int, Context, Equations ), LambdaType )
+infer : Term -> Int -> Context -> Equations -> Result (List TypeError) ( ( Int, Context, Equations ), LambdaType )
 infer term n context0 eqs0 =
     case term of
         VarUse varname ->
@@ -717,7 +717,7 @@ infer term n context0 eqs0 =
                         ( m, typeVar ) =
                             newTypeVar n
                     in
-                    Ok ( ( m, context0 |> extendContext varname typeVar, eqs0 ), typeVar )
+                    Ok ( ( m, context0 |> pushVarToContext varname typeVar, eqs0 ), typeVar )
 
         Pair fst snd ->
             let
@@ -811,7 +811,7 @@ infer term n context0 eqs0 =
                     newTypeVar n
 
                 typeBodyResult =
-                    infer body m (context0 |> extendContext var typeVar) eqs0
+                    infer body m (context0 |> pushVarToContext var typeVar) eqs0
             in
             typeBodyResult
                 |> Result.andThen
@@ -917,7 +917,7 @@ infer term n context0 eqs0 =
                                     Sum leftType rightType ->
                                         let
                                             typeLeftBodyResult =
-                                                infer leftBody k2 (context1 |> extendContext leftVar leftType) eqs2
+                                                infer leftBody k2 (context1 |> pushVarToContext leftVar leftType) eqs2
                                         in
                                         typeLeftBodyResult
                                             |> Result.andThen
@@ -927,7 +927,7 @@ infer term n context0 eqs0 =
                                                             context2 |> popVarFromContext leftVar
 
                                                         typeRightBodyResult =
-                                                            infer rightBody k3 (context3 |> extendContext rightVar rightType) eqs3
+                                                            infer rightBody k3 (context3 |> pushVarToContext rightVar rightType) eqs3
                                                     in
                                                     typeRightBodyResult
                                                         |> Result.andThen
@@ -1055,8 +1055,8 @@ infer term n context0 eqs0 =
                                                     infer loop.body
                                                         k1
                                                         (context2
-                                                            |> extendContext loop.indexVar LambdaNat
-                                                            |> extendContext loop.stateVar baseType
+                                                            |> pushVarToContext loop.indexVar LambdaNat
+                                                            |> pushVarToContext loop.stateVar baseType
                                                         )
                                                         eqs3
                                             in
@@ -1086,16 +1086,16 @@ infer term n context0 eqs0 =
                     )
 
 
-infer0 : LambdaTerm -> Result (List TypeError) ( Equations, LambdaType )
+infer0 : Term -> Result (List TypeError) ( Equations, LambdaType )
 infer0 term =
-    infer term 0 emptyEnv emptyEqs
+    infer term 0 emptyEnvironment emptyEquations
         |> Result.map
             (\( ( _, _, eqs ), type1 ) ->
                 ( eqs, type1 )
             )
 
 
-showInfer0 : LambdaTerm -> Maybe String
+showInfer0 : Term -> Maybe String
 showInfer0 term =
     case infer0 term of
         Ok ( _, type1 ) ->
@@ -1109,7 +1109,7 @@ showInfer0 term =
 -- This expands the final type according to equations
 
 
-showFinalInfer : LambdaTerm -> Maybe String
+showFinalInfer : Term -> Maybe String
 showFinalInfer term =
     case infer0 term of
         Ok ( eqs, type1 ) ->
@@ -1119,22 +1119,22 @@ showFinalInfer term =
             Nothing
 
 
-showVal : LambdaVal -> String
-showVal val =
+showValue : Value -> String
+showValue val =
     case val of
-        PairVal fst snd ->
-            String.concat [ "(", showVal fst, ", ", showVal snd, ")" ]
+        PairValue fst snd ->
+            String.concat [ "(", showValue fst, ", ", showValue snd, ")" ]
 
-        LeftVal val1 ->
-            String.concat [ "L(", showVal val1, ")" ]
+        LeftValue val1 ->
+            String.concat [ "L(", showValue val1, ")" ]
 
-        RightVal val1 ->
-            String.concat [ "R(", showVal val1, ")" ]
+        RightValue val1 ->
+            String.concat [ "R(", showValue val1, ")" ]
 
         Closure { env, var, body } ->
             String.concat
                 [ "{"
-                , showEnv env
+                , showEnvironment env
                 , if AssocList.isEmpty env then
                     "lam("
 
@@ -1146,27 +1146,27 @@ showVal val =
                 , ")}"
                 ]
 
-        TrueVal ->
+        TrueValue ->
             "True"
 
-        FalseVal ->
+        FalseValue ->
             "False"
 
-        NatVal natVal ->
+        NatValue natVal ->
             showNatVal natVal
 
 
-natValToInt : NatVal -> Int
+natValToInt : NatValue -> Int
 natValToInt natVal =
     case natVal of
-        NatZeroVal ->
+        NatZeroValue ->
             0
 
-        NatSuccVal val1 ->
+        NatSuccValue val1 ->
             1 + natValToInt val1
 
 
-intToNatTerm : Int -> LambdaTerm
+intToNatTerm : Int -> Term
 intToNatTerm n =
     if n == 0 then
         NatZero
@@ -1175,7 +1175,7 @@ intToNatTerm n =
         NatSucc (intToNatTerm (n - 1))
 
 
-showNatVal : NatVal -> String
+showNatVal : NatValue -> String
 showNatVal natVal =
     -- case natVal of
     --     NatZeroVal ->
@@ -1186,15 +1186,15 @@ showNatVal natVal =
         |> String.fromInt
 
 
-showEnv : LambdaEnv -> String
-showEnv env =
+showEnvironment : TermEnvironment -> String
+showEnvironment env =
     env
         |> AssocList.toList
         |> List.concatMap
             (\( varname, vals ) ->
                 case List.head vals of
                     Just val ->
-                        [ String.concat [ varname, " := ", showVal val ] ]
+                        [ String.concat [ varname, " := ", showValue val ] ]
 
                     Nothing ->
                         []
@@ -1202,10 +1202,10 @@ showEnv env =
         |> String.join ", "
 
 
-showEval : LambdaEnv -> LambdaTerm -> Result (List EvalError) String
+showEval : TermEnvironment -> Term -> Result (List EvalError) String
 showEval env term =
     eval env term
         |> Result.map
             (\val ->
-                String.concat [ showTerm term, "  ~~>  ", showVal val ]
+                String.concat [ showTerm term, "  ~~>  ", showValue val ]
             )
