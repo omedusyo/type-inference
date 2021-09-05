@@ -503,37 +503,46 @@ showType type0 =
             Debug.todo ""
 
 
-
--- TODO: change it to `Dict VarName (List LambdaType)`
---       where the list serves as a stack of types
---         - any element in the stack shadows everything below it
-
-
-type alias Context =
-    Dict VarName LambdaType
-
-
 newTypeVar : Int -> ( Int, LambdaType )
 newTypeVar n =
     ( n + 1, VarType n )
 
 
-popContext : String -> Context -> Context
-popContext varname context0 =
-    -- TODO: rename to popVarFromContext
-    -- TODO: this will only pop the top element
-    AssocList.remove varname context0
+
+-- The list serves as a stack of types
+-- - any element in the stack shadows everything below it.
+
+
+type alias Context =
+    Dict VarName (List LambdaType)
+
+
+popVarFromContext : String -> Context -> Context
+popVarFromContext varName context0 =
+    AssocList.update varName
+        (Maybe.andThen List.tail)
+        context0
 
 
 lookupType : VarName -> Context -> Maybe LambdaType
-lookupType =
-    AssocList.get
+lookupType varName context0 =
+    AssocList.get varName context0
+        |> Maybe.andThen List.head
 
 
 extendContext : VarName -> LambdaType -> Context -> Context
-extendContext varname lambdaType context =
+extendContext varName type0 context0 =
     -- TODO: rename to pushVarToContext
-    AssocList.insert varname lambdaType context
+    AssocList.update varName
+        (\maybeBinding ->
+            case maybeBinding of
+                Just types0 ->
+                    Just (type0 :: types0)
+
+                Nothing ->
+                    Just [ type0 ]
+        )
+        context0
 
 
 type alias Equations =
@@ -829,7 +838,7 @@ infer term n context0 eqs0 =
                         let
                             context2 =
                                 -- TODO: remove binding `var : typeVar` from `context1`
-                                context1 |> popContext var
+                                context1 |> popVarFromContext var
                         in
                         Ok ( ( k, context2, eqs1 ), Arrow typeVar typeBody )
                     )
@@ -932,7 +941,7 @@ infer term n context0 eqs0 =
                                                 (\( ( k3, context2, eqs3 ), typeLeftBody ) ->
                                                     let
                                                         context3 =
-                                                            context2 |> popContext leftVar
+                                                            context2 |> popVarFromContext leftVar
 
                                                         typeRightBodyResult =
                                                             infer rightBody k3 (context3 |> extendContext rightVar rightType) eqs3
@@ -942,7 +951,7 @@ infer term n context0 eqs0 =
                                                             (\( ( k4, context4, eqs4 ), typeRightBody ) ->
                                                                 let
                                                                     context5 =
-                                                                        context4 |> popContext rightVar
+                                                                        context4 |> popVarFromContext rightVar
 
                                                                     maybeEqs5 =
                                                                         eqs4 |> unification typeLeftBody typeRightBody
@@ -1074,8 +1083,8 @@ infer term n context0 eqs0 =
                                                         let
                                                             context4 =
                                                                 context3
-                                                                    |> popContext loop.stateVar
-                                                                    |> popContext loop.indexVar
+                                                                    |> popVarFromContext loop.stateVar
+                                                                    |> popVarFromContext loop.indexVar
 
                                                             maybeEqs5 =
                                                                 eqs4 |> unification typeLoopBody baseType
