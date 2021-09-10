@@ -51,29 +51,16 @@ get stateful_a1 stateful_a0 =
     \state0 ->
         case stateful_a0 state0 of
             Ok ( state1, _ ) ->
-                let
-                    stateful_a2 =
-                        stateful_a1 state1
-                in
-                stateful_a2 state1
+                stateful_a1 state1 state1
 
             Err err ->
                 Err err
 
 
-
--- TODO: change the name to something more appropriate
-
-
-get0 : (s -> Result e b) -> StatefulWithErr e s b
+get0 : (s -> StatefulWithErr e s b) -> StatefulWithErr e s b
 get0 f =
     \state0 ->
-        case f state0 of
-            Ok b ->
-                Ok ( state0, b )
-
-            Err err ->
-                Err err
+        f state0 state0
 
 
 
