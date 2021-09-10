@@ -914,6 +914,19 @@ infer2 term =
                 (infer2 arg)
                 generateFreshVar
 
+        Left leftTerm ->
+            -- typeLeftTerm := infer2 leftTerm;
+            -- typeRightTerm := generateFreshVar;
+            -- return (Sum typeLeftTerm typeRightTerm);
+            State.map2 Sum
+                (infer2 leftTerm)
+                generateFreshVar
+
+        Right rightTerm ->
+            State.map2 Sum
+                generateFreshVar
+                (infer2 rightTerm)
+
         _ ->
             Debug.todo ""
 
