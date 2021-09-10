@@ -22,6 +22,7 @@ module StatefulWithErr exposing
     , pair
     , pairRightToLeft
     , return
+    , run
     , sequence
     , set
     , throw
@@ -110,18 +111,13 @@ set state stateful_a0 =
 
 -- example use
 --   state0
---   |> do
+--   |> run
 --     (...stateful_a0...)
 
 
-do : StatefulWithErr e s a -> s -> Result e a
-do stateful_a0 state0 =
-    case stateful_a0 state0 of
-        Ok ( _, a ) ->
-            Ok a
-
-        Err err ->
-            Err err
+run : StatefulWithErr e s a -> s -> Result e ( s, a )
+run stateful_a0 =
+    stateful_a0
 
 
 
@@ -200,8 +196,8 @@ blank =
 --     stateful_b
 
 
-semicolon : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s b
-semicolon stateful_a stateful_b =
+do : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s b
+do stateful_a stateful_b =
     pair stateful_a stateful_b |> map (\( _, b ) -> b)
 
 

@@ -756,6 +756,11 @@ updateContext nextContext =
     State.update (\({ context } as state) -> { state | context = nextContext context })
 
 
+updateContext0 : (Context -> Context) -> InferenceContext ()
+updateContext0 nextContext =
+    State.update0 (\({ context } as state) -> { state | context = nextContext context })
+
+
 updateEquations : (Equations -> Equations) -> InferenceContext a -> InferenceContext a
 updateEquations nextEquations =
     State.update (\({ equations } as state) -> { state | equations = nextEquations equations })
@@ -861,6 +866,26 @@ infer2 term =
                 (infer2 productExp)
                 generateFreshVar
                 generateFreshVar
+
+        Abstraction var body ->
+            -- typeVar := generateFreshVar;
+            -- updateContext (\context -> context |> pushVarToContext var typeVar);
+            -- typeBody := infer2 body;
+            -- updateContext (\context -> context |> popVarFromContext var);
+            -- return (Arrow typeVar typeBody)
+            generateFreshVar
+                |> State.andThen
+                    (\typeVar ->
+                        State.do
+                            (updateContext0 (\context -> context |> pushVarToContext var typeVar))
+                            (infer2 body)
+                            |> State.andThen
+                                (\typeBody ->
+                                    State.do
+                                        (updateContext0 (\context -> context |> popVarFromContext var))
+                                        (State.return (Arrow typeVar typeBody))
+                                )
+                    )
 
         Application fn arg ->
             -- typeFn0 := infer2 fn ;
