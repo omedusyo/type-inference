@@ -255,20 +255,20 @@ pairRightToLeft stateful_a stateful_b =
 --
 -- WARNING:
 -- Note that
---   andMap stateful_f stateful_a
---  first executes `stateful_a`, then `stateful_f`
+--   andMap stateful_a stateful_f
+--  first executes `stateful_f`, then `stateful_a`
 --  that is
---    andMap stateful_f stateful_a == pairRightToLeft stateful_f stateful_a |> map (\(f, a) -> f a)
---    andMap stateful_f stateful_a != pair stateful_f stateful_a |> map (\(f, a) -> f a)
+--    andMap stateful_a stateful_f == pair stateful_f stateful_a |> map (\(f, a) -> f a)
+--    andMap stateful_a stateful_f != pairRightToLeft stateful_a stateful_f |> map (\(a, f) -> f a)
 
 
-andMap : StatefulWithErr e s (a -> b) -> StatefulWithErr e s a -> StatefulWithErr e s b
-andMap stateful_f stateful_a =
+andMap : StatefulWithErr e s a -> StatefulWithErr e s (a -> b) -> StatefulWithErr e s b
+andMap stateful_a stateful_f =
     \state0 ->
-        case stateful_a state0 of
-            Ok ( state1, a ) ->
-                case stateful_f state1 of
-                    Ok ( state2, f ) ->
+        case stateful_f state0 of
+            Ok ( state1, f ) ->
+                case stateful_a state1 of
+                    Ok ( state2, a ) ->
                         Ok ( state2, f a )
 
                     Err err ->
