@@ -2,12 +2,17 @@ module StatefulWithErr exposing
     ( StatefulWithErr
     , andMap
     , andThen
+    , andThen2
+    , andThen3
+    , andThen4
+    , andThen5
     , blank
     , do
     , error
     , get
     , get0
     , ifThenElse
+    , join
     , map
     , map2
     , map3
@@ -93,15 +98,6 @@ set state stateful_a0 =
 
             Err err ->
                 Err err
-
-
-
--- TODO
--- update0 : (s -> s) -> StatefulWithErr e s a -> StatefulWithErr e s a
-
-
-x =
-    3
 
 
 
@@ -336,6 +332,31 @@ andThen f stateful_a =
 
             Err err ->
                 Err err
+
+
+join : StatefulWithErr e s (StatefulWithErr e s a) -> StatefulWithErr e s a
+join stateful_stateful_a =
+    andThen (\x -> x) stateful_stateful_a
+
+
+andThen2 : (a0 -> a1 -> StatefulWithErr e s b) -> StatefulWithErr e s a0 -> StatefulWithErr e s a1 -> StatefulWithErr e s b
+andThen2 f stateful_a0 stateful_a1 =
+    join (map2 f stateful_a0 stateful_a1)
+
+
+andThen3 : (a0 -> a1 -> a2 -> StatefulWithErr e s b) -> StatefulWithErr e s a0 -> StatefulWithErr e s a1 -> StatefulWithErr e s a2 -> StatefulWithErr e s b
+andThen3 f stateful_a0 stateful_a1 stateful_a2 =
+    join (map3 f stateful_a0 stateful_a1 stateful_a2)
+
+
+andThen4 : (a0 -> a1 -> a2 -> a3 -> StatefulWithErr e s b) -> StatefulWithErr e s a0 -> StatefulWithErr e s a1 -> StatefulWithErr e s a2 -> StatefulWithErr e s a3 -> StatefulWithErr e s b
+andThen4 f stateful_a0 stateful_a1 stateful_a2 stateful_a3 =
+    join (map4 f stateful_a0 stateful_a1 stateful_a2 stateful_a3)
+
+
+andThen5 : (a0 -> a1 -> a2 -> a3 -> a4 -> StatefulWithErr e s b) -> StatefulWithErr e s a0 -> StatefulWithErr e s a1 -> StatefulWithErr e s a2 -> StatefulWithErr e s a3 -> StatefulWithErr e s a4 -> StatefulWithErr e s b
+andThen5 f stateful_a0 stateful_a1 stateful_a2 stateful_a3 stateful_a4 =
+    join (map5 f stateful_a0 stateful_a1 stateful_a2 stateful_a3 stateful_a4)
 
 
 
