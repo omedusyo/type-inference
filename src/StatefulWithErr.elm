@@ -7,8 +7,8 @@ module StatefulWithErr exposing
     , andThen4
     , andThen5
     , blank
-    , do
     , error
+    , first
     , get
     , get0
     , ifThenElse
@@ -23,6 +23,7 @@ module StatefulWithErr exposing
     , pairRightToLeft
     , return
     , run
+    , second
     , sequence
     , set
     , throw
@@ -196,9 +197,14 @@ blank =
 --     stateful_b
 
 
-do : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s b
-do stateful_a stateful_b =
+second : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s b
+second stateful_a stateful_b =
     pair stateful_a stateful_b |> map (\( _, b ) -> b)
+
+
+first : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s a
+first stateful_a stateful_b =
+    pair stateful_a stateful_b |> map (\( a, _ ) -> a)
 
 
 
