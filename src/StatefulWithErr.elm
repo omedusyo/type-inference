@@ -340,8 +340,14 @@ sequence stateful_as0 =
 
 
 andThen : (a -> StatefulWithErr e s b) -> StatefulWithErr e s a -> StatefulWithErr e s b
-andThen f stateful_a0 =
-    Debug.todo ""
+andThen f stateful_a =
+    \state0 ->
+        case stateful_a state0 of
+            Ok ( state1, a ) ->
+                f a state1
+
+            Err err ->
+                Err err
 
 
 
