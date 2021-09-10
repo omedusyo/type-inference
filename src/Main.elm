@@ -878,12 +878,13 @@ infer2 term =
                     (\typeVar ->
                         State.second
                             (updateContext0 (\context -> context |> pushVarToContext var typeVar))
-                            (infer2 body)
-                            |> State.andThen
+                            (State.first
+                                (infer2 body)
+                                (updateContext0 (\context -> context |> popVarFromContext var))
+                            )
+                            |> State.map
                                 (\typeBody ->
-                                    State.second
-                                        (updateContext0 (\context -> context |> popVarFromContext var))
-                                        (State.return (Arrow typeVar typeBody))
+                                    Arrow typeVar typeBody
                                 )
                     )
 
