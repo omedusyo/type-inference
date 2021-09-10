@@ -876,12 +876,10 @@ infer2 term =
             generateFreshVar
                 |> State.andThen
                     (\typeVar ->
-                        State.second
+                        State.mid
                             (updateContext0 (\context -> context |> pushVarToContext var typeVar))
-                            (State.first
-                                (infer2 body)
-                                (updateContext0 (\context -> context |> popVarFromContext var))
-                            )
+                            (infer2 body)
+                            (updateContext0 (\context -> context |> popVarFromContext var))
                             |> State.map
                                 (\typeBody ->
                                     Arrow typeVar typeBody
@@ -957,19 +955,15 @@ infer2 term =
                                             (\typeLeftBody typeRightBody ->
                                                 unify typeLeftBody typeRightBody
                                             )
-                                            (State.second
+                                            (State.mid
                                                 (updateContext0 (\context -> context |> pushVarToContext leftVar leftType))
-                                                (State.first
-                                                    (infer2 leftBody)
-                                                    (updateContext0 (\context -> context |> popVarFromContext leftVar))
-                                                )
+                                                (infer2 leftBody)
+                                                (updateContext0 (\context -> context |> popVarFromContext leftVar))
                                             )
-                                            (State.second
+                                            (State.mid
                                                 (updateContext0 (\context -> context |> pushVarToContext rightVar rightType))
-                                                (State.first
-                                                    (infer2 rightBody)
-                                                    (updateContext0 (\context -> context |> popVarFromContext rightVar))
-                                                )
+                                                (infer2 rightBody)
+                                                (updateContext0 (\context -> context |> popVarFromContext rightVar))
                                             )
 
                                     _ ->
@@ -1052,7 +1046,7 @@ infer2 term =
                         (\baseType ->
                             let
                                 loopBodyInference =
-                                    State.second
+                                    State.mid
                                         (updateContext0
                                             (\context ->
                                                 context
@@ -1060,14 +1054,12 @@ infer2 term =
                                                     |> pushVarToContext loop.stateVar baseType
                                             )
                                         )
-                                        (State.first
-                                            (infer2 loop.body)
-                                            (updateContext0
-                                                (\context ->
-                                                    context
-                                                        |> popVarFromContext loop.stateVar
-                                                        |> popVarFromContext loop.indexVar
-                                                )
+                                        (infer2 loop.body)
+                                        (updateContext0
+                                            (\context ->
+                                                context
+                                                    |> popVarFromContext loop.stateVar
+                                                    |> popVarFromContext loop.indexVar
                                             )
                                         )
                             in

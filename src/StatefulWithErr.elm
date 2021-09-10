@@ -19,6 +19,7 @@ module StatefulWithErr exposing
     , map4
     , map5
     , mapError
+    , mid
     , pair
     , pairRightToLeft
     , return
@@ -200,13 +201,18 @@ blank =
 
 
 second : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s b
-second stateful_a stateful_b =
-    pair stateful_a stateful_b |> map (\( _, b ) -> b)
+second stateful_a_ignored stateful_b =
+    pair stateful_a_ignored stateful_b |> map (\( _, b ) -> b)
 
 
 first : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s a
-first stateful_a stateful_b =
-    pair stateful_a stateful_b |> map (\( a, _ ) -> a)
+first stateful_a stateful_b_ignored =
+    pair stateful_a stateful_b_ignored |> map (\( a, _ ) -> a)
+
+
+mid : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s c -> StatefulWithErr e s b
+mid stateful_a_ignored stateful_b stateful_c_ignored =
+    second stateful_a_ignored (first stateful_b stateful_c_ignored)
 
 
 
