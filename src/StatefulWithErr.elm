@@ -29,6 +29,7 @@ module StatefulWithErr exposing
     , tryMapError
     , until
     , update
+    , update0
     , while
     )
 
@@ -87,6 +88,12 @@ update nextState stateful_a0 =
 
             Err err ->
                 Err err
+
+
+update0 : (s -> s) -> StatefulWithErr e s ()
+update0 f =
+    \state0 ->
+        Ok ( f state0, () )
 
 
 set : s -> StatefulWithErr e s a -> StatefulWithErr e s a
