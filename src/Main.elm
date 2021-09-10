@@ -872,7 +872,22 @@ infer2 term =
             --         return resultTypeVar
             --     _ ->
             --         throwTypeError [ ExpectedArrowType ]
-            Debug.todo ""
+            State.andThen3
+                (\typeFn0 typeArg resultType0 ->
+                    unify typeFn0 (Arrow typeArg resultType0)
+                        |> State.andThen
+                            (\typeFn1 ->
+                                case typeFn1 of
+                                    Arrow _ resultType1 ->
+                                        State.return resultType1
+
+                                    _ ->
+                                        throwTypeError [ ExpectedArrowType ]
+                            )
+                )
+                (infer2 fn)
+                (infer2 arg)
+                generateFreshVar
 
         _ ->
             Debug.todo ""
