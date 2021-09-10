@@ -827,27 +827,40 @@ infer2 term =
             --         return fstTypeVar1
             --     _ ->
             --         err ExpectedProductType
-            State.return
+            State.andThen3
                 (\typeProduct0 fstTypeVar0 sndTypeVar0 ->
-                    -- TODO: this sucks
-                    ( typeProduct0, fstTypeVar0, sndTypeVar0 )
-                )
-                |> State.andMap (infer2 productExp)
-                |> State.andMap generateFreshVar
-                |> State.andMap generateFreshVar
-                |> State.andThen
-                    (\( typeProduct0, fstTypeVar0, sndTypeVar0 ) ->
-                        unify typeProduct0 (Product fstTypeVar0 sndTypeVar0)
-                            |> State.andThen
-                                (\typeProduct2 ->
-                                    case typeProduct2 of
-                                        Product fstTypeVar1 _ ->
-                                            State.return fstTypeVar1
+                    unify typeProduct0 (Product fstTypeVar0 sndTypeVar0)
+                        |> State.andThen
+                            (\typeProduct2 ->
+                                case typeProduct2 of
+                                    Product fstTypeVar1 _ ->
+                                        State.return fstTypeVar1
 
-                                        _ ->
-                                            throwTypeError [ ExpectedProductType ]
-                                )
-                    )
+                                    _ ->
+                                        throwTypeError [ ExpectedProductType ]
+                            )
+                )
+                (infer2 productExp)
+                generateFreshVar
+                generateFreshVar
+
+        Snd productExp ->
+            State.andThen3
+                (\typeProduct0 fstTypeVar0 sndTypeVar0 ->
+                    unify typeProduct0 (Product fstTypeVar0 sndTypeVar0)
+                        |> State.andThen
+                            (\typeProduct2 ->
+                                case typeProduct2 of
+                                    Product _ sndTypeVar2 ->
+                                        State.return sndTypeVar2
+
+                                    _ ->
+                                        throwTypeError [ ExpectedProductType ]
+                            )
+                )
+                (infer2 productExp)
+                generateFreshVar
+                generateFreshVar
 
         Application fn arg ->
             -- typeFn0 := infer2 fn ;
