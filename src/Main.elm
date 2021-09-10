@@ -1004,8 +1004,80 @@ infer2 term =
                     (infer2 rightBody)
                 )
 
-        _ ->
-            Debug.todo ""
+        NatZero ->
+            State.return LambdaNat
+
+        NatSucc term1 ->
+            -- type1 infer2 term1;
+            -- unify type1 LambdaNat;
+            infer2 term1
+                |> State.andThen
+                    (\type1 ->
+                        unify type1 LambdaNat
+                    )
+
+        NatLoop { base, loop, arg } ->
+            -- argType := infer2 arg;
+            -- unify argType LambdaNat
+            --
+            -- baseType := infer2 base;
+            --
+            -- updateContext
+            --   (\context ->
+            --       context
+            --           |> pushVarToContext loop.indexVar LambdaNat
+            --           |> pushVarToContext loop.stateVar baseType
+            --   );
+            -- loopBodyType := infer2 loop.body;
+            -- updateContext
+            --   (\context ->
+            --       context
+            --           |> popVarFromContext loop.stateVar
+            --           |> popVarFromContext loop.indexVar
+            --   );
+            --
+            -- unify loopBodyType baseType;
+            let
+                argInference =
+                    infer2 arg
+                        |> State.andThen
+                            (\argType ->
+                                unify argType LambdaNat
+                            )
+            in
+            State.second
+                argInference
+                (infer2 base
+                    |> State.andThen
+                        (\baseType ->
+                            let
+                                loopBodyInference =
+                                    State.second
+                                        (updateContext0
+                                            (\context ->
+                                                context
+                                                    |> pushVarToContext loop.indexVar LambdaNat
+                                                    |> pushVarToContext loop.stateVar baseType
+                                            )
+                                        )
+                                        (State.first
+                                            (infer2 loop.body)
+                                            (updateContext0
+                                                (\context ->
+                                                    context
+                                                        |> popVarFromContext loop.stateVar
+                                                        |> popVarFromContext loop.indexVar
+                                                )
+                                            )
+                                        )
+                            in
+                            loopBodyInference
+                                |> State.andThen
+                                    (\loopBodyType ->
+                                        unify loopBodyType baseType
+                                    )
+                        )
+                )
 
 
 infer : Term -> TypeVarName -> Context -> Equations -> Result (List TypeError) ( ( TypeVarName, Context, Equations ), Type )
