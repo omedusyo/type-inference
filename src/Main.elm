@@ -876,12 +876,12 @@ infer2 term =
             generateFreshVar
                 |> State.andThen
                     (\typeVar ->
-                        State.do
+                        State.second
                             (updateContext0 (\context -> context |> pushVarToContext var typeVar))
                             (infer2 body)
                             |> State.andThen
                                 (\typeBody ->
-                                    State.do
+                                    State.second
                                         (updateContext0 (\context -> context |> popVarFromContext var))
                                         (State.return (Arrow typeVar typeBody))
                                 )
@@ -926,6 +926,58 @@ infer2 term =
             State.map2 Sum
                 generateFreshVar
                 (infer2 rightTerm)
+
+        Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+            -- typeArg := infer2 arg;
+            -- leftTypeVar := generateFreshVar;
+            -- rightTypeVar := generateFreshVar;
+            -- sumType := unify (Sum leftTypeVar rightTypeVar) typeArg;
+            -- case sumType of
+            --     Sum leftType rightType ->
+            --         updateContext (\context -> context |> pushVarToContext leftVar leftType);
+            --         typeLeftBody := infer2 leftBody;
+            --         updateContext (\context -> context |> popVarFromContext leftVar);
+            --
+            --         updateContext (\context -> context |> pushVarToContext rightVar rightType);
+            --         typeRightBody := infer2 rightBody;
+            --         updateContext (\context -> context |> popVarFromContext rightVar);
+            --
+            --         unify typeLeftBody typeRightBody
+            --     _ ->
+            --         throwTypeError [ ExpectedSumType ]
+            State.andThen3
+                (\typeArg leftTypeVar rightTypeVar ->
+                    unify (Sum leftTypeVar rightTypeVar) typeArg
+                        |> State.andThen
+                            (\sumType ->
+                                case sumType of
+                                    Sum leftType rightType ->
+                                        State.andThen2
+                                            (\typeLeftBody typeRightBody ->
+                                                unify typeLeftBody typeRightBody
+                                            )
+                                            (State.second
+                                                (updateContext0 (\context -> context |> pushVarToContext leftVar leftType))
+                                                (State.first
+                                                    (infer2 leftBody)
+                                                    (updateContext0 (\context -> context |> popVarFromContext leftVar))
+                                                )
+                                            )
+                                            (State.second
+                                                (updateContext0 (\context -> context |> pushVarToContext rightVar rightType))
+                                                (State.first
+                                                    (infer2 rightBody)
+                                                    (updateContext0 (\context -> context |> popVarFromContext rightVar))
+                                                )
+                                            )
+
+                                    _ ->
+                                        throwTypeError [ ExpectedSumType ]
+                            )
+                )
+                (infer2 arg)
+                generateFreshVar
+                generateFreshVar
 
         _ ->
             Debug.todo ""
