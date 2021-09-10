@@ -18,6 +18,7 @@ module StatefulWithErr exposing
     , pairRightToLeft
     , return
     , sequence
+    , set
     , throw
     , try
     , tryMapError
@@ -83,8 +84,8 @@ update nextState stateful_a0 =
                 Err err
 
 
-reset : s -> StatefulWithErr e s a -> StatefulWithErr e s a
-reset state stateful_a0 =
+set : s -> StatefulWithErr e s a -> StatefulWithErr e s a
+set state stateful_a0 =
     \state0 ->
         case stateful_a0 state0 of
             Ok ( _, a ) ->
