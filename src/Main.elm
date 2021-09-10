@@ -980,6 +980,30 @@ infer2 term =
                 generateFreshVar
                 generateFreshVar
 
+        BoolTrue ->
+            State.return LambdaBool
+
+        BoolFalse ->
+            State.return LambdaBool
+
+        IfThenElse arg leftBody rightBody ->
+            -- argType := infer2 arg;
+            -- unify argType LambdaBool;
+            -- typeLeftBody := infer2 leftBody;
+            -- typeRightBody := infer2 rightBody;
+            -- unify typeLeftBody typeRightBody;
+            State.second
+                (infer2 arg
+                    |> State.andThen
+                        (\argType ->
+                            unify argType LambdaBool
+                        )
+                )
+                (State.andThen2 unify
+                    (infer2 leftBody)
+                    (infer2 rightBody)
+                )
+
         _ ->
             Debug.todo ""
 
