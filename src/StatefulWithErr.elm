@@ -192,9 +192,11 @@ blank =
 
 
 -- exmaple use
---   semicolon
+--   second
 --     stateful_a_to_be_ignored
---     stateful_b
+--     (first
+--       stateful_b
+--       stateful_c_to_be_ignored)
 
 
 second : StatefulWithErr e s a -> StatefulWithErr e s b -> StatefulWithErr e s b
