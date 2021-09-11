@@ -2,6 +2,7 @@ module Show exposing (..)
 
 import AssocList exposing (Dict)
 import Evaluation exposing (..)
+import Inference exposing (..)
 import Main exposing (..)
 
 

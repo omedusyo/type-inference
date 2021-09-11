@@ -1,5 +1,6 @@
 module Example exposing (..)
 
+import Inference exposing (..)
 import Main exposing (..)
 
 
