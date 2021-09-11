@@ -311,3 +311,138 @@ selfApply =
 selfApplyType =
     -- infinite type
     infer0 selfApply
+
+
+
+-- LISTS
+
+
+range4 =
+    Cons n0 (Cons n1 (Cons n2 (Cons n3 EmptyList)))
+
+
+range4Type =
+    infer0 range4
+
+
+constList =
+    Abstraction "x"
+        (Abstraction "n"
+            (NatLoop
+                { base = EmptyList
+                , loop =
+                    { indexVar = "i"
+                    , stateVar = "xs"
+                    , body =
+                        Cons (VarUse "x") (VarUse "xs")
+                    }
+                , arg = VarUse "n"
+                }
+            )
+        )
+
+
+constListType =
+    infer0 constList
+
+
+constTrue =
+    Application (Application constList BoolTrue) n4
+
+
+sumList =
+    Abstraction "xs"
+        (ListLoop
+            { initState = n0
+            , loop =
+                { listElementVar = "x"
+                , stateVar = "s"
+                , body =
+                    Application (Application add (VarUse "x")) (VarUse "s")
+                }
+            , arg = VarUse "xs"
+            }
+        )
+
+
+sumListType =
+    infer0 sumList
+
+
+sumRange4 =
+    Application sumList range4
+
+
+sumRange4Type =
+    infer0 sumRange4
+
+
+listMap =
+    Abstraction "f"
+        (Abstraction "xs"
+            (ListLoop
+                { initState = EmptyList
+                , loop =
+                    { listElementVar = "x"
+                    , stateVar = "ys"
+                    , body =
+                        Cons (Application (VarUse "f") (VarUse "x")) (VarUse "ys")
+                    }
+                , arg = VarUse "xs"
+                }
+            )
+        )
+
+
+listMapType =
+    infer0 listMap
+
+
+listConcat =
+    Abstraction "xs"
+        (Abstraction "ys"
+            (ListLoop
+                { initState = VarUse "ys"
+                , loop =
+                    { listElementVar = "x"
+                    , stateVar = "zs"
+                    , body =
+                        Cons (VarUse "x") (VarUse "zs")
+                    }
+                , arg = VarUse "xs"
+                }
+            )
+        )
+
+
+listConcatType =
+    infer0 listConcat
+
+
+listAndThen =
+    Abstraction "f"
+        (Abstraction "xs"
+            (ListLoop
+                { initState = EmptyList
+                , loop =
+                    { listElementVar = "x"
+                    , stateVar = "ys"
+                    , body =
+                        Application
+                            (Application listConcat
+                                (Application (VarUse "f") (VarUse "x"))
+                            )
+                            (VarUse "ys")
+                    }
+                , arg = VarUse "xs"
+                }
+            )
+        )
+
+
+listReturn =
+    Abstraction "x" (Cons (VarUse "x") EmptyList)
+
+
+listReturnType =
+    infer0 listReturn

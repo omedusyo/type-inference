@@ -58,6 +58,18 @@ type Term
             }
         , arg : Term
         }
+      -- ==Lists==
+    | EmptyList
+    | Cons Term Term
+    | ListLoop
+        { initState : Term
+        , loop :
+            { listElementVar : TermVarName
+            , stateVar : TermVarName
+            , body : Term
+            }
+        , arg : Term
+        }
 
 
 type alias TypeVarName =
@@ -71,3 +83,4 @@ type Type
     | Arrow Type Type
     | LambdaBool
     | LambdaNat
+    | LambdaList Type

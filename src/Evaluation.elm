@@ -17,11 +17,18 @@ type Value
     | FalseValue
       --==Natural Number Object==
     | NatValue NatValue
+    | --==Lists==
+      ListValue ListValue
 
 
 type NatValue
     = NatZeroValue
     | NatSuccValue NatValue
+
+
+type ListValue
+    = EmptyListValue
+    | ConsValue Value Value
 
 
 type EvalError
@@ -31,6 +38,7 @@ type EvalError
     | ExpectedLeftRight
     | ExpectedBoolean
     | ExpectedNat
+    | ExpectedList
 
 
 
@@ -317,3 +325,57 @@ eval env term =
 
                 Err errs ->
                     Err errs
+
+        EmptyList ->
+            Ok (ListValue EmptyListValue)
+
+        Cons headTerm tailTerm ->
+            eval env headTerm
+                |> Result.andThen
+                    (\headValue ->
+                        eval env tailTerm
+                            |> Result.andThen
+                                (\tailValue ->
+                                    Ok (ListValue (ConsValue headValue tailValue))
+                                )
+                    )
+
+        ListLoop { initState, loop, arg } ->
+            eval env arg
+                |> Result.andThen
+                    (\argValue ->
+                        case argValue of
+                            ListValue listValue ->
+                                let
+                                    evalListLoop listValue0 =
+                                        case listValue0 of
+                                            EmptyListValue ->
+                                                eval env initState
+
+                                            ConsValue headValue restValue ->
+                                                case restValue of
+                                                    ListValue listValue1 ->
+                                                        let
+                                                            prevResult =
+                                                                evalListLoop listValue1
+                                                        in
+                                                        prevResult
+                                                            |> Result.andThen
+                                                                (\prevVal ->
+                                                                    let
+                                                                        newEnv =
+                                                                            env
+                                                                                |> extendEnvironment loop.listElementVar headValue
+                                                                                |> extendEnvironment loop.stateVar prevVal
+                                                                    in
+                                                                    eval newEnv loop.body
+                                                                )
+
+                                                    _ ->
+                                                        Err [ ExpectedList ]
+                                in
+                                evalListLoop listValue
+
+                            _ ->
+                                Err [ ExpectedList ]
+                    )

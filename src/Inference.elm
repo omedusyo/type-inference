@@ -15,6 +15,7 @@ type TypeError
     | ExpectedBoolType
     | ExpectedMatchingTypesInIfThenElseBranches
     | ExpectedBaseUnifiesWithLoopBodyType
+    | ExpectedListType
     | InfiniteType Int
 
 
@@ -122,6 +123,9 @@ expandType_MAY_INFINITE_CYCLE type0 eqs0 =
         LambdaNat ->
             LambdaNat
 
+        LambdaList type1 ->
+            LambdaList (expandType_MAY_INFINITE_CYCLE type1 eqs0)
+
 
 
 -- This expansion can't loop. It will detect infinite types.
@@ -167,6 +171,10 @@ expandTypeWithCycleDetection type0 seenVars eqs0 =
 
         LambdaNat ->
             Ok LambdaNat
+
+        LambdaList type1 ->
+            expandTypeWithCycleDetection type1 seenVars eqs0
+                |> Result.map LambdaList
 
 
 
@@ -281,6 +289,16 @@ unification type0Unexpanded type1Unexpanded eqs0 =
 
                     ( LambdaNat, _ ) ->
                         Err [ ExpectedNatType ]
+
+                    ( LambdaList type00, LambdaList type11 ) ->
+                        unification type00 type11 eqs0
+                            |> Result.map
+                                (\( eqs1, typeResult ) ->
+                                    ( eqs1, LambdaList typeResult )
+                                )
+
+                    ( LambdaList _, _ ) ->
+                        Err [ ExpectedListType ]
             )
 
 
@@ -650,6 +668,97 @@ infer term =
                                     )
                         )
                 )
+
+        EmptyList ->
+            generateFreshVar
+                |> State.map (\var -> LambdaList var)
+
+        Cons headTerm tailTerm ->
+            -- headType := infer headTerm;
+            -- tailType := infer tailTerm;
+            -- resultType := unify (LambdaList headType) tailType
+            State.andThen2
+                (\headType tailType ->
+                    unify (LambdaList headType) tailType
+                )
+                (infer headTerm)
+                (infer tailTerm)
+
+        ListLoop { initState, loop, arg } ->
+            -- stateType0 := infer initState;
+            -- argType0 := infer arg;
+            -- innerListVar := generateFreshVar;
+            -- argType1 := unify (LambdaList innerListVar) argType0;
+            -- case argType1 of
+            --   LambdaList innerType0 ->
+            --     loopVar := generateFreshVar;
+            --     stateVar := generateFreshVar;
+            --     innerType1 := unify loopVar innerType0;
+            --     stateType1 := unify stateVar stateType0;
+            --
+            --     updateContext
+            --       (\context ->
+            --           context
+            --               |> pushVarToContext loop.listElementVar innerType1
+            --               |> pushVarToContext loop.stateVar stateType1
+            --       );
+            --     loopBodyType := infer loop.body
+            --     updateContext
+            --       (\context ->
+            --           context
+            --               |> popVarToContext loop.listElementVar
+            --               |> popVarToContext loop.stateVar
+            --       );
+            --
+            --     unify loopBodyType stateType1
+            --
+            --   _ ->
+            --     throwTypeError [ ExpectedListType ]
+            State.andThen4
+                (\stateType0 argType0 loopVar stateVar ->
+                    generateFreshVar
+                        |> State.andThen
+                            (\innerListVar ->
+                                unify (LambdaList innerListVar) argType0
+                                    |> State.andThen
+                                        (\argType1 ->
+                                            case argType1 of
+                                                LambdaList innerType0 ->
+                                                    State.andThen2
+                                                        (\stateType1 innerType1 ->
+                                                            State.mid
+                                                                (updateContext0
+                                                                    (\context ->
+                                                                        context
+                                                                            |> pushVarToContext loop.listElementVar innerType1
+                                                                            |> pushVarToContext loop.stateVar stateType1
+                                                                    )
+                                                                )
+                                                                (infer loop.body)
+                                                                (updateContext0
+                                                                    (\context ->
+                                                                        context
+                                                                            |> popVarFromContext loop.listElementVar
+                                                                            |> popVarFromContext loop.stateVar
+                                                                    )
+                                                                )
+                                                                |> State.andThen
+                                                                    (\loopBodyType ->
+                                                                        unify loopBodyType stateType1
+                                                                    )
+                                                        )
+                                                        (unify stateVar stateType0)
+                                                        (unify loopVar innerType0)
+
+                                                _ ->
+                                                    throwTypeError [ ExpectedListType ]
+                                        )
+                            )
+                )
+                (infer initState)
+                (infer arg)
+                generateFreshVar
+                generateFreshVar
 
 
 infer0 : Term -> Result (List TypeError) ( Context, Equations, Type )
