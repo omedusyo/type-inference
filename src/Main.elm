@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import AssocList exposing (Dict)
+import Set exposing (Set)
 import StatefulWithErr as State exposing (StatefulWithErr)
 
 
@@ -149,6 +150,7 @@ type TypeError
     | ExpectedBoolType
     | ExpectedMatchingTypesInIfThenElseBranches
     | ExpectedBaseUnifiesWithLoopBodyType
+    | InfiniteType Int
 
 
 eval : TermEnvironment -> Term -> Result (List EvalError) Value
@@ -605,119 +607,161 @@ expandType type0 eqs0 =
             LambdaNat
 
 
+expandType0 : Type -> Equations -> Result (List TypeError) Type
+expandType0 type0 eqs0 =
+    expandTypeWithCycleDetection type0 Set.empty eqs0
+
+
+expandTypeWithCycleDetection : Type -> Set TypeVarName -> Equations -> Result (List TypeError) Type
+expandTypeWithCycleDetection type0 seenVars eqs0 =
+    case type0 of
+        VarType n ->
+            if Set.member n seenVars then
+                Err [ InfiniteType n ]
+
+            else
+                case lookupEquations n eqs0 of
+                    Just type1 ->
+                        expandTypeWithCycleDetection type1 (Set.insert n seenVars) eqs0
+
+                    Nothing ->
+                        Ok (VarType n)
+
+        Product type1 type2 ->
+            Result.map2 Product
+                (expandTypeWithCycleDetection type1 seenVars eqs0)
+                (expandTypeWithCycleDetection type2 seenVars eqs0)
+
+        Sum type1 type2 ->
+            Result.map2 Sum
+                (expandTypeWithCycleDetection type1 seenVars eqs0)
+                (expandTypeWithCycleDetection type2 seenVars eqs0)
+
+        Arrow type1 type2 ->
+            Result.map2 Arrow
+                (expandTypeWithCycleDetection type1 seenVars eqs0)
+                (expandTypeWithCycleDetection type2 seenVars eqs0)
+
+        LambdaBool ->
+            Ok LambdaBool
+
+        LambdaNat ->
+            Ok LambdaNat
+
+
 
 -- ===UNIFICATION===
 
 
 unification : Type -> Type -> Equations -> Result (List TypeError) ( Equations, Type )
 unification type0Unexpanded type1Unexpanded eqs0 =
-    let
-        type0 =
-            expandType type0Unexpanded eqs0
+    Result.map2
+        Tuple.pair
+        (expandType0 type0Unexpanded eqs0)
+        (expandType0 type1Unexpanded eqs0)
+        |> Result.andThen
+            (\( type0, type1 ) ->
+                case ( type0, type1 ) of
+                    -- ===TYPE VARS===
+                    ( VarType id0, VarType id1 ) ->
+                        if id0 == id1 then
+                            Ok ( eqs0, VarType id0 )
 
-        type1 =
-            expandType type1Unexpanded eqs0
-    in
-    case ( type0, type1 ) of
-        -- ===TYPE VARS===
-        ( VarType id0, VarType id1 ) ->
-            if id0 == id1 then
-                Ok ( eqs0, VarType id0 )
+                        else if id0 < id1 then
+                            Ok ( eqs0 |> extendEquations id0 (VarType id1), VarType id1 )
 
-            else if id0 < id1 then
-                Ok ( eqs0 |> extendEquations id0 (VarType id1), VarType id1 )
+                        else
+                            Ok ( eqs0 |> extendEquations id1 (VarType id0), VarType id1 )
 
-            else
-                Ok ( eqs0 |> extendEquations id1 (VarType id0), VarType id1 )
+                    ( VarType id0, _ ) ->
+                        Ok ( eqs0 |> extendEquations id0 type1, type1 )
 
-        ( VarType id0, _ ) ->
-            Ok ( eqs0 |> extendEquations id0 type1, type1 )
+                    ( _, VarType id1 ) ->
+                        Ok ( eqs0 |> extendEquations id1 type0, type0 )
 
-        ( _, VarType id1 ) ->
-            Ok ( eqs0 |> extendEquations id1 type0, type0 )
-
-        -- ===PRODUCT===
-        ( Product type00 type01, Product type10 type11 ) ->
-            let
-                maybeEqs1 =
-                    unification type00 type10 eqs0
-            in
-            maybeEqs1
-                |> Result.andThen
-                    (\( eqs1, typeFst ) ->
+                    -- ===PRODUCT===
+                    ( Product type00 type01, Product type10 type11 ) ->
                         let
-                            maybeEqs2 =
-                                unification type01 type11 eqs1
+                            maybeEqs1 =
+                                unification type00 type10 eqs0
                         in
-                        maybeEqs2
-                            |> Result.map
-                                (\( eqs2, typeSnd ) ->
-                                    ( eqs2, Product typeFst typeSnd )
+                        maybeEqs1
+                            |> Result.andThen
+                                (\( eqs1, typeFst ) ->
+                                    let
+                                        maybeEqs2 =
+                                            unification type01 type11 eqs1
+                                    in
+                                    maybeEqs2
+                                        |> Result.map
+                                            (\( eqs2, typeSnd ) ->
+                                                ( eqs2, Product typeFst typeSnd )
+                                            )
                                 )
-                    )
 
-        ( Product _ _, _ ) ->
-            Err [ ExpectedProductType ]
+                    ( Product _ _, _ ) ->
+                        Err [ ExpectedProductType ]
 
-        -- ===ARROW===
-        ( Arrow type00 type01, Arrow type10 type11 ) ->
-            let
-                maybeEqs1 =
-                    unification type00 type10 eqs0
-            in
-            maybeEqs1
-                |> Result.andThen
-                    (\( eqs1, typeFst ) ->
+                    -- ===ARROW===
+                    ( Arrow type00 type01, Arrow type10 type11 ) ->
                         let
-                            maybeEqs2 =
-                                unification type01 type11 eqs1
+                            maybeEqs1 =
+                                unification type00 type10 eqs0
                         in
-                        maybeEqs2
-                            |> Result.map
-                                (\( eqs2, typeSnd ) ->
-                                    ( eqs2, Arrow typeFst typeSnd )
+                        maybeEqs1
+                            |> Result.andThen
+                                (\( eqs1, typeFst ) ->
+                                    let
+                                        maybeEqs2 =
+                                            unification type01 type11 eqs1
+                                    in
+                                    maybeEqs2
+                                        |> Result.map
+                                            (\( eqs2, typeSnd ) ->
+                                                ( eqs2, Arrow typeFst typeSnd )
+                                            )
                                 )
-                    )
 
-        ( Arrow _ _, _ ) ->
-            Err [ ExpectedArrowType ]
+                    ( Arrow _ _, _ ) ->
+                        Err [ ExpectedArrowType ]
 
-        -- ===SUM===
-        ( Sum type00 type01, Sum type10 type11 ) ->
-            let
-                maybeEqs1 =
-                    unification type00 type10 eqs0
-            in
-            maybeEqs1
-                |> Result.andThen
-                    (\( eqs1, typeFst ) ->
+                    -- ===SUM===
+                    ( Sum type00 type01, Sum type10 type11 ) ->
                         let
-                            maybeEqs2 =
-                                unification type01 type11 eqs1
+                            maybeEqs1 =
+                                unification type00 type10 eqs0
                         in
-                        maybeEqs2
-                            |> Result.map
-                                (\( eqs2, typeSnd ) ->
-                                    ( eqs2, Sum typeFst typeSnd )
+                        maybeEqs1
+                            |> Result.andThen
+                                (\( eqs1, typeFst ) ->
+                                    let
+                                        maybeEqs2 =
+                                            unification type01 type11 eqs1
+                                    in
+                                    maybeEqs2
+                                        |> Result.map
+                                            (\( eqs2, typeSnd ) ->
+                                                ( eqs2, Sum typeFst typeSnd )
+                                            )
                                 )
-                    )
 
-        ( Sum _ _, _ ) ->
-            Err [ ExpectedSumType ]
+                    ( Sum _ _, _ ) ->
+                        Err [ ExpectedSumType ]
 
-        -- ===BOOL===
-        ( LambdaBool, LambdaBool ) ->
-            Ok ( eqs0, LambdaBool )
+                    -- ===BOOL===
+                    ( LambdaBool, LambdaBool ) ->
+                        Ok ( eqs0, LambdaBool )
 
-        ( LambdaBool, _ ) ->
-            Err [ ExpectedBoolType ]
+                    ( LambdaBool, _ ) ->
+                        Err [ ExpectedBoolType ]
 
-        -- ===NAT===
-        ( LambdaNat, LambdaNat ) ->
-            Ok ( eqs0, LambdaNat )
+                    -- ===NAT===
+                    ( LambdaNat, LambdaNat ) ->
+                        Ok ( eqs0, LambdaNat )
 
-        ( LambdaNat, _ ) ->
-            Err [ ExpectedNatType ]
+                    ( LambdaNat, _ ) ->
+                        Err [ ExpectedNatType ]
+            )
 
 
 
@@ -1098,28 +1142,28 @@ infer0 term =
             )
 
 
-showInfer0 : Term -> Maybe String
+showInfer0 : Term -> Result (List TypeError) String
 showInfer0 term =
-    case infer0 term of
-        Ok ( _, type1 ) ->
-            Just (showType type1)
-
-        Err _ ->
-            Nothing
+    infer0 term
+        |> Result.map
+            (\( _, type1 ) ->
+                showType type1
+            )
 
 
 
 -- This expands the final type according to equations
 
 
-showFinalInfer : Term -> Maybe String
+showFinalInfer : Term -> Result (List TypeError) String
 showFinalInfer term =
-    case infer0 term of
-        Ok ( eqs, type1 ) ->
-            Just (showType (expandType type1 eqs))
-
-        Err _ ->
-            Nothing
+    infer0 term
+        |> Result.andThen
+            (\( eqs, type1 ) ->
+                -- TODO: you need to show the context, and var bindings
+                expandType0 type1 eqs
+                    |> Result.map showType
+            )
 
 
 showValue : Value -> String
