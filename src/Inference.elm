@@ -290,9 +290,15 @@ unification type0Unexpanded type1Unexpanded eqs0 =
                     ( LambdaNat, _ ) ->
                         Err [ ExpectedNatType ]
 
-                    _ ->
-                        -- TODO: lists
-                        Debug.todo ""
+                    ( LambdaList type00, LambdaList type11 ) ->
+                        unification type00 type11 eqs0
+                            |> Result.map
+                                (\( eqs1, typeResult ) ->
+                                    ( eqs1, LambdaList typeResult )
+                                )
+
+                    ( LambdaList _, _ ) ->
+                        Err [ ExpectedListType ]
             )
 
 
