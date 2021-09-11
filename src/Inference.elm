@@ -124,7 +124,7 @@ expandType_MAY_INFINITE_CYCLE type0 eqs0 =
             LambdaNat
 
         LambdaList type1 ->
-            Debug.todo ""
+            LambdaList (expandType_MAY_INFINITE_CYCLE type1 eqs0)
 
 
 
@@ -173,7 +173,8 @@ expandTypeWithCycleDetection type0 seenVars eqs0 =
             Ok LambdaNat
 
         LambdaList type1 ->
-            Debug.todo ""
+            expandTypeWithCycleDetection type1 seenVars eqs0
+                |> Result.map LambdaList
 
 
 
