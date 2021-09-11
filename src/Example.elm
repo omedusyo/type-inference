@@ -7,20 +7,31 @@ import Main exposing (..)
 -- examples
 
 
-nt =
-    intToNatTerm
-
-
 x =
     VarUse "X"
+
+
+xType =
+    -- '0
+    infer0 x
 
 
 y =
     VarUse "Y"
 
 
+yType =
+    -- '0
+    infer0 y
+
+
 n0 =
     NatZero
+
+
+n0Type =
+    -- Nat
+    infer0 n0
 
 
 n1 =
@@ -44,9 +55,19 @@ pair0 =
     Pair x y
 
 
+pair0Type =
+    -- ('0, '1)
+    infer0 pair0
+
+
 pair1 =
     -- (x, x)
     Pair x x
+
+
+pair1Type =
+    -- ('0, '0)
+    infer0 pair1
 
 
 id =
@@ -54,9 +75,19 @@ id =
     Abstraction "x" (VarUse "x")
 
 
+idType =
+    -- '0 -> '0
+    infer0 id
+
+
 dup =
     -- \x -> (x, x)
     Abstraction "x" (Pair (VarUse "x") (VarUse "x"))
+
+
+dupType =
+    -- '0 -> ('0, '0)
+    infer0 dup
 
 
 twist =
@@ -64,6 +95,11 @@ twist =
     Abstraction
         "tuple"
         (Pair (Snd (VarUse "tuple")) (Fst (VarUse "tuple")))
+
+
+twistType =
+    -- ('0, '1) -> ('1, '0)
+    infer0 twist
 
 
 apply =
@@ -74,12 +110,22 @@ apply =
         )
 
 
+applyType =
+    -- ('0 -> '1) -> '0 -> '1
+    infer0 apply
+
+
 pairing =
     -- \x y -> (x, y)
     Abstraction "x"
         (Abstraction "y"
             (Pair (VarUse "x") (VarUse "y"))
         )
+
+
+pairingType =
+    -- '0 -> '1 -> ('0, '1)
+    infer0 pairing
 
 
 curry =
@@ -93,6 +139,11 @@ curry =
                 )
             )
         )
+
+
+curryType =
+    -- (('0, '1) -> '2) -> '0 -> '1 -> '2
+    infer0 curry
 
 
 uncurry =
@@ -109,20 +160,38 @@ uncurry =
         )
 
 
+uncurryType =
+    -- ('0 -> '1 -> '2) -> ('0, '1) -> '2
+    infer0 uncurry
+
+
 apply0 =
-    Application apply dup
+    Application (Application apply dup) n0
 
 
-apply1 =
-    Application apply0 n0
+apply0Type =
+    -- (Nat, Nat)
+    infer0 apply0
 
 
 evalAt0 =
+    -- \f -> f 0
     Abstraction "f" (Application (VarUse "f") n0)
 
 
+evalAt0Type =
+    -- (Nat -> '0) -> '0
+    infer0 evalAt0
+
+
 succ0 =
+    -- \n -> S n
     Abstraction "n" (NatSucc (VarUse "n"))
+
+
+succ0Type =
+    -- Nat -> Nat
+    infer0 succ0
 
 
 case0 =
@@ -136,6 +205,11 @@ case0 =
             , rightBody = VarUse "y"
             }
         )
+
+
+case0Type =
+    -- [Nat + Nat] -> Nat
+    infer0 case0
 
 
 add =
@@ -156,6 +230,11 @@ add =
         )
 
 
+addType =
+    -- Nat -> Nat
+    infer0 add
+
+
 mul =
     -- Multiplication
     -- \x y -> x * y
@@ -172,6 +251,11 @@ mul =
                 }
             )
         )
+
+
+mulType =
+    -- Nat -> Nat
+    infer0 mul
 
 
 exp =
@@ -192,6 +276,11 @@ exp =
         )
 
 
+expType =
+    -- Nat -> Nat
+    infer0 exp
+
+
 sumTerm =
     -- Sum
     -- \N -> (N - 1) + ... + 2 + 3 + 1 + 0
@@ -208,6 +297,16 @@ sumTerm =
         )
 
 
+sumTermType =
+    -- Nat -> Nat
+    infer0 sumTerm
+
+
 selfApply =
     -- \f -> f f
     Abstraction "f" (Application (VarUse "f") (VarUse "f"))
+
+
+selfApplyType =
+    -- infinite type
+    infer0 selfApply

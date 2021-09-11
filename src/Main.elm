@@ -1134,13 +1134,13 @@ infer term =
                 )
 
 
-infer0 : Term -> Result (List TypeError) ( Equations, Type )
+infer0 : Term -> Result (List TypeError) ( Context, Equations, Type )
 infer0 term =
     State.run (infer term)
         emptyState
         |> Result.map
             (\( state, type0 ) ->
-                ( state.equations, type0 )
+                ( state.context, state.equations, type0 )
             )
 
 
@@ -1148,7 +1148,7 @@ showInfer0 : Term -> Result (List TypeError) String
 showInfer0 term =
     infer0 term
         |> Result.map
-            (\( _, type1 ) ->
+            (\( _, _, type1 ) ->
                 showType type1
             )
 
@@ -1161,7 +1161,7 @@ showFinalInfer : Term -> Result (List TypeError) String
 showFinalInfer term =
     infer0 term
         |> Result.andThen
-            (\( eqs, type1 ) ->
+            (\( _, eqs, type1 ) ->
                 -- TODO: you need to show the context, and var bindings
                 expandType type1 eqs
                     |> Result.map showType
