@@ -417,3 +417,32 @@ listConcat =
 
 listConcatType =
     infer0 listConcat
+
+
+listAndThen =
+    Abstraction "f"
+        (Abstraction "xs"
+            (ListLoop
+                { initState = EmptyList
+                , loop =
+                    { listElementVar = "x"
+                    , stateVar = "ys"
+                    , body =
+                        Application
+                            (Application listConcat
+                                (Application (VarUse "f") (VarUse "x"))
+                            )
+                            (VarUse "ys")
+                    }
+                , arg = VarUse "xs"
+                }
+            )
+        )
+
+
+listReturn =
+    Abstraction "x" (Cons (VarUse "x") EmptyList)
+
+
+listReturnType =
+    infer0 listReturn
