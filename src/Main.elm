@@ -83,3 +83,4 @@ type Type
     | Arrow Type Type
     | LambdaBool
     | LambdaNat
+    | LambdaList Type

@@ -155,6 +155,9 @@ showType type0 =
         LambdaNat ->
             "Nat"
 
+        LambdaList type0 ->
+            String.concat [ "List(", showType type0, ")" ]
+
 
 
 -- ===INFERENCE===

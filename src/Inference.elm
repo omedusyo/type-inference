@@ -15,6 +15,7 @@ type TypeError
     | ExpectedBoolType
     | ExpectedMatchingTypesInIfThenElseBranches
     | ExpectedBaseUnifiesWithLoopBodyType
+    | ExpectedListType
     | InfiniteType Int
 
 
