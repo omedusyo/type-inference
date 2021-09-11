@@ -206,3 +206,8 @@ sumTerm =
             , arg = VarUse "N"
             }
         )
+
+
+selfApply =
+    -- \f -> f f
+    Abstraction "f" (Application (VarUse "f") (VarUse "f"))

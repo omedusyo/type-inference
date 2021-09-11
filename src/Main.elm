@@ -574,10 +574,8 @@ extendEquations varname type0 eqs =
 -- ===EXPANSION===
 
 
-expandType : Type -> Equations -> Type
-expandType type0 eqs0 =
-    -- This can loop on itself
-    -- TODO: implement cycle detection
+expandType_MAY_INFINITE_CYCLE : Type -> Equations -> Type
+expandType_MAY_INFINITE_CYCLE type0 eqs0 =
     case type0 of
         VarType n ->
             let
@@ -586,19 +584,19 @@ expandType type0 eqs0 =
             in
             case maybeType1 of
                 Just type1 ->
-                    expandType type1 eqs0
+                    expandType_MAY_INFINITE_CYCLE type1 eqs0
 
                 Nothing ->
                     VarType n
 
         Product type1 type2 ->
-            Product (expandType type1 eqs0) (expandType type2 eqs0)
+            Product (expandType_MAY_INFINITE_CYCLE type1 eqs0) (expandType_MAY_INFINITE_CYCLE type2 eqs0)
 
         Sum type1 type2 ->
-            Sum (expandType type1 eqs0) (expandType type2 eqs0)
+            Sum (expandType_MAY_INFINITE_CYCLE type1 eqs0) (expandType_MAY_INFINITE_CYCLE type2 eqs0)
 
         Arrow type1 type2 ->
-            Arrow (expandType type1 eqs0) (expandType type2 eqs0)
+            Arrow (expandType_MAY_INFINITE_CYCLE type1 eqs0) (expandType_MAY_INFINITE_CYCLE type2 eqs0)
 
         LambdaBool ->
             LambdaBool
@@ -607,8 +605,12 @@ expandType type0 eqs0 =
             LambdaNat
 
 
-expandType0 : Type -> Equations -> Result (List TypeError) Type
-expandType0 type0 eqs0 =
+
+-- This expansion can't loop. It will detect infinite types.
+
+
+expandType : Type -> Equations -> Result (List TypeError) Type
+expandType type0 eqs0 =
     expandTypeWithCycleDetection type0 Set.empty eqs0
 
 
@@ -657,8 +659,8 @@ unification : Type -> Type -> Equations -> Result (List TypeError) ( Equations, 
 unification type0Unexpanded type1Unexpanded eqs0 =
     Result.map2
         Tuple.pair
-        (expandType0 type0Unexpanded eqs0)
-        (expandType0 type1Unexpanded eqs0)
+        (expandType type0Unexpanded eqs0)
+        (expandType type1Unexpanded eqs0)
         |> Result.andThen
             (\( type0, type1 ) ->
                 case ( type0, type1 ) of
@@ -1161,7 +1163,7 @@ showFinalInfer term =
         |> Result.andThen
             (\( eqs, type1 ) ->
                 -- TODO: you need to show the context, and var bindings
-                expandType0 type1 eqs
+                expandType type1 eqs
                     |> Result.map showType
             )
 
