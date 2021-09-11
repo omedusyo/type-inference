@@ -92,6 +92,15 @@ showTerm term =
                 , ")"
                 ]
 
+        EmptyList ->
+            "[]"
+
+        Cons headTerm tailTerm ->
+            Debug.todo ""
+
+        ListLoop {} ->
+            Debug.todo ""
+
 
 showTermEnvironment : TermEnvironment -> String
 showTermEnvironment env =

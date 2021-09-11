@@ -651,6 +651,15 @@ infer term =
                         )
                 )
 
+        EmptyList ->
+            Debug.todo ""
+
+        Cons headTerm tailTerm ->
+            Debug.todo ""
+
+        ListLoop {} ->
+            Debug.todo ""
+
 
 infer0 : Term -> Result (List TypeError) ( Context, Equations, Type )
 infer0 term =

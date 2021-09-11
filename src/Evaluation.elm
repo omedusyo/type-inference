@@ -317,3 +317,12 @@ eval env term =
 
                 Err errs ->
                     Err errs
+
+        EmptyList ->
+            Debug.todo ""
+
+        Cons headTerm tailTerm ->
+            Debug.todo ""
+
+        ListLoop {} ->
+            Debug.todo ""

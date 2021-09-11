@@ -58,6 +58,18 @@ type Term
             }
         , arg : Term
         }
+      -- ==Lists==
+    | EmptyList
+    | Cons Term Term
+    | ListLoop
+        { initState : Term
+        , loop :
+            { listVar : TermVarName
+            , stateVar : TermVarName
+            , body : Term
+            }
+        , arg : Term
+        }
 
 
 type alias TypeVarName =
