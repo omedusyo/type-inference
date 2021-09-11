@@ -365,5 +365,9 @@ sumList =
         )
 
 
+sumListType =
+    infer0 sumList
+
+
 sumRange4 =
     Application sumList range4
