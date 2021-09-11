@@ -7,7 +7,7 @@ import Main exposing (..)
 
 
 
--- ===VALUES===
+-- ===TERMS===
 
 
 showTerm : Term -> String
@@ -138,72 +138,16 @@ showTermEnvironment env =
         |> String.join ", "
 
 
+
+-- ===VALUES===
+
+
 showEval : TermEnvironment -> Term -> Result (List EvalError) String
 showEval env term =
     eval env term
         |> Result.map
             (\val ->
                 String.concat [ showTerm term, "  ~~>  ", showValue val ]
-            )
-
-
-
--- ===TYPES===
-
-
-showType : Type -> String
-showType type0 =
-    case type0 of
-        VarType n ->
-            String.concat [ "'", String.fromInt n ]
-
-        Product type1 type2 ->
-            String.concat
-                [ "(", showType type1, " , ", showType type2, ")" ]
-
-        Sum type1 type2 ->
-            String.concat
-                [ "[", showType type1, " + ", showType type2, "]" ]
-
-        Arrow type1 type2 ->
-            String.concat
-                [ "(", showType type1, " -> ", showType type2, ")" ]
-
-        LambdaBool ->
-            "Bool"
-
-        LambdaNat ->
-            "Nat"
-
-        LambdaList type0 ->
-            String.concat [ "List(", showType type0, ")" ]
-
-
-
--- ===INFERENCE===
-
-
-showInfer0 : Term -> Result (List TypeError) String
-showInfer0 term =
-    infer0 term
-        |> Result.map
-            (\( _, _, type1 ) ->
-                showType type1
-            )
-
-
-
--- This expands the final type according to equations
-
-
-showFinalInfer : Term -> Result (List TypeError) String
-showFinalInfer term =
-    infer0 term
-        |> Result.andThen
-            (\( _, eqs, type1 ) ->
-                -- TODO: you need to show the context, and var bindings
-                expandType type1 eqs
-                    |> Result.map showType
             )
 
 
@@ -243,6 +187,18 @@ showValue val =
         NatValue natVal ->
             showNatValue natVal
 
+        EmptyListValue ->
+            "[]"
+
+        ConsValue headVal tailVal ->
+            String.concat
+                [ "Cons("
+                , showValue headVal
+                , ", "
+                , showValue tailVal
+                , ")"
+                ]
+
 
 natValToInt : NatValue -> Int
 natValToInt natVal =
@@ -272,3 +228,63 @@ showNatValue natVal =
     --         String.concat [ "S(", showNatValue val1, ")" ]
     natValToInt natVal
         |> String.fromInt
+
+
+
+-- ===TYPES===
+
+
+showType : Type -> String
+showType type0 =
+    case type0 of
+        VarType n ->
+            String.concat [ "'", String.fromInt n ]
+
+        Product type1 type2 ->
+            String.concat
+                [ "(", showType type1, " , ", showType type2, ")" ]
+
+        Sum type1 type2 ->
+            String.concat
+                [ "[", showType type1, " + ", showType type2, "]" ]
+
+        Arrow type1 type2 ->
+            String.concat
+                [ "(", showType type1, " -> ", showType type2, ")" ]
+
+        LambdaBool ->
+            "Bool"
+
+        LambdaNat ->
+            "Nat"
+
+        LambdaList type1 ->
+            String.concat [ "List(", showType type1, ")" ]
+
+
+
+-- ===INFERENCE===
+
+
+showInfer0 : Term -> Result (List TypeError) String
+showInfer0 term =
+    infer0 term
+        |> Result.map
+            (\( _, _, type1 ) ->
+                showType type1
+            )
+
+
+
+-- This expands the final type according to equations
+
+
+showFinalInfer : Term -> Result (List TypeError) String
+showFinalInfer term =
+    infer0 term
+        |> Result.andThen
+            (\( _, eqs, type1 ) ->
+                -- TODO: you need to show the context, and var bindings
+                expandType type1 eqs
+                    |> Result.map showType
+            )

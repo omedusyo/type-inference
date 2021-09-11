@@ -123,6 +123,9 @@ expandType_MAY_INFINITE_CYCLE type0 eqs0 =
         LambdaNat ->
             LambdaNat
 
+        LambdaList type1 ->
+            Debug.todo ""
+
 
 
 -- This expansion can't loop. It will detect infinite types.
@@ -168,6 +171,9 @@ expandTypeWithCycleDetection type0 seenVars eqs0 =
 
         LambdaNat ->
             Ok LambdaNat
+
+        LambdaList type1 ->
+            Debug.todo ""
 
 
 
@@ -282,6 +288,10 @@ unification type0Unexpanded type1Unexpanded eqs0 =
 
                     ( LambdaNat, _ ) ->
                         Err [ ExpectedNatType ]
+
+                    _ ->
+                        -- TODO: lists
+                        Debug.todo ""
             )
 
 

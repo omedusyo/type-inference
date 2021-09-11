@@ -17,6 +17,9 @@ type Value
     | FalseValue
       --==Natural Number Object==
     | NatValue NatValue
+    | --==Lists==
+      EmptyListValue
+    | ConsValue Value Value
 
 
 type NatValue
