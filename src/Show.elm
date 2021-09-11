@@ -187,17 +187,8 @@ showValue val =
         NatValue natVal ->
             showNatValue natVal
 
-        EmptyListValue ->
-            "[]"
-
-        ConsValue headVal tailVal ->
-            String.concat
-                [ "Cons("
-                , showValue headVal
-                , ", "
-                , showValue tailVal
-                , ")"
-                ]
+        ListValue listValue ->
+            showListValue listValue
 
 
 natValToInt : NatValue -> Int
@@ -228,6 +219,22 @@ showNatValue natVal =
     --         String.concat [ "S(", showNatValue val1, ")" ]
     natValToInt natVal
         |> String.fromInt
+
+
+showListValue : ListValue -> String
+showListValue listValue =
+    case listValue of
+        EmptyListValue ->
+            "[]"
+
+        ConsValue headValue tailValue ->
+            String.concat
+                [ "Cons("
+                , showValue headValue
+                , ", "
+                , showValue tailValue
+                , ")"
+                ]
 
 
 
