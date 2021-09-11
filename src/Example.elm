@@ -311,3 +311,51 @@ selfApply =
 selfApplyType =
     -- infinite type
     infer0 selfApply
+
+
+
+-- LISTS
+
+
+range4 =
+    Cons n0 (Cons n1 (Cons n2 (Cons n3 EmptyList)))
+
+
+constList =
+    Abstraction "x"
+        (Abstraction "n"
+            (NatLoop
+                { base = EmptyList
+                , loop =
+                    { indexVar = "i"
+                    , stateVar = "xs"
+                    , body =
+                        Cons (VarUse "x") (VarUse "xs")
+                    }
+                , arg = VarUse "n"
+                }
+            )
+        )
+
+
+constTrue =
+    Application (Application constList BoolTrue) n4
+
+
+sumList =
+    Abstraction "xs"
+        (ListLoop
+            { initState = n0
+            , loop =
+                { listElementVar = "x"
+                , stateVar = "s"
+                , body =
+                    Application (Application add (VarUse "x")) (VarUse "s")
+                }
+            , arg = VarUse "xs"
+            }
+        )
+
+
+sumRange4 =
+    Application sumList range4
