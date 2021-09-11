@@ -676,24 +676,10 @@ infer term =
         Cons headTerm tailTerm ->
             -- headType := infer headTerm;
             -- tailType := infer tailTerm;
-            -- case tailType of
-            --   ListType typeInner ->
-            --     resultType := unify headType typeInner;
-            --     return (ListType resultType);
-            --   _ ->
-            --     throwTypeError [ExpectedListType]
+            -- resultType := unify (LambdaList headType) tailType
             State.andThen2
                 (\headType tailType ->
-                    case tailType of
-                        LambdaList innerType ->
-                            unify headType innerType
-                                |> State.andThen
-                                    (\resultType ->
-                                        State.return (LambdaList resultType)
-                                    )
-
-                        _ ->
-                            throwTypeError [ ExpectedListType ]
+                    unify (LambdaList headType) tailType
                 )
                 (infer headTerm)
                 (infer tailTerm)

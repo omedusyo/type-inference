@@ -371,3 +371,49 @@ sumListType =
 
 sumRange4 =
     Application sumList range4
+
+
+sumRange4Type =
+    infer0 sumRange4
+
+
+listMap =
+    Abstraction "f"
+        (Abstraction "xs"
+            (ListLoop
+                { initState = EmptyList
+                , loop =
+                    { listElementVar = "x"
+                    , stateVar = "ys"
+                    , body =
+                        Cons (Application (VarUse "f") (VarUse "x")) (VarUse "ys")
+                    }
+                , arg = VarUse "xs"
+                }
+            )
+        )
+
+
+listMapType =
+    infer0 listMap
+
+
+listConcat =
+    Abstraction "xs"
+        (Abstraction "ys"
+            (ListLoop
+                { initState = VarUse "ys"
+                , loop =
+                    { listElementVar = "x"
+                    , stateVar = "zs"
+                    , body =
+                        Cons (VarUse "x") (VarUse "zs")
+                    }
+                , arg = VarUse "xs"
+                }
+            )
+        )
+
+
+listConcatType =
+    infer0 listConcat
