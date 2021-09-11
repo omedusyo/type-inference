@@ -545,6 +545,10 @@ pushVarToContext varName type0 context0 =
         context0
 
 
+
+-- ===EQUATIONS===
+
+
 type alias Equations =
     Dict TypeVarName Type
 
@@ -562,6 +566,10 @@ lookupEquations =
 extendEquations : TypeVarName -> Type -> Equations -> Equations
 extendEquations varname type0 eqs =
     AssocList.insert varname type0 eqs
+
+
+
+-- ===EXPANSION===
 
 
 expandType : Type -> Equations -> Type
@@ -595,6 +603,10 @@ expandType type0 eqs0 =
 
         LambdaNat ->
             LambdaNat
+
+
+
+-- ===UNIFICATION===
 
 
 unification : Type -> Type -> Equations -> Result (List TypeError) ( Equations, Type )
@@ -790,8 +802,12 @@ unify type0 type1 =
         )
 
 
-infer2 : Term -> InferenceContext Type
-infer2 term =
+
+-- ===INFERENCE===
+
+
+infer : Term -> InferenceContext Type
+infer term =
     case term of
         VarUse varName ->
             getContext
@@ -814,16 +830,16 @@ infer2 term =
                 )
 
         Pair fst snd ->
-            -- typeFst := infer2 fst
-            -- typeSnd := infer2 snd
+            -- typeFst := infer fst
+            -- typeSnd := infer snd
             -- return (Product typeFst typeSnd)
             State.map2
                 (\typeFst typeSnd -> Product typeFst typeSnd)
-                (infer2 fst)
-                (infer2 snd)
+                (infer fst)
+                (infer snd)
 
         Fst productExp ->
-            -- typeProduct0 := infer2 productExp;
+            -- typeProduct0 := infer productExp;
             -- fstTypeVar0  := generateFreshVar;
             -- sndTypeVar0  := generateFreshVar;
             -- typeProduct2 := unify typeProduct0 (Product fstTypeVar0 sndTypeVar0)
@@ -845,7 +861,7 @@ infer2 term =
                                         throwTypeError [ ExpectedProductType ]
                             )
                 )
-                (infer2 productExp)
+                (infer productExp)
                 generateFreshVar
                 generateFreshVar
 
@@ -863,14 +879,14 @@ infer2 term =
                                         throwTypeError [ ExpectedProductType ]
                             )
                 )
-                (infer2 productExp)
+                (infer productExp)
                 generateFreshVar
                 generateFreshVar
 
         Abstraction var body ->
             -- typeVar := generateFreshVar;
             -- updateContext (\context -> context |> pushVarToContext var typeVar);
-            -- typeBody := infer2 body;
+            -- typeBody := infer body;
             -- updateContext (\context -> context |> popVarFromContext var);
             -- return (Arrow typeVar typeBody)
             generateFreshVar
@@ -878,7 +894,7 @@ infer2 term =
                     (\typeVar ->
                         State.mid
                             (updateContext0 (\context -> context |> pushVarToContext var typeVar))
-                            (infer2 body)
+                            (infer body)
                             (updateContext0 (\context -> context |> popVarFromContext var))
                             |> State.map
                                 (\typeBody ->
@@ -887,8 +903,8 @@ infer2 term =
                     )
 
         Application fn arg ->
-            -- typeFn0 := infer2 fn ;
-            -- typeArg := infer2 arg ;
+            -- typeFn0 := infer fn ;
+            -- typeArg := infer arg ;
             -- resultTypeVar := generateFreshVar;
             -- typeFn1 := unify typeFn0 (Arrow typeArg resultTypeVar);
             -- case typeFn1 of
@@ -909,36 +925,36 @@ infer2 term =
                                         throwTypeError [ ExpectedArrowType ]
                             )
                 )
-                (infer2 fn)
-                (infer2 arg)
+                (infer fn)
+                (infer arg)
                 generateFreshVar
 
         Left leftTerm ->
-            -- typeLeftTerm := infer2 leftTerm;
+            -- typeLeftTerm := infer leftTerm;
             -- typeRightTerm := generateFreshVar;
             -- return (Sum typeLeftTerm typeRightTerm);
             State.map2 Sum
-                (infer2 leftTerm)
+                (infer leftTerm)
                 generateFreshVar
 
         Right rightTerm ->
             State.map2 Sum
                 generateFreshVar
-                (infer2 rightTerm)
+                (infer rightTerm)
 
         Case { arg, leftVar, leftBody, rightVar, rightBody } ->
-            -- typeArg := infer2 arg;
+            -- typeArg := infer arg;
             -- leftTypeVar := generateFreshVar;
             -- rightTypeVar := generateFreshVar;
             -- sumType := unify (Sum leftTypeVar rightTypeVar) typeArg;
             -- case sumType of
             --     Sum leftType rightType ->
             --         updateContext (\context -> context |> pushVarToContext leftVar leftType);
-            --         typeLeftBody := infer2 leftBody;
+            --         typeLeftBody := infer leftBody;
             --         updateContext (\context -> context |> popVarFromContext leftVar);
             --
             --         updateContext (\context -> context |> pushVarToContext rightVar rightType);
-            --         typeRightBody := infer2 rightBody;
+            --         typeRightBody := infer rightBody;
             --         updateContext (\context -> context |> popVarFromContext rightVar);
             --
             --         unify typeLeftBody typeRightBody
@@ -957,12 +973,12 @@ infer2 term =
                                             )
                                             (State.mid
                                                 (updateContext0 (\context -> context |> pushVarToContext leftVar leftType))
-                                                (infer2 leftBody)
+                                                (infer leftBody)
                                                 (updateContext0 (\context -> context |> popVarFromContext leftVar))
                                             )
                                             (State.mid
                                                 (updateContext0 (\context -> context |> pushVarToContext rightVar rightType))
-                                                (infer2 rightBody)
+                                                (infer rightBody)
                                                 (updateContext0 (\context -> context |> popVarFromContext rightVar))
                                             )
 
@@ -970,7 +986,7 @@ infer2 term =
                                         throwTypeError [ ExpectedSumType ]
                             )
                 )
-                (infer2 arg)
+                (infer arg)
                 generateFreshVar
                 generateFreshVar
 
@@ -981,40 +997,40 @@ infer2 term =
             State.return LambdaBool
 
         IfThenElse arg leftBody rightBody ->
-            -- argType := infer2 arg;
+            -- argType := infer arg;
             -- unify argType LambdaBool;
-            -- typeLeftBody := infer2 leftBody;
-            -- typeRightBody := infer2 rightBody;
+            -- typeLeftBody := infer leftBody;
+            -- typeRightBody := infer rightBody;
             -- unify typeLeftBody typeRightBody;
             State.second
-                (infer2 arg
+                (infer arg
                     |> State.andThen
                         (\argType ->
                             unify argType LambdaBool
                         )
                 )
                 (State.andThen2 unify
-                    (infer2 leftBody)
-                    (infer2 rightBody)
+                    (infer leftBody)
+                    (infer rightBody)
                 )
 
         NatZero ->
             State.return LambdaNat
 
         NatSucc term1 ->
-            -- type1 infer2 term1;
+            -- type1 infer term1;
             -- unify type1 LambdaNat;
-            infer2 term1
+            infer term1
                 |> State.andThen
                     (\type1 ->
                         unify type1 LambdaNat
                     )
 
         NatLoop { base, loop, arg } ->
-            -- argType := infer2 arg;
+            -- argType := infer arg;
             -- unify argType LambdaNat
             --
-            -- baseType := infer2 base;
+            -- baseType := infer base;
             --
             -- updateContext
             --   (\context ->
@@ -1022,7 +1038,7 @@ infer2 term =
             --           |> pushVarToContext loop.indexVar LambdaNat
             --           |> pushVarToContext loop.stateVar baseType
             --   );
-            -- loopBodyType := infer2 loop.body;
+            -- loopBodyType := infer loop.body;
             -- updateContext
             --   (\context ->
             --       context
@@ -1033,7 +1049,7 @@ infer2 term =
             -- unify loopBodyType baseType;
             let
                 argInference =
-                    infer2 arg
+                    infer arg
                         |> State.andThen
                             (\argType ->
                                 unify argType LambdaNat
@@ -1041,7 +1057,7 @@ infer2 term =
             in
             State.second
                 argInference
-                (infer2 base
+                (infer base
                     |> State.andThen
                         (\baseType ->
                             let
@@ -1054,7 +1070,7 @@ infer2 term =
                                                     |> pushVarToContext loop.stateVar baseType
                                             )
                                         )
-                                        (infer2 loop.body)
+                                        (infer loop.body)
                                         (updateContext0
                                             (\context ->
                                                 context
@@ -1072,380 +1088,13 @@ infer2 term =
                 )
 
 
-infer : Term -> TypeVarName -> Context -> Equations -> Result (List TypeError) ( ( TypeVarName, Context, Equations ), Type )
-infer term n context0 eqs0 =
-    case term of
-        VarUse varname ->
-            case lookupType varname context0 of
-                Just varType ->
-                    Ok ( ( n, context0, eqs0 ), varType )
-
-                Nothing ->
-                    let
-                        ( m, typeVar ) =
-                            newTypeVar n
-                    in
-                    Ok ( ( m, context0 |> pushVarToContext varname typeVar, eqs0 ), typeVar )
-
-        Pair fst snd ->
-            let
-                typeFstResult =
-                    infer fst n context0 eqs0
-            in
-            typeFstResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeFst ) ->
-                        let
-                            typeSndResult =
-                                infer snd m context1 eqs1
-                        in
-                        typeSndResult
-                            |> Result.andThen
-                                (\( ( k, context2, eqs2 ), typeSnd ) ->
-                                    Ok ( ( k, context2, eqs2 ), Product typeFst typeSnd )
-                                )
-                    )
-
-        Fst productExp ->
-            let
-                typeExpResult =
-                    infer productExp n context0 eqs0
-            in
-            typeExpResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeProduct ) ->
-                        let
-                            ( k1, fstTypeVar ) =
-                                newTypeVar m
-
-                            ( k2, sndTypeVar ) =
-                                newTypeVar k1
-
-                            maybeEqs2 =
-                                eqs1
-                                    |> unification typeProduct (Product fstTypeVar sndTypeVar)
-                        in
-                        maybeEqs2
-                            |> Result.andThen
-                                (\( eqs2, typeProduct2 ) ->
-                                    case typeProduct2 of
-                                        Product fstTypeVar2 _ ->
-                                            Ok ( ( k2, context1, eqs2 ), fstTypeVar2 )
-
-                                        _ ->
-                                            Err [ ExpectedProductType ]
-                                )
-                    )
-
-        Snd productExp ->
-            let
-                typeExpResult =
-                    infer productExp n context0 eqs0
-            in
-            typeExpResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeProduct ) ->
-                        let
-                            ( k1, fstTypeVar ) =
-                                newTypeVar m
-
-                            ( k2, sndTypeVar ) =
-                                newTypeVar k1
-
-                            maybeEqs2 =
-                                eqs1
-                                    |> unification typeProduct (Product fstTypeVar sndTypeVar)
-                        in
-                        maybeEqs2
-                            |> Result.andThen
-                                (\( eqs2, typeProduct2 ) ->
-                                    case typeProduct2 of
-                                        Product _ sndTypeVar2 ->
-                                            Ok ( ( k2, context1, eqs2 ), sndTypeVar )
-
-                                        _ ->
-                                            Err [ ExpectedProductType ]
-                                )
-                    )
-
-        Abstraction var body ->
-            let
-                ( m, typeVar ) =
-                    newTypeVar n
-
-                typeBodyResult =
-                    infer body m (context0 |> pushVarToContext var typeVar) eqs0
-            in
-            typeBodyResult
-                |> Result.andThen
-                    (\( ( k, context1, eqs1 ), typeBody ) ->
-                        let
-                            context2 =
-                                context1 |> popVarFromContext var
-                        in
-                        Ok ( ( k, context2, eqs1 ), Arrow typeVar typeBody )
-                    )
-
-        Application fn arg ->
-            let
-                typeFnResult =
-                    infer fn n context0 eqs0
-            in
-            typeFnResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeFn ) ->
-                        let
-                            typeArgResult =
-                                infer arg m context1 eqs1
-                        in
-                        typeArgResult
-                            |> Result.andThen
-                                (\( ( k, context2, eqs2 ), typeArg ) ->
-                                    let
-                                        ( k1, resultTypeVar ) =
-                                            newTypeVar k
-
-                                        maybeEqs3 =
-                                            eqs2
-                                                |> unification typeFn (Arrow typeArg resultTypeVar)
-                                    in
-                                    maybeEqs3
-                                        |> Result.andThen
-                                            (\( eqs3, typeFn3 ) ->
-                                                case typeFn3 of
-                                                    Arrow _ resultTypeVar3 ->
-                                                        Ok ( ( k1, context2, eqs3 ), resultTypeVar )
-
-                                                    _ ->
-                                                        Err [ ExpectedArrowType ]
-                                            )
-                                )
-                    )
-
-        Left leftTerm ->
-            let
-                typeLeftTermResult =
-                    infer leftTerm n context0 eqs0
-            in
-            typeLeftTermResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeLeftTerm ) ->
-                        let
-                            ( k, typeRightTerm ) =
-                                newTypeVar m
-                        in
-                        Ok ( ( k, context1, eqs1 ), Sum typeLeftTerm typeRightTerm )
-                    )
-
-        Right rightTerm ->
-            let
-                typeRightTermResult =
-                    infer rightTerm n context0 eqs0
-            in
-            typeRightTermResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeRightTerm ) ->
-                        let
-                            ( k, typeLeftTerm ) =
-                                newTypeVar m
-                        in
-                        Ok ( ( k, context1, eqs1 ), Sum typeLeftTerm typeRightTerm )
-                    )
-
-        Case { arg, leftVar, leftBody, rightVar, rightBody } ->
-            let
-                typeArgResult =
-                    infer arg n context0 eqs0
-            in
-            typeArgResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeArg ) ->
-                        let
-                            ( k1, leftTypeVar ) =
-                                newTypeVar m
-
-                            ( k2, rightTypeVar ) =
-                                newTypeVar k1
-
-                            maybeEqs2 =
-                                eqs1 |> unification (Sum leftTypeVar rightTypeVar) typeArg
-                        in
-                        maybeEqs2
-                            |> Result.andThen
-                                (\( eqs2, sumType ) ->
-                                    case sumType of
-                                        Sum leftType rightType ->
-                                            let
-                                                typeLeftBodyResult =
-                                                    infer leftBody k2 (context1 |> pushVarToContext leftVar leftType) eqs2
-                                            in
-                                            typeLeftBodyResult
-                                                |> Result.andThen
-                                                    (\( ( k3, context2, eqs3 ), typeLeftBody ) ->
-                                                        let
-                                                            context3 =
-                                                                context2 |> popVarFromContext leftVar
-
-                                                            typeRightBodyResult =
-                                                                infer rightBody k3 (context3 |> pushVarToContext rightVar rightType) eqs3
-                                                        in
-                                                        typeRightBodyResult
-                                                            |> Result.andThen
-                                                                (\( ( k4, context4, eqs4 ), typeRightBody ) ->
-                                                                    let
-                                                                        context5 =
-                                                                            context4 |> popVarFromContext rightVar
-
-                                                                        maybeEqs5 =
-                                                                            eqs4 |> unification typeLeftBody typeRightBody
-                                                                    in
-                                                                    maybeEqs5
-                                                                        |> Result.map
-                                                                            (\( eqs5, typeResult ) ->
-                                                                                ( ( k4, context5, eqs5 ), typeResult )
-                                                                            )
-                                                                )
-                                                    )
-
-                                        _ ->
-                                            Err [ ExpectedSumType ]
-                                )
-                    )
-
-        BoolTrue ->
-            Ok ( ( n, context0, eqs0 ), LambdaBool )
-
-        BoolFalse ->
-            Ok ( ( n, context0, eqs0 ), LambdaBool )
-
-        IfThenElse arg leftBody rightBody ->
-            let
-                typeArgResult =
-                    infer arg n context0 eqs0
-            in
-            typeArgResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), typeArg ) ->
-                        let
-                            maybeEqs2 =
-                                eqs1 |> unification LambdaBool typeArg
-                        in
-                        maybeEqs2
-                            |> Result.andThen
-                                (\( eqs2, _ ) ->
-                                    let
-                                        typeLeftBodyResult =
-                                            infer leftBody m context1 eqs2
-                                    in
-                                    typeLeftBodyResult
-                                        |> Result.andThen
-                                            (\( ( k1, context2, eqs3 ), typeLeftBody ) ->
-                                                let
-                                                    typeRightBodyResult =
-                                                        infer rightBody k1 context2 eqs3
-                                                in
-                                                typeRightBodyResult
-                                                    |> Result.andThen
-                                                        (\( ( k2, context3, eqs4 ), typeRightBody ) ->
-                                                            let
-                                                                maybeEqs5 =
-                                                                    eqs4 |> unification typeLeftBody typeRightBody
-                                                            in
-                                                            case maybeEqs5 of
-                                                                Ok ( eqs5, typeResult ) ->
-                                                                    Ok ( ( k2, context3, eqs5 ), typeResult )
-
-                                                                Err errs ->
-                                                                    Err (ExpectedMatchingTypesInIfThenElseBranches :: errs)
-                                                        )
-                                            )
-                                )
-                    )
-
-        NatZero ->
-            Ok ( ( n, context0, eqs0 ), LambdaNat )
-
-        NatSucc term1 ->
-            let
-                typeTerm1Result =
-                    infer term1 n context0 eqs0
-            in
-            typeTerm1Result
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), type1 ) ->
-                        let
-                            maybeEqs2 =
-                                eqs1 |> unification LambdaNat type1
-                        in
-                        maybeEqs2
-                            |> Result.map
-                                (\( eqs2, _ ) ->
-                                    ( ( m, context1, eqs2 ), LambdaNat )
-                                )
-                    )
-
-        NatLoop { base, loop, arg } ->
-            let
-                baseTypeResult =
-                    infer base n context0 eqs0
-            in
-            baseTypeResult
-                |> Result.andThen
-                    (\( ( m, context1, eqs1 ), baseType ) ->
-                        let
-                            argTypeResult =
-                                infer arg m context1 eqs1
-                        in
-                        argTypeResult
-                            |> Result.andThen
-                                (\( ( k1, context2, eqs2 ), argType ) ->
-                                    let
-                                        maybeEqs3 =
-                                            eqs2 |> unification argType LambdaNat
-                                    in
-                                    maybeEqs3
-                                        |> Result.andThen
-                                            (\( eqs3, _ ) ->
-                                                let
-                                                    typeLoopBodyResult =
-                                                        infer loop.body
-                                                            k1
-                                                            (context2
-                                                                |> pushVarToContext loop.indexVar LambdaNat
-                                                                |> pushVarToContext loop.stateVar baseType
-                                                            )
-                                                            eqs3
-                                                in
-                                                typeLoopBodyResult
-                                                    |> Result.andThen
-                                                        (\( ( k2, context3, eqs4 ), typeLoopBody ) ->
-                                                            let
-                                                                context4 =
-                                                                    context3
-                                                                        |> popVarFromContext loop.stateVar
-                                                                        |> popVarFromContext loop.indexVar
-
-                                                                maybeEqs5 =
-                                                                    eqs4 |> unification typeLoopBody baseType
-                                                            in
-                                                            case maybeEqs5 of
-                                                                Ok ( eqs5, stateType ) ->
-                                                                    Ok ( ( k2, context4, eqs5 ), stateType )
-
-                                                                Err errs ->
-                                                                    Err (ExpectedBaseUnifiesWithLoopBodyType :: errs)
-                                                        )
-                                            )
-                                )
-                    )
-
-
 infer0 : Term -> Result (List TypeError) ( Equations, Type )
 infer0 term =
-    infer term 0 emptyEnvironment emptyEquations
+    State.run (infer term)
+        emptyState
         |> Result.map
-            (\( ( _, _, eqs ), type1 ) ->
-                ( eqs, type1 )
+            (\( state, type0 ) ->
+                ( state.equations, type0 )
             )
 
 
