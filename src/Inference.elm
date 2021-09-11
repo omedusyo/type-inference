@@ -670,10 +670,33 @@ infer term =
                 )
 
         EmptyList ->
-            Debug.todo ""
+            generateFreshVar
+                |> State.map (\var -> LambdaList var)
 
         Cons headTerm tailTerm ->
-            Debug.todo ""
+            -- headType := infer headTerm;
+            -- tailType := infer tailTerm;
+            -- case tailType of
+            --   ListType typeInner ->
+            --     resultType := unify headType typeInner;
+            --     return (ListType resultType);
+            --   _ ->
+            --     throwTypeError [ExpectedListType]
+            State.andThen2
+                (\headType tailType ->
+                    case tailType of
+                        LambdaList innerType ->
+                            unify headType innerType
+                                |> State.andThen
+                                    (\resultType ->
+                                        State.return (LambdaList resultType)
+                                    )
+
+                        _ ->
+                            throwTypeError [ ExpectedListType ]
+                )
+                (infer headTerm)
+                (infer tailTerm)
 
         ListLoop {} ->
             Debug.todo ""

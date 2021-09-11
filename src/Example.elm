@@ -321,6 +321,10 @@ range4 =
     Cons n0 (Cons n1 (Cons n2 (Cons n3 EmptyList)))
 
 
+range4Type =
+    infer0 range4
+
+
 constList =
     Abstraction "x"
         (Abstraction "n"
@@ -336,6 +340,10 @@ constList =
                 }
             )
         )
+
+
+constListType =
+    infer0 constList
 
 
 constTrue =
