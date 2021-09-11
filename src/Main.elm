@@ -84,3 +84,16 @@ type Type
     | LambdaBool
     | LambdaNat
     | LambdaList Type
+
+
+
+-- helpers
+
+
+intToNatTerm : Int -> Term
+intToNatTerm n =
+    if n == 0 then
+        NatZero
+
+    else
+        NatSucc (intToNatTerm (n - 1))

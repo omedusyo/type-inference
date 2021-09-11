@@ -4,6 +4,10 @@ import Main exposing (..)
 import Parser exposing ((|.), (|=), Parser)
 
 
+
+-- ===Bool===
+
+
 true : Parser Term
 true =
     Parser.succeed BoolTrue
@@ -19,3 +23,18 @@ false =
 bool : Parser Term
 bool =
     Parser.oneOf [ true, false ]
+
+
+
+-- TODO if-then-else
+-- ===Nat===
+
+
+natConstant : Parser Term
+natConstant =
+    Parser.int
+        |> Parser.map intToNatTerm
+
+
+
+-- TODO: nat-loop
