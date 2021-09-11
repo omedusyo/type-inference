@@ -64,7 +64,7 @@ type Term
     | ListLoop
         { initState : Term
         , loop :
-            { listVar : TermVarName
+            { listElementVar : TermVarName
             , stateVar : TermVarName
             , body : Term
             }

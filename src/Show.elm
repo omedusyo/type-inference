@@ -77,7 +77,7 @@ showTerm term =
 
         NatLoop { base, loop, arg } ->
             String.concat
-                [ "loop("
+                [ "nat-loop("
                 , loop.stateVar
                 , " := "
                 , showTerm base
@@ -96,10 +96,30 @@ showTerm term =
             "[]"
 
         Cons headTerm tailTerm ->
-            Debug.todo ""
+            String.concat
+                [ "Cons("
+                , showTerm headTerm
+                , ", "
+                , showTerm tailTerm
+                , ")"
+                ]
 
-        ListLoop {} ->
-            Debug.todo ""
+        ListLoop { initState, loop, arg } ->
+            String.concat
+                [ "list-loop("
+                , loop.stateVar
+                , " := "
+                , showTerm initState
+                , ", for "
+                , loop.listElementVar
+                , " in reverse("
+                , showTerm arg
+                , ") do "
+                , loop.stateVar
+                , " := "
+                , showTerm loop.body
+                , ")"
+                ]
 
 
 showTermEnvironment : TermEnvironment -> String
