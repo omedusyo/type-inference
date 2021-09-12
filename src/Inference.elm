@@ -420,48 +420,45 @@ infer term =
                 (infer fst)
                 (infer snd)
 
-        Fst productExp ->
-            -- typeProduct0 := infer productExp;
-            -- fstTypeVar0  := generateFreshVar;
-            -- sndTypeVar0  := generateFreshVar;
-            -- typeProduct2 := unify typeProduct0 (Product fstTypeVar0 sndTypeVar0)
-            -- case typeProduct1 of
-            --     Product fstTypeVar1 _ ->
-            --         return fstTypeVar1
-            --     _ ->
-            --         err ExpectedProductType
+        MatchProduct { arg, var0, var1, body } ->
+            -- argType0 := infer arg
+            -- varType0 := generateFreshVar
+            -- varType1 := generateFreshVar
+            -- unify (Product varType0 varType1) argType
+            -- updateContext
+            --   (\context ->
+            --     context |> pushVarToContext var0 varType0
+            --                pushVarToContext var1 varType1
+            --   );
+            -- infer body
+            -- updateContext
+            --   (\context ->
+            --     context |> popVarFromContext var1
+            --                popVarFromContext var0
+            --   );
             State.andThen3
-                (\typeProduct0 fstTypeVar0 sndTypeVar0 ->
-                    unify typeProduct0 (Product fstTypeVar0 sndTypeVar0)
-                        |> State.andThen
-                            (\typeProduct2 ->
-                                case typeProduct2 of
-                                    Product fstTypeVar1 _ ->
-                                        State.return fstTypeVar1
-
-                                    _ ->
-                                        throwTypeError [ ExpectedProductType ]
+                (\argType varType0 varType1 ->
+                    State.second
+                        (unify (Product varType0 varType1) argType)
+                        (State.mid
+                            (updateContext0
+                                (\context ->
+                                    context
+                                        |> pushVarToContext var0 varType0
+                                        |> pushVarToContext var1 varType1
+                                )
                             )
-                )
-                (infer productExp)
-                generateFreshVar
-                generateFreshVar
-
-        Snd productExp ->
-            State.andThen3
-                (\typeProduct0 fstTypeVar0 sndTypeVar0 ->
-                    unify typeProduct0 (Product fstTypeVar0 sndTypeVar0)
-                        |> State.andThen
-                            (\typeProduct2 ->
-                                case typeProduct2 of
-                                    Product _ sndTypeVar2 ->
-                                        State.return sndTypeVar2
-
-                                    _ ->
-                                        throwTypeError [ ExpectedProductType ]
+                            (infer body)
+                            (updateContext0
+                                (\context ->
+                                    context
+                                        |> popVarFromContext var1
+                                        |> popVarFromContext var0
+                                )
                             )
+                        )
                 )
-                (infer productExp)
+                (infer arg)
                 generateFreshVar
                 generateFreshVar
 

@@ -21,13 +21,18 @@ showTerm term =
             -- (pair e1 e2)
             String.concat [ "(pair ", showTerm fst, " ", showTerm snd, ")" ]
 
-        Fst term1 ->
-            -- (first e)
-            String.concat [ "(first ", showTerm term1, ")" ]
-
-        Snd term1 ->
-            -- (second e)
-            String.concat [ "(second ", showTerm term1, ")" ]
+        MatchProduct { arg, var0, var1, body } ->
+            String.concat
+                [ "(match-pair "
+                , showTerm arg
+                , " { (pair "
+                , var0
+                , " "
+                , var1
+                , ") . "
+                , showTerm body
+                , " })"
+                ]
 
         Abstraction var body ->
             -- (fn { x . body })
