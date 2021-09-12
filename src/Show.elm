@@ -14,111 +14,121 @@ showTerm : Term -> String
 showTerm term =
     case term of
         VarUse varname ->
+            -- $foo
             String.concat [ "$", varname ]
 
         Pair fst snd ->
-            String.concat [ "(", showTerm fst, ", ", showTerm snd, ")" ]
+            -- (pair e1 e2)
+            String.concat [ "(pair ", showTerm fst, " ", showTerm snd, ")" ]
 
         Fst term1 ->
-            String.concat [ showTerm term1, ".0" ]
+            -- (first e)
+            String.concat [ "(first ", showTerm term1, ")" ]
 
         Snd term1 ->
-            String.concat [ showTerm term1, ".1" ]
+            -- (second e)
+            String.concat [ "(second ", showTerm term1, ")" ]
 
         Abstraction var body ->
-            String.concat [ "lam(", var, " -> ", showTerm body, ")" ]
+            -- (fn { x . body })
+            String.concat [ "(fn { ", var, " . ", showTerm body, " })" ]
 
         Application fn arg ->
-            String.concat [ "[", showTerm fn, " ", showTerm arg, "]" ]
+            -- (@ e1 e2)
+            String.concat [ "(@ ", showTerm fn, " ", showTerm arg, ")" ]
 
         Left term1 ->
-            String.concat [ "L(", showTerm term1, ")" ]
+            -- (left e)
+            String.concat [ "(left ", showTerm term1, ")" ]
 
         Right term1 ->
-            String.concat [ "R(", showTerm term1, ")" ]
+            -- (right e)
+            String.concat [ "(right ", showTerm term1, ")" ]
 
         Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+            -- (match-sum e { (left x) . e1 } { (right y) . e2 })
             String.concat
-                [ "case("
+                [ "(match-sum "
                 , showTerm arg
-                , ", Left "
+                , " { (left "
                 , leftVar
-                , " -> "
+                , ") . "
                 , showTerm leftBody
-                , ", Right "
+                , " } { (right "
                 , rightVar
-                , " -> "
+                , ") . "
                 , showTerm rightBody
-                , ")"
+                , " })"
                 ]
 
         BoolTrue ->
-            "True"
+            "true"
 
         BoolFalse ->
-            "False"
+            "false"
 
         IfThenElse arg leftBody rightBody ->
+            -- (if { x } { y })
             String.concat
-                [ "if("
+                [ "(if "
                 , showTerm arg
-                , " then "
+                , " { "
                 , showTerm leftBody
-                , " else "
+                , " } { "
                 , showTerm rightBody
-                , ")"
+                , " })"
                 ]
 
         NatZero ->
-            "Z"
+            "0"
 
         NatSucc term1 ->
-            String.concat [ "S(", showTerm term1, ")" ]
+            -- (succ e)
+            String.concat [ "(succ ", showTerm term1, ")" ]
 
         NatLoop { base, loop, arg } ->
+            -- (loop-nat nExp initStateExp { i state . body })
             String.concat
-                [ "nat-loop("
-                , loop.stateVar
-                , " := "
-                , showTerm base
-                , ", for "
-                , loop.indexVar
-                , " in range("
+                [ "(loop-nat "
                 , showTerm arg
-                , ") do "
+                , " "
+                , showTerm base
+                , " { "
+                , loop.indexVar
+                , " "
                 , loop.stateVar
-                , " := "
+                , " . "
                 , showTerm loop.body
-                , ")"
+                , " })"
                 ]
 
         EmptyList ->
-            "[]"
+            "empty-list"
 
         Cons headTerm tailTerm ->
+            -- (cons e1 e2)
             String.concat
-                [ "Cons("
+                [ "(cons "
                 , showTerm headTerm
-                , ", "
+                , " "
                 , showTerm tailTerm
                 , ")"
                 ]
 
         ListLoop { initState, loop, arg } ->
+            -- (loop-list xsExp initStateExp { x state . body } )
             String.concat
-                [ "list-loop("
-                , loop.stateVar
-                , " := "
-                , showTerm initState
-                , ", for "
-                , loop.listElementVar
-                , " in reverse("
+                [ "(list-loop "
                 , showTerm arg
-                , ") do "
+                , " "
+                , showTerm initState
+                , " { "
+                , loop.listElementVar
+                , " "
                 , loop.stateVar
-                , " := "
+                , " . "
                 , showTerm loop.body
-                , ")"
+                , " })"
                 ]
 
 
@@ -155,34 +165,34 @@ showValue : Value -> String
 showValue val =
     case val of
         PairValue fst snd ->
-            String.concat [ "(", showValue fst, ", ", showValue snd, ")" ]
+            String.concat [ "(pair ", showValue fst, " ", showValue snd, ")" ]
 
         LeftValue val1 ->
-            String.concat [ "L(", showValue val1, ")" ]
+            String.concat [ "(left ", showValue val1, ")" ]
 
         RightValue val1 ->
-            String.concat [ "R(", showValue val1, ")" ]
+            String.concat [ "(right ", showValue val1, ")" ]
 
         Closure { env, var, body } ->
             String.concat
-                [ "{"
+                [ "<"
                 , showTermEnvironment env
                 , if AssocList.isEmpty env then
-                    "lam("
+                    "(fn { "
 
                   else
-                    " |- lam("
+                    " |- (fn { "
                 , var
-                , " -> "
+                , " . "
                 , showTerm body
-                , ")}"
+                , " })>"
                 ]
 
         TrueValue ->
-            "True"
+            "true"
 
         FalseValue ->
-            "False"
+            "false"
 
         NatValue natVal ->
             showNatValue natVal
@@ -216,13 +226,13 @@ showListValue : ListValue -> String
 showListValue listValue =
     case listValue of
         EmptyListValue ->
-            "[]"
+            "empty-list"
 
         ConsValue headValue tailValue ->
             String.concat
-                [ "Cons("
+                [ "(cons "
                 , showValue headValue
-                , ", "
+                , " "
                 , showValue tailValue
                 , ")"
                 ]

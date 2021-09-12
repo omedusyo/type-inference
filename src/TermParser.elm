@@ -23,18 +23,55 @@ spaces =
     Parser.chompWhile (\c -> Set.member c whitespaceChars)
 
 
-spacesDelimited : Parser a -> Parser (List a)
-spacesDelimited p =
+keyword : String -> Parser ()
+keyword str =
+    Parser.keyword str
+        |. spaces
+
+
+symbol : String -> Parser ()
+symbol str =
+    Parser.symbol str
+        |. spaces
+
+
+paren : Parser a -> Parser a
+paren p =
+    Parser.succeed (\x -> x)
+        |. symbol "("
+        |= p
+        |. symbol ")"
+
+
+binding : Parser a -> Parser b -> Parser ( a, b )
+binding varsParser bodyParser =
+    Parser.succeed (\vars body -> ( vars, body ))
+        |. symbol "{"
+        |= varsParser
+        |. symbol "."
+        |= bodyParser
+        |. symbol "}"
+
+
+optionalBinding : Parser a -> Parser a
+optionalBinding bodyParser =
+    Parser.succeed (\x -> x)
+        |. symbol "{"
+        |. Parser.oneOf [ symbol ".", Parser.succeed () ]
+        |= bodyParser
+        |. symbol "}"
+
+
+seq : Parser a -> Parser (List a)
+seq p =
     Parser.loop []
         (\xs ->
             Parser.oneOf
                 [ Parser.succeed (\x -> Parser.Loop (x :: xs))
                     |= p
-                    |. spaces
                 , Parser.succeed (Parser.Done (List.reverse xs))
                 ]
         )
-        |. spaces
 
 
 
@@ -59,8 +96,7 @@ operatorTerm : Parser Term
 operatorTerm =
     -- TODO: how to refactor this identity?
     Parser.succeed (\x -> x)
-        |. Parser.symbol "("
-        |. spaces
+        |. symbol "("
         |= Parser.oneOf
             [ abstraction
             , application
@@ -76,8 +112,7 @@ operatorTerm =
             , cons
             , listLoop
             ]
-        |. Parser.symbol ")"
-        |. spaces
+        |. symbol ")"
 
 
 
@@ -121,6 +156,7 @@ varIntro =
             -- TODO
             Set.empty
         }
+        |. spaces
 
 
 
@@ -132,17 +168,18 @@ varIntro =
 
 varsIntro : Parser (List TermVarName)
 varsIntro =
-    spacesDelimited varIntro
+    seq varIntro
 
 
 terms : Parser (List Term)
 terms =
-    spacesDelimited term
+    seq term
 
 
 varUse : Parser Term
 varUse =
     Parser.succeed VarUse
+        -- WARNING: It's very important that this uses `Parser.symbol` and not `symbol` because here we don't actually want to consume trailing whitespace after `$`
         |. Parser.symbol "$"
         |= varIntro
 
@@ -154,13 +191,13 @@ varUse =
 true : Parser Term
 true =
     Parser.succeed BoolTrue
-        |. Parser.keyword "true"
+        |. keyword "true"
 
 
 false : Parser Term
 false =
     Parser.succeed BoolFalse
-        |. Parser.keyword "false"
+        |. keyword "false"
 
 
 bool : Parser Term
@@ -168,32 +205,23 @@ bool =
     Parser.oneOf [ true, false ]
 
 
+
+-- (if { x } { y })
+-- TODO: also allow `(if { true . x } { false . y })`
+
+
 ifThenElse : Parser Term
 ifThenElse =
     Parser.succeed IfThenElse
-        |. Parser.keyword "if"
-        |. spaces
+        |. keyword "if"
         -- test expression
         |= Parser.lazy (\() -> term)
-        |. spaces
         -- left branch
-        |. Parser.symbol "{"
-        |. spaces
-        -- optional `.`
-        |. Parser.oneOf [ Parser.symbol "." |. spaces, Parser.succeed () ]
-        |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "}"
-        |. spaces
+        |= optionalBinding
+            (Parser.lazy (\() -> term))
         -- right branch
-        |. Parser.symbol "{"
-        |. spaces
-        -- optional `.`
-        |. Parser.oneOf [ Parser.symbol "." |. spaces, Parser.succeed () ]
-        |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "}"
-        |. spaces
+        |= optionalBinding
+            (Parser.lazy (\() -> term))
 
 
 
@@ -204,30 +232,23 @@ ifThenElse =
 pair : Parser Term
 pair =
     Parser.succeed Pair
-        |. Parser.keyword "pair"
-        |. spaces
+        |. keyword "pair"
         |= Parser.lazy (\() -> term)
-        |. spaces
         |= Parser.lazy (\() -> term)
-        |. spaces
 
 
 fst : Parser Term
 fst =
     Parser.succeed Fst
-        |. Parser.keyword "first"
-        |. spaces
+        |. keyword "first"
         |= Parser.lazy (\() -> term)
-        |. spaces
 
 
 snd : Parser Term
 snd =
     Parser.succeed Snd
-        |. Parser.keyword "second"
-        |. spaces
+        |. keyword "second"
         |= Parser.lazy (\() -> term)
-        |. spaces
 
 
 
@@ -253,21 +274,13 @@ abstraction =
                 var :: vars1 ->
                     Abstraction var (abstractionWithListOfVars vars1 body)
     in
-    Parser.succeed abstractionWithListOfVars
-        |. Parser.keyword "fn"
-        |. spaces
+    Parser.succeed (\( vars0, body ) -> abstractionWithListOfVars vars0 body)
+        |. keyword "fn"
         -- Parameters
-        |. Parser.symbol "{"
-        |. spaces
-        |= varsIntro
-        |. spaces
-        |. Parser.symbol "."
-        |. spaces
-        -- body
-        |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "}"
-        |. spaces
+        |= binding
+            -- Note that this parser multiple vars and not just one
+            varsIntro
+            (Parser.lazy (\() -> term))
 
 
 
@@ -297,12 +310,9 @@ application =
                     applicationWithListOfArgs (Application fn arg) args1
     in
     Parser.succeed applicationWithListOfArgs
-        |. Parser.keyword "@"
-        |. spaces
+        |. keyword "@"
         |= Parser.lazy (\() -> term)
-        |. spaces
         |= Parser.lazy (\() -> terms)
-        |. spaces
 
 
 
@@ -312,29 +322,44 @@ application =
 left : Parser Term
 left =
     Parser.succeed Left
-        |. Parser.keyword "left"
-        |. spaces
+        |. keyword "left"
         |= Parser.lazy (\() -> term)
-        |. spaces
+
+
+leftPattern : Parser TermVarName
+leftPattern =
+    Parser.succeed (\x -> x)
+        |. keyword "left"
+        |= varIntro
 
 
 right : Parser Term
 right =
     Parser.succeed Right
-        |. Parser.keyword "right"
-        |. spaces
+        |. keyword "right"
         |= Parser.lazy (\() -> term)
-        |. spaces
+
+
+rightPattern : Parser TermVarName
+rightPattern =
+    Parser.succeed (\x -> x)
+        |. keyword "right"
+        |= varIntro
 
 
 
--- (sum-case e {x . e1} {y . e2})
+-- (sum-case e {(left x) . e1} {(right y) . e2})
 
 
 sumCase : Parser Term
 sumCase =
+    -- TODO: we allow
+    --          (sum-case e {(left x) . e1} {(right y) . e2})
+    --       but we don't allow
+    --          (sum-case e {(right y) . e2} {(left x) . e1} )
+    --       Order shouldn't matter.
     Parser.succeed
-        (\arg leftVar leftBody rightVar rightBody ->
+        (\arg ( leftVar, leftBody ) ( rightVar, rightBody ) ->
             Case
                 { arg = arg
                 , leftVar = leftVar
@@ -343,35 +368,17 @@ sumCase =
                 , rightBody = rightBody
                 }
         )
-        |. Parser.keyword "sum-case"
-        |. spaces
+        |. keyword "match-sum"
         -- arg
         |= Parser.lazy (\() -> term)
-        |. spaces
-        -- leftVar
-        |. Parser.symbol "{"
-        |. spaces
-        |= varIntro
-        |. spaces
-        |. Parser.symbol "."
-        |. spaces
-        -- left body
-        |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "}"
-        |. spaces
-        -- rightVar
-        |. Parser.symbol "{"
-        |. spaces
-        |= varIntro
-        |. spaces
-        |. Parser.symbol "."
-        |. spaces
-        -- right body
-        |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "}"
-        |. spaces
+        -- left
+        |= binding
+            (paren leftPattern)
+            (Parser.lazy (\() -> term))
+        -- right
+        |= binding
+            (paren rightPattern)
+            (Parser.lazy (\() -> term))
 
 
 
@@ -387,10 +394,8 @@ natConstant =
 natSucc : Parser Term
 natSucc =
     Parser.succeed NatSucc
-        |. Parser.keyword "succ"
-        |. spaces
+        |. keyword "succ"
         |= Parser.lazy (\() -> term)
-        |. spaces
 
 
 
@@ -400,7 +405,7 @@ natSucc =
 natLoop : Parser Term
 natLoop =
     Parser.succeed
-        (\arg initState indexVar stateVar body ->
+        (\arg initState ( ( indexVar, stateVar ), body ) ->
             NatLoop
                 { base = initState
                 , loop =
@@ -411,28 +416,14 @@ natLoop =
                 , arg = arg
                 }
         )
-        |. Parser.keyword "nat-loop"
-        |. spaces
+        |. keyword "nat-loop"
         -- loop argument (the natural number bound)
         |= Parser.lazy (\() -> term)
-        |. spaces
         -- the initial state of the loop
         |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "{"
-        |. spaces
-        -- index var
-        |= varIntro
-        |. spaces
-        -- state var
-        |= varIntro
-        |. spaces
-        |. Parser.symbol "."
-        |. spaces
-        |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "}"
-        |. spaces
+        |= binding
+            (Parser.succeed (\indexVar stateVar -> ( indexVar, stateVar )) |= varIntro |= varIntro)
+            (Parser.lazy (\() -> term))
 
 
 
@@ -443,18 +434,15 @@ natLoop =
 emptyList : Parser Term
 emptyList =
     Parser.succeed EmptyList
-        |. Parser.keyword "empty-list"
+        |. keyword "empty-list"
 
 
 cons : Parser Term
 cons =
     Parser.succeed Cons
-        |. Parser.keyword "cons"
-        |. spaces
+        |. keyword "cons"
         |= Parser.lazy (\() -> term)
-        |. spaces
         |= Parser.lazy (\() -> term)
-        |. spaces
 
 
 
@@ -464,7 +452,7 @@ cons =
 listLoop : Parser Term
 listLoop =
     Parser.succeed
-        (\arg initState listElementVar stateVar body ->
+        (\arg initState ( ( listElementVar, stateVar ), body ) ->
             ListLoop
                 { initState = initState
                 , loop =
@@ -475,25 +463,11 @@ listLoop =
                 , arg = arg
                 }
         )
-        |. Parser.keyword "list-loop"
-        |. spaces
+        |. keyword "list-loop"
         -- loop argument (the list)
         |= Parser.lazy (\() -> term)
-        |. spaces
         -- the initial state of the loop
         |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "{"
-        |. spaces
-        -- list element var
-        |= varIntro
-        |. spaces
-        -- state var
-        |= varIntro
-        |. spaces
-        |. Parser.symbol "."
-        |. spaces
-        |= Parser.lazy (\() -> term)
-        |. spaces
-        |. Parser.symbol "}"
-        |. spaces
+        |= binding
+            (Parser.succeed (\listElementVar stateVar -> ( listElementVar, stateVar )) |= varIntro |= varIntro)
+            (Parser.lazy (\() -> term))
