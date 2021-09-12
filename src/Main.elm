@@ -13,6 +13,7 @@ type Term
     = -- ==Variables==
       VarUse TermVarName
       -- ==Cartesian Product==
+      -- TODO: add empty-tuple
       -- intro
     | Pair Term Term
       -- elim
@@ -50,6 +51,7 @@ type Term
       -- f 0 = ....
       -- f (n + 1) = you can use `f n` here
     | NatLoop
+        -- TODO: rename to initState var
         { base : Term
         , loop :
             { indexVar : TermVarName
@@ -78,7 +80,9 @@ type alias TypeVarName =
 
 type Type
     = VarType TypeVarName
+      -- add unit type
     | Product Type Type
+      -- add zero type
     | Sum Type Type
     | Arrow Type Type
     | LambdaBool
