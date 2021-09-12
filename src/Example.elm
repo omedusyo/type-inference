@@ -71,6 +71,10 @@ pair1Type =
     infer0 pair1
 
 
+matchProduct0 =
+    MatchProduct { arg = Pair n0 n1, var0 = "x", var1 = "y", body = VarUse "x" }
+
+
 id =
     -- \x -> x
     Abstraction "x" (VarUse "x")
