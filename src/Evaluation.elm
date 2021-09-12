@@ -186,26 +186,17 @@ eval env term =
             Ok (Closure { env = env, var = var, body = body })
 
         Application fn arg ->
-            let
-                fnEvaledResult =
-                    eval env fn
-            in
-            case fnEvaledResult of
+            case eval env fn of
                 Ok (Closure ({ var, body } as closure)) ->
-                    let
-                        argEvaledResult =
-                            eval env arg
-                    in
-                    case argEvaledResult of
-                        Ok argEvaled ->
-                            let
-                                newEnv =
-                                    extendEnvironment var argEvaled closure.env
-                            in
-                            eval newEnv body
-
-                        Err err ->
-                            Err err
+                    eval env arg
+                        |> Result.andThen
+                            (\argEvaled ->
+                                let
+                                    newEnv =
+                                        extendEnvironment var argEvaled closure.env
+                                in
+                                eval newEnv body
+                            )
 
                 Ok _ ->
                     Err [ ExpectedFunction ]
@@ -214,56 +205,35 @@ eval env term =
                     Err err
 
         Left term1 ->
-            let
-                evaledTermResult =
-                    eval env term1
-            in
-            case evaledTermResult of
-                Ok evaledTerm ->
-                    Ok (LeftValue evaledTerm)
-
-                Err err ->
-                    Err err
+            eval env term1
+                |> Result.map LeftValue
 
         Right term1 ->
-            let
-                evaledTermResult =
-                    eval env term1
-            in
-            case evaledTermResult of
-                Ok evaledTerm ->
-                    Ok (RightValue evaledTerm)
-
-                Err err ->
-                    Err err
+            eval env term1
+                |> Result.map RightValue
 
         Case { arg, leftVar, leftBody, rightVar, rightBody } ->
-            let
-                argEvaledResult =
-                    eval env arg
-            in
-            case argEvaledResult of
-                Ok argEvaled ->
-                    case argEvaled of
-                        LeftValue val ->
-                            let
-                                newEnv =
-                                    extendEnvironment leftVar val env
-                            in
-                            eval newEnv leftBody
+            eval env arg
+                |> Result.andThen
+                    (\argEvaled ->
+                        case argEvaled of
+                            LeftValue val ->
+                                let
+                                    newEnv =
+                                        extendEnvironment leftVar val env
+                                in
+                                eval newEnv leftBody
 
-                        RightValue val ->
-                            let
-                                newEnv =
-                                    extendEnvironment rightVar val env
-                            in
-                            eval newEnv rightBody
+                            RightValue val ->
+                                let
+                                    newEnv =
+                                        extendEnvironment rightVar val env
+                                in
+                                eval newEnv rightBody
 
-                        _ ->
-                            Err [ ExpectedLeftRight ]
-
-                Err errs ->
-                    Err errs
+                            _ ->
+                                Err [ ExpectedLeftRight ]
+                    )
 
         BoolTrue ->
             Ok TrueValue
@@ -272,86 +242,66 @@ eval env term =
             Ok FalseValue
 
         IfThenElse arg leftBody rightBody ->
-            let
-                argEvaledResult =
-                    eval env arg
-            in
-            case argEvaledResult of
-                Ok argEvaled ->
-                    case argEvaled of
-                        TrueValue ->
-                            eval env leftBody
+            eval env arg
+                |> Result.andThen
+                    (\argEvaled ->
+                        case argEvaled of
+                            TrueValue ->
+                                eval env leftBody
 
-                        FalseValue ->
-                            eval env rightBody
+                            FalseValue ->
+                                eval env rightBody
 
-                        _ ->
-                            Err [ ExpectedBoolean ]
-
-                Err errs ->
-                    Err errs
+                            _ ->
+                                Err [ ExpectedBoolean ]
+                    )
 
         NatZero ->
             Ok (NatValue NatZeroValue)
 
         NatSucc term1 ->
-            let
-                term1EvaledResult =
-                    eval env term1
-            in
-            case term1EvaledResult of
-                Ok argEvaled ->
-                    case argEvaled of
-                        NatValue natVal ->
-                            Ok (NatValue (NatSuccValue natVal))
+            eval env term1
+                |> Result.andThen
+                    (\argEvaled ->
+                        case argEvaled of
+                            NatValue natVal ->
+                                Ok (NatValue (NatSuccValue natVal))
 
-                        _ ->
-                            Err [ ExpectedNat ]
-
-                Err errs ->
-                    Err errs
+                            _ ->
+                                Err [ ExpectedNat ]
+                    )
 
         NatLoop { base, loop, arg } ->
             -- TODO: error on same var name? loop.indexVar, loop.stateVar
-            let
-                argEvaledResult =
-                    eval env arg
-            in
-            case argEvaledResult of
-                Ok argEvaled ->
-                    case argEvaled of
-                        NatValue natVal ->
-                            let
-                                evalNatLoop natVal0 =
-                                    case natVal0 of
-                                        NatZeroValue ->
-                                            eval env base
+            eval env arg
+                |> Result.andThen
+                    (\argEvaled ->
+                        case argEvaled of
+                            NatValue natVal ->
+                                let
+                                    evalNatLoop natVal0 =
+                                        case natVal0 of
+                                            NatZeroValue ->
+                                                eval env base
 
-                                        NatSuccValue natVal1 ->
-                                            let
-                                                prevResult =
-                                                    evalNatLoop natVal1
-                                            in
-                                            case prevResult of
-                                                Ok prevVal ->
-                                                    let
-                                                        newEnv =
-                                                            env
-                                                                |> extendEnvironment loop.indexVar (NatValue natVal1)
-                                                                |> extendEnvironment loop.stateVar prevVal
-                                                    in
-                                                    eval newEnv loop.body
+                                            NatSuccValue natVal1 ->
+                                                evalNatLoop natVal1
+                                                    |> Result.andThen
+                                                        (\prevVal ->
+                                                            let
+                                                                newEnv =
+                                                                    env
+                                                                        |> extendEnvironment loop.indexVar (NatValue natVal1)
+                                                                        |> extendEnvironment loop.stateVar prevVal
+                                                            in
+                                                            eval newEnv loop.body
+                                                        )
+                                in
+                                evalNatLoop natVal
 
-                                                Err errs ->
-                                                    Err errs
-                            in
-                            evalNatLoop natVal
-
-                        _ ->
-                            Err [ ExpectedNat ]
-
-                Err errs ->
-                    Err errs
+                            _ ->
+                                Err [ ExpectedNat ]
+                    )
 
         EmptyList ->
             Ok (ListValue EmptyListValue)
