@@ -125,6 +125,11 @@ extendEnvironment varName term env =
 -- ===EVALUATION===
 
 
+eval0 : Term -> Result (List EvalError) Value
+eval0 term =
+    eval emptyTermEnvironment term
+
+
 eval : TermEnvironment -> Term -> Result (List EvalError) Value
 eval env term =
     case term of
