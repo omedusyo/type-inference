@@ -1,11 +1,12 @@
 module Main exposing (..)
 
+import Browser
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Evaluation as L
-import Html as H
+import Html as H exposing (Html)
 import Inference as L
 import LambdaBasics as L
 import Return exposing (Return)
@@ -13,6 +14,11 @@ import TermParser as L
 
 
 type alias Model =
+    {}
+
+
+initModel : Model
+initModel =
     {}
 
 
@@ -26,13 +32,22 @@ update msg model =
         |> Return.singleton
 
 
+main : Program () Model Msg
 main =
-    E.layout []
-        (E.row [ E.width E.fill, E.centerX ]
-            [ e
-            , e
-            ]
-        )
+    Browser.element { init = \_ -> Return.singleton initModel, update = update, subscriptions = subscriptions, view = \model -> E.layout [] (view model) }
+
+
+subscriptions : Model -> Sub msg
+subscriptions model =
+    Sub.none
+
+
+view : Model -> Element Msg
+view model =
+    E.row [ E.width E.fill, E.centerX ]
+        [ e
+        , e
+        ]
 
 
 e =
