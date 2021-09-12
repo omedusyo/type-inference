@@ -27,6 +27,15 @@ import Set exposing (Set)
 --   (list-loop xs initState { x s . body })
 
 
+type alias TermParsingError =
+    List DeadEnd
+
+
+parsingErrorToString : TermParsingError -> String
+parsingErrorToString =
+    Parser.deadEndsToString
+
+
 whitespaceChars : Set Char
 whitespaceChars =
     -- \u{000D} === \r
@@ -93,7 +102,7 @@ seq p =
 -- ===TERM===
 
 
-parseTerm : String -> Result (List DeadEnd) Term
+parseTerm : String -> Result TermParsingError Term
 parseTerm input =
     Parser.run term input
 
@@ -304,7 +313,8 @@ abstraction =
                 [] ->
                     -- TODO: what's the result of 0-ary abstraction?
                     --       You'll have to introduce a type for Frozen computations (thunks?)
-                    Debug.todo "Use of Frozen computation"
+                    -- Debug.todo "Use of Frozen computation"
+                    Abstraction "_" body
 
                 [ var ] ->
                     Abstraction var body
@@ -339,7 +349,8 @@ application =
             case args0 of
                 [] ->
                     -- TODO: some sort of "thawing" of `fn`
-                    Debug.todo "Use of Thawing of a Computation"
+                    -- Debug.todo "Use of Thawing of a Computation"
+                    Application fn EmptyList
 
                 [ arg ] ->
                     Application fn arg
