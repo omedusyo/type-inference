@@ -29,6 +29,7 @@ type alias Model =
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) Value)
+    , inferedType : Maybe (Result (List L.TypeError) ( L.Context, L.Equations, Type ))
     }
 
 
@@ -37,6 +38,7 @@ initModel =
     { input = ""
     , parsedTerm = Nothing
     , evaledTerm = Nothing
+    , inferedType = Nothing
     }
 
 
@@ -45,8 +47,9 @@ initModel =
 
 
 type Msg
-    = RunButtonClicked
-    | InputChanged String
+    = InputChanged String
+    | InferButtonClicked
+    | RunButtonClicked
 
 
 isParsedSuccesfully : Model -> Bool
@@ -62,20 +65,6 @@ isParsedSuccesfully model =
 update : Msg -> Model -> Return Msg Model
 update msg model =
     case msg of
-        RunButtonClicked ->
-            case model.parsedTerm of
-                Just (Ok term) ->
-                    let
-                        _ =
-                            Debug.log "wat" ""
-                    in
-                    { model | evaledTerm = Just (L.eval L.emptyTermEnvironment term) }
-                        |> Return.singleton
-
-                _ ->
-                    model
-                        |> Return.singleton
-
         InputChanged input ->
             { model
                 | input = input
@@ -83,6 +72,26 @@ update msg model =
                 , evaledTerm = Nothing
             }
                 |> Return.singleton
+
+        RunButtonClicked ->
+            case model.parsedTerm of
+                Just (Ok term) ->
+                    { model | evaledTerm = Just (L.eval L.emptyTermEnvironment term) }
+                        |> Return.singleton
+
+                _ ->
+                    model
+                        |> Return.singleton
+
+        InferButtonClicked ->
+            case model.parsedTerm of
+                Just (Ok term) ->
+                    { model | inferedType = Just (L.infer0 term) }
+                        |> Return.singleton
+
+                _ ->
+                    model
+                        |> Return.singleton
 
 
 
@@ -94,21 +103,34 @@ view model =
     let
         heightPx =
             450
-    in
-    E.column [ E.width E.fill, E.padding 10 ]
-        [ Input.button
+
+        buttonStyle =
             [ Background.color blue
             , E.paddingXY 9 4
             , Border.rounded 2
             ]
-            { onPress =
-                if isParsedSuccesfully model then
-                    Just RunButtonClicked
+    in
+    E.column [ E.width E.fill, E.padding 10 ]
+        [ E.row []
+            [ Input.button buttonStyle
+                { onPress =
+                    if isParsedSuccesfully model then
+                        Just RunButtonClicked
 
-                else
-                    Nothing
-            , label = E.text "Run"
-            }
+                    else
+                        Nothing
+                , label = E.text "Run"
+                }
+            , Input.button buttonStyle
+                { onPress =
+                    if isParsedSuccesfully model then
+                        Just InferButtonClicked
+
+                    else
+                        Nothing
+                , label = E.text "Infer"
+                }
+            ]
         , E.row [ E.width E.fill, E.paddingEach { top = 5, right = 0, bottom = 0, left = 0 } ]
             [ Input.multiline
                 [ E.height (E.px heightPx)
@@ -157,6 +179,28 @@ view model =
 
                                         Err err ->
                                             "Evaluation Error"
+                            ]
+                        )
+                    , E.text
+                        (String.concat
+                            [ "type = "
+                            , case model.inferedType of
+                                Nothing ->
+                                    ""
+
+                                Just result ->
+                                    case result of
+                                        Ok ( context, equations, type0 ) ->
+                                            -- TODO: remove the dependence on expandType
+                                            case L.expandType type0 equations of
+                                                Ok type1 ->
+                                                    L.showType type1
+
+                                                Err err ->
+                                                    "Type Error"
+
+                                        Err err ->
+                                            "Type Error"
                             ]
                         )
                     ]
