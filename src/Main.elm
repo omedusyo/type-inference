@@ -111,7 +111,9 @@ view model =
             ]
     in
     E.column [ E.width E.fill, E.padding 10 ]
-        [ E.row []
+        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . $p }) })`"
+        , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
+        , E.row []
             [ Input.button buttonStyle
                 { onPress =
                     if isParsedSuccesfully model then
