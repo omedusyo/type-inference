@@ -1,7 +1,7 @@
 module Evaluation exposing (..)
 
 import AssocList exposing (Dict)
-import Main exposing (..)
+import LambdaBasics exposing (..)
 
 
 type Value

@@ -1,7 +1,7 @@
 module Inference exposing (..)
 
 import AssocList exposing (Dict)
-import Main exposing (..)
+import LambdaBasics exposing (..)
 import Set exposing (Set)
 import StatefulWithErr as State exposing (StatefulWithErr)
 

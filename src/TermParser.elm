@@ -1,15 +1,31 @@
 module TermParser exposing (..)
 
-import Main exposing (..)
+import LambdaBasics exposing (..)
 import Parser exposing ((|.), (|=), DeadEnd, Parser)
 import Set exposing (Set)
 
 
 
--- true, false
--- 0, 1, 2, 3, ...
--- empty-list
---
+-- Constants/vars:
+--   true, false
+--   0, 1, 2, 3, ...
+--   empty-list
+--   $foo
+-- Simple Operators
+--   (pair e e')
+--   (first e)
+--   (second e)
+--   (@ f x)
+--   (left e)
+--   (right e)
+--   (succ e)
+--   (cons e1 e2)
+-- Bindings Operators
+--   (fn { x . body })
+--   (if { x } { y })
+--   (sum-case e { (left x) . e1 } { (right y) . e2 })
+--   (nat-loop   n initState { i s . body })
+--   (list-loop xs initState { x s . body })
 
 
 whitespaceChars : Set Char
