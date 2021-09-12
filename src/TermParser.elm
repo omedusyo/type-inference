@@ -179,9 +179,8 @@ ifThenElse =
         -- left branch
         |. Parser.symbol "{"
         |. spaces
-        -- TODO: make the `.` optional
-        |. Parser.symbol "."
-        |. spaces
+        -- optional `.`
+        |. Parser.oneOf [ Parser.symbol "." |. spaces, Parser.succeed () ]
         |= Parser.lazy (\() -> term)
         |. spaces
         |. Parser.symbol "}"
@@ -189,9 +188,8 @@ ifThenElse =
         -- right branch
         |. Parser.symbol "{"
         |. spaces
-        -- TODO: make the `.` optional
-        |. Parser.symbol "."
-        |. spaces
+        -- optional `.`
+        |. Parser.oneOf [ Parser.symbol "." |. spaces, Parser.succeed () ]
         |= Parser.lazy (\() -> term)
         |. spaces
         |. Parser.symbol "}"
