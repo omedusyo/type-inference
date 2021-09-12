@@ -159,40 +159,6 @@ eval env term =
                 ( Err errFst, Err errSnd ) ->
                     Err (errFst ++ errSnd)
 
-        Fst term1 ->
-            let
-                evaledTermResult =
-                    eval env term1
-            in
-            case evaledTermResult of
-                Ok evaledTerm ->
-                    case evaledTerm of
-                        PairValue fst _ ->
-                            Ok fst
-
-                        _ ->
-                            Err [ ExpectedPair ]
-
-                Err err ->
-                    Err err
-
-        Snd term1 ->
-            let
-                evaledTermResult =
-                    eval env term1
-            in
-            case evaledTermResult of
-                Ok evaledTerm ->
-                    case evaledTerm of
-                        PairValue _ snd ->
-                            Ok snd
-
-                        _ ->
-                            Err [ ExpectedPair ]
-
-                Err err ->
-                    Err err
-
         MatchProduct { arg, var0, var1, body } ->
             eval env arg
                 |> Result.andThen

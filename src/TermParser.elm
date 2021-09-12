@@ -13,8 +13,6 @@ import Set exposing (Set)
 --   $foo
 -- Simple Operators
 --   (pair e e')
---   (first e)
---   (second e)
 --   (@ f x)
 --   (left e)
 --   (right e)
@@ -124,8 +122,6 @@ operatorTerm =
             , application
             , ifThenElse
             , pair
-            , snd
-            , fst
             , matchProduct
             , left
             , right
@@ -267,20 +263,6 @@ pairPattern =
         |. keyword "pair"
         |= varIntro
         |= varIntro
-
-
-fst : Parser Term
-fst =
-    Parser.succeed Fst
-        |. keyword "first"
-        |= Parser.lazy (\() -> term)
-
-
-snd : Parser Term
-snd =
-    Parser.succeed Snd
-        |. keyword "second"
-        |= Parser.lazy (\() -> term)
 
 
 

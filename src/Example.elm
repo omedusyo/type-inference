@@ -100,13 +100,6 @@ dupType =
 
 
 twist =
-    --  \tuple -> (tuple.snd, tuple.fst)
-    Abstraction
-        "tuple"
-        (Pair (Snd (VarUse "tuple")) (Fst (VarUse "tuple")))
-
-
-twistMatch =
     -- \p -> (match-pair p { (pair x y) . (pair y x) })
     Abstraction
         "p"
@@ -117,10 +110,6 @@ twistMatch =
             , body = Pair (VarUse "y") (VarUse "x")
             }
         )
-
-
-twistMatchType =
-    infer0 twistMatch
 
 
 twistType =
@@ -173,15 +162,15 @@ curryType =
 
 
 uncurry =
-    -- \f p -> (f (fst p)) (snd p)
+    -- (fn { f p . (match-pair p { x y . (@ f x y) }) })
     Abstraction "f"
         (Abstraction "p"
-            (Application
-                (Application
-                    (VarUse "f")
-                    (Fst (VarUse "p"))
-                )
-                (Snd (VarUse "p"))
+            (MatchProduct
+                { arg = VarUse "p"
+                , var0 = "x"
+                , var1 = "y"
+                , body = Application (Application (VarUse "f") (VarUse "x")) (VarUse "y")
+                }
             )
         )
 
