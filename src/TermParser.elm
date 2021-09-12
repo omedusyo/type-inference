@@ -23,6 +23,20 @@ spaces =
     Parser.chompWhile (\c -> Set.member c whitespaceChars)
 
 
+spacesDelimited : Parser a -> Parser (List a)
+spacesDelimited p =
+    Parser.loop []
+        (\xs ->
+            Parser.oneOf
+                [ Parser.succeed (\x -> Parser.Loop (x :: xs))
+                    |= p
+                    |. spaces
+                , Parser.succeed (Parser.Done (List.reverse xs))
+                ]
+        )
+        |. spaces
+
+
 
 -- ===TERM===
 
@@ -118,17 +132,12 @@ varIntro =
 
 varsIntro : Parser (List TermVarName)
 varsIntro =
-    -- Parser.delimitedSequence spaces varIntro
-    Parser.loop []
-        (\vars ->
-            Parser.oneOf
-                [ Parser.succeed (\var -> Parser.Loop (var :: vars))
-                    |= varIntro
-                    |. spaces
-                , Parser.succeed (Parser.Done (List.reverse vars))
-                ]
-        )
-        |. spaces
+    spacesDelimited varIntro
+
+
+terms : Parser (List Term)
+terms =
+    spacesDelimited term
 
 
 varUse : Parser Term
@@ -226,8 +235,6 @@ snd =
 
 -- ==Function Space==
 --   (fn {x . body})
--- this syntax has an unfortunate amount of parens
--- TODO: generalize so it can take 0,1,2,... variables
 --   (fn { x y z . body }) ~> (fn {x . (fn {y . (fn {z . body}) }) })
 
 
@@ -240,7 +247,7 @@ abstraction =
                 [] ->
                     -- TODO: what's the result of 0-ary abstraction?
                     --       You'll have to introduce a type for Frozen computations (thunks?)
-                    Debug.todo ""
+                    Debug.todo "Use of Frozen computation"
 
                 [ var ] ->
                     Abstraction var body
@@ -266,19 +273,37 @@ abstraction =
 
 
 
--- TODO: should we have special syntax for application since it is so ubiquitous?
--- TODO: extend so
---   (apply f e1 e2) ~> (apply (apply f e1) e2)
+-- (@ f x)
+-- (@ f e1 e2) ~> (@ (@ f e1) e2)
+--
+-- How can we interpret
+--   (@ f) ?
+-- Suppose f is a frozen computation e.g. the result of something like `(fn {. body })`
+-- Then the application could be interpreted as the "thawing" of the frozen computation.
 
 
 application : Parser Term
 application =
-    Parser.succeed Application
+    let
+        applicationWithListOfArgs : Term -> List Term -> Term
+        applicationWithListOfArgs fn args0 =
+            case args0 of
+                [] ->
+                    -- TODO: some sort of "thawing" of `fn`
+                    Debug.todo "Use of Thawing of a Computation"
+
+                [ arg ] ->
+                    Application fn arg
+
+                arg :: args1 ->
+                    applicationWithListOfArgs (Application fn arg) args1
+    in
+    Parser.succeed applicationWithListOfArgs
         |. Parser.keyword "@"
         |. spaces
         |= Parser.lazy (\() -> term)
         |. spaces
-        |= Parser.lazy (\() -> term)
+        |= Parser.lazy (\() -> terms)
         |. spaces
 
 
