@@ -13,8 +13,6 @@ import Set exposing (Set)
 --   $foo
 -- Simple Operators
 --   (pair e e')
---   (first e)
---   (second e)
 --   (@ f x)
 --   (left e)
 --   (right e)
@@ -22,6 +20,7 @@ import Set exposing (Set)
 --   (cons e1 e2)
 -- Bindings Operators
 --   (fn { x . body })
+--   (match-pair pairExp { (pair x y) . body })
 --   (if e { e1 } { e2 })
 --   (sum-case e { (left x) . e1 } { (right y) . e2 })
 --   (nat-loop   n initState { i s . body })
@@ -123,8 +122,7 @@ operatorTerm =
             , application
             , ifThenElse
             , pair
-            , snd
-            , fst
+            , matchProduct
             , left
             , right
             , sumCase
@@ -259,18 +257,36 @@ pair =
         |= Parser.lazy (\() -> term)
 
 
-fst : Parser Term
-fst =
-    Parser.succeed Fst
-        |. keyword "first"
-        |= Parser.lazy (\() -> term)
+pairPattern : Parser ( TermVarName, TermVarName )
+pairPattern =
+    Parser.succeed (\x y -> ( x, y ))
+        |. keyword "pair"
+        |= varIntro
+        |= varIntro
 
 
-snd : Parser Term
-snd =
-    Parser.succeed Snd
-        |. keyword "second"
+
+--   (match-pair pairExp { (pair x y) . body })
+
+
+matchProduct : Parser Term
+matchProduct =
+    Parser.succeed
+        (\arg ( ( var0, var1 ), body ) ->
+            MatchProduct
+                { arg = arg
+                , var0 = var0
+                , var1 = var1
+                , body = body
+                }
+        )
+        |. keyword "match-pair"
+        -- arg
         |= Parser.lazy (\() -> term)
+        -- body
+        |= binding
+            (paren pairPattern)
+            (Parser.lazy (\() -> term))
 
 
 

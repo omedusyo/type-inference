@@ -17,8 +17,12 @@ type Term
       -- intro
     | Pair Term Term
       -- elim
-    | Fst Term
-    | Snd Term
+    | MatchProduct
+        { arg : Term
+        , var0 : TermVarName
+        , var1 : TermVarName
+        , body : Term
+        }
       -- ==Function Space==
       -- intro
     | Abstraction TermVarName Term

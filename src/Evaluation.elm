@@ -8,6 +8,10 @@ import LambdaBasics exposing (..)
 -- Evaluation of Bindings Operators
 --   (fn { x . body }) ~> capture current env into a closure. The env together with body expression is the resulting value.
 --
+--   (product-match e { (product x y) . body })
+--   (product-match (product e1 e2) { (product x y) . body }) ~> body in environment x := value of e1, y := value of e2
+--
+--
 --   (if e { e1 } { e2 })
 --     (if true  { e1 } { e2 }) ~> e1
 --     (if false { e1 } { e2 }) ~> e2
@@ -155,39 +159,23 @@ eval env term =
                 ( Err errFst, Err errSnd ) ->
                     Err (errFst ++ errSnd)
 
-        Fst term1 ->
-            let
-                evaledTermResult =
-                    eval env term1
-            in
-            case evaledTermResult of
-                Ok evaledTerm ->
-                    case evaledTerm of
-                        PairValue fst _ ->
-                            Ok fst
+        MatchProduct { arg, var0, var1, body } ->
+            eval env arg
+                |> Result.andThen
+                    (\argEvaled ->
+                        case argEvaled of
+                            PairValue val0 val1 ->
+                                let
+                                    newEnv =
+                                        env
+                                            |> extendEnvironment var0 val0
+                                            |> extendEnvironment var1 val1
+                                in
+                                eval newEnv body
 
-                        _ ->
-                            Err [ ExpectedPair ]
-
-                Err err ->
-                    Err err
-
-        Snd term1 ->
-            let
-                evaledTermResult =
-                    eval env term1
-            in
-            case evaledTermResult of
-                Ok evaledTerm ->
-                    case evaledTerm of
-                        PairValue _ snd ->
-                            Ok snd
-
-                        _ ->
-                            Err [ ExpectedPair ]
-
-                Err err ->
-                    Err err
+                            _ ->
+                                Err [ ExpectedPair ]
+                    )
 
         Abstraction var body ->
             Ok (Closure { env = env, var = var, body = body })
