@@ -2,7 +2,17 @@ module TermParser exposing (..)
 
 import Main exposing (..)
 import Parser exposing ((|.), (|=), Parser)
-import Set
+import Set exposing (Set)
+
+
+whitespaceChars : Set Char
+whitespaceChars =
+    Set.fromList [ ' ', '\n', '\u{000D}', '\t' ]
+
+
+spaces : Parser ()
+spaces =
+    Parser.chompWhile (\c -> Set.member c whitespaceChars)
 
 
 
@@ -13,7 +23,9 @@ varIntro : Parser TermVarName
 varIntro =
     let
         excludedChars =
-            Set.fromList [ '$', '(', ')', '{', '}', ' ', '\n', '\t', '\'', '"' ]
+            Set.union
+                (Set.fromList [ '$', '(', ')', '{', '}', '\'', '"' ])
+                whitespaceChars
 
         isPrintable charCode =
             32 <= charCode && charCode <= 126
