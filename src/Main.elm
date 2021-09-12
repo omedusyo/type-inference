@@ -44,6 +44,7 @@ type Term
     | IfThenElse Term Term Term
       --==Natural Number Object==
       -- intro
+      -- TODO: introduces NatConst Int for efficiency
     | NatZero
     | NatSucc Term
       -- elim
