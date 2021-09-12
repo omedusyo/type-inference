@@ -208,6 +208,32 @@ view model =
                     ]
                 )
             ]
+        , E.text "SYNTAX"
+        , E.text "Constants"
+        , E.text "  true, false"
+        , E.text "  0, 1, 2, 3, ..."
+        , E.text "  empty-list"
+        , E.text ""
+        , E.text "Variable Use"
+        , E.text "  $foo // when using a variable, you have to prepend a dollar sign to it"
+        , E.text ""
+        , E.text "Simple Operators"
+        , E.text "  (pair e e')"
+        , E.text "  (@ f x) // this is function application"
+        , E.text "  (@ f x y)"
+        , E.text "  (left e)"
+        , E.text "  (right e)"
+        , E.text "  (succ n)      // this is the natural numbers successor function"
+        , E.text "  (cons x xs) // this is consing of an element to a list"
+        , E.text ""
+        , E.text "Bindings Operators"
+        , E.text "  (fn { x . body })"
+        , E.text "  (fn { x y . body })"
+        , E.text "  (match-pair pairExp { (pair x y) . body })"
+        , E.text "  (if e { e1 } { e2 })"
+        , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
+        , E.text "  (nat-loop   n initState { i s . body })"
+        , E.text "  (list-loop xs initState { x s . body })"
         ]
 
 
