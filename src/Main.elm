@@ -13,6 +13,7 @@ type Term
     = -- ==Variables==
       VarUse TermVarName
       -- ==Cartesian Product==
+      -- TODO: add empty-tuple
       -- intro
     | Pair Term Term
       -- elim
@@ -43,6 +44,7 @@ type Term
     | IfThenElse Term Term Term
       --==Natural Number Object==
       -- intro
+      -- TODO: introduces NatConst Int for efficiency
     | NatZero
     | NatSucc Term
       -- elim
@@ -50,6 +52,7 @@ type Term
       -- f 0 = ....
       -- f (n + 1) = you can use `f n` here
     | NatLoop
+        -- TODO: rename to initState var
         { base : Term
         , loop :
             { indexVar : TermVarName
@@ -78,9 +81,24 @@ type alias TypeVarName =
 
 type Type
     = VarType TypeVarName
+      -- add unit type
     | Product Type Type
+      -- add zero type
     | Sum Type Type
     | Arrow Type Type
     | LambdaBool
     | LambdaNat
     | LambdaList Type
+
+
+
+-- helpers
+
+
+intToNatTerm : Int -> Term
+intToNatTerm n =
+    if n == 0 then
+        NatZero
+
+    else
+        NatSucc (intToNatTerm (n - 1))

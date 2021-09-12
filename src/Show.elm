@@ -201,15 +201,6 @@ natValToInt natVal =
             1 + natValToInt val1
 
 
-intToNatTerm : Int -> Term
-intToNatTerm n =
-    if n == 0 then
-        NatZero
-
-    else
-        NatSucc (intToNatTerm (n - 1))
-
-
 showNatValue : NatValue -> String
 showNatValue natVal =
     -- case natVal of
