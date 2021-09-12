@@ -89,6 +89,7 @@ update msg model =
                 | input = input
                 , parsedTerm = Just (L.parseTerm input)
                 , evaledTerm = Nothing
+                , inferedType = Nothing
             }
                 |> Return.singleton
 
