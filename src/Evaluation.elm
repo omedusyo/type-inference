@@ -94,17 +94,16 @@ emptyTermEnvironment =
 
 lookupEnvironment : TermVarName -> TermEnvironment -> Maybe Value
 lookupEnvironment varName env =
-    case AssocList.get varName env of
-        Just terms ->
-            case terms of
-                [] ->
-                    Nothing
+    AssocList.get varName env
+        |> Maybe.andThen
+            (\terms ->
+                case terms of
+                    [] ->
+                        Nothing
 
-                term0 :: _ ->
-                    Just term0
-
-        Nothing ->
-            Nothing
+                    term0 :: _ ->
+                        Just term0
+            )
 
 
 extendEnvironment : TermVarName -> Value -> TermEnvironment -> TermEnvironment
