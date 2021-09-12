@@ -30,8 +30,17 @@ showTerm term =
             String.concat [ "(second ", showTerm term1, ")" ]
 
         MatchProduct { arg, var0, var1, body } ->
-            -- TODO
-            Debug.todo ""
+            String.concat
+                [ "(match-pair "
+                , showTerm arg
+                , " { (pair "
+                , var0
+                , " "
+                , var1
+                , ") . "
+                , showTerm body
+                , " })"
+                ]
 
         Abstraction var body ->
             -- (fn { x . body })
