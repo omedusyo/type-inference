@@ -109,6 +109,28 @@ varIntro =
         }
 
 
+
+-- Parses a nonemptysequence of vars
+-- "foo  bar quux" ~> ["foo", "bar", "quux"]
+-- "foo  bar quux   " ~> failure cause of the trailing whitespace
+-- "   foo  bar quux" ~> failure cause you cant start with spaces
+
+
+varsIntro : Parser (List TermVarName)
+varsIntro =
+    -- Parser.delimitedSequence spaces varIntro
+    Parser.loop []
+        (\vars ->
+            Parser.oneOf
+                [ Parser.succeed (\var -> Parser.Loop (var :: vars))
+                    |= varIntro
+                    |. spaces
+                , Parser.succeed (Parser.Done (List.reverse vars))
+                ]
+        )
+        |. spaces
+
+
 varUse : Parser Term
 varUse =
     Parser.succeed VarUse
@@ -211,13 +233,28 @@ snd =
 
 abstraction : Parser Term
 abstraction =
-    Parser.succeed Abstraction
+    let
+        abstractionWithListOfVars : List TermVarName -> Term -> Term
+        abstractionWithListOfVars vars0 body =
+            case vars0 of
+                [] ->
+                    -- TODO: what's the result of 0-ary abstraction?
+                    --       You'll have to introduce a type for Frozen computations (thunks?)
+                    Debug.todo ""
+
+                [ var ] ->
+                    Abstraction var body
+
+                var :: vars1 ->
+                    Abstraction var (abstractionWithListOfVars vars1 body)
+    in
+    Parser.succeed abstractionWithListOfVars
         |. Parser.keyword "fn"
         |. spaces
         -- Parameters
         |. Parser.symbol "{"
         |. spaces
-        |= varIntro
+        |= varsIntro
         |. spaces
         |. Parser.symbol "."
         |. spaces
