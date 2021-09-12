@@ -35,10 +35,29 @@ type alias Model =
 
 initModel : Model
 initModel =
-    { input = ""
-    , parsedTerm = Nothing
-    , evaledTerm = Nothing
-    , inferedType = Nothing
+    let
+        input =
+            "(fn { p . (match-pair $p { (pair x y) . $p }) })"
+
+        termResult =
+            L.parseTerm input
+    in
+    { input = input
+    , parsedTerm = Just termResult
+    , evaledTerm =
+        case termResult of
+            Ok term ->
+                Just (L.eval0 term)
+
+            _ ->
+                Nothing
+    , inferedType =
+        case termResult of
+            Ok term ->
+                Just (L.infer0 term)
+
+            _ ->
+                Nothing
     }
 
 
@@ -70,6 +89,7 @@ update msg model =
                 | input = input
                 , parsedTerm = Just (L.parseTerm input)
                 , evaledTerm = Nothing
+                , inferedType = Nothing
             }
                 |> Return.singleton
 
