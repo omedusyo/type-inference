@@ -4,6 +4,40 @@ import AssocList exposing (Dict)
 import LambdaBasics exposing (..)
 
 
+
+-- Evaluation of Bindings Operators
+--   (fn { x . body }) ~> capture current env into a closure. The env together with body expression is the resulting value.
+--
+--   (if e { e1 } { e2 })
+--     (if true  { e1 } { e2 }) ~> e1
+--     (if false { e1 } { e2 }) ~> e2
+--
+--
+--
+--   (sum-case e { (left x) . e1 } { (right y) . e2 }) ~>
+--     (sum-case (left  e) { (left x) . e1 } { (right y) . e2 }) ~> e1 in environment x := value of e
+--     (sum-case (right e) { (left x) . e1 } { (right y) . e2 }) ~> e2 in environment y := value of e
+--
+--   (nat-loop   n initState { i s . body })
+--     (nat-loop   0 initState { i s . body }) ~> initState
+--     (nat-loop   3 initState { i s . body }) ~>
+--            state0 := initState
+--            state1 := body in env i := 0, s := state0
+--            state2 := body in env i := 1, s := state1
+--            state3 := body in env i := 2, s := state2
+--            state3
+--
+--
+--   (list-loop xs initState { x s . body })
+--     (list-loop empty-list initState { x s . body }) ~> initState
+--     (list-loop (cons x0 (cons x1 (cons x2 empty-listA))) initState { x s . body }) ~>
+--            state0 := initState
+--            state1 := body in env x := x2, s := state0
+--            state2 := body in env x := x1, s := state1
+--            state3 := body in env x := x0, s := state2
+--            state3
+
+
 type Value
     = -- ==Cartesian Product==
       PairValue Value Value

@@ -22,7 +22,7 @@ import Set exposing (Set)
 --   (cons e1 e2)
 -- Bindings Operators
 --   (fn { x . body })
---   (if { x } { y })
+--   (if e { e1 } { e2 })
 --   (sum-case e { (left x) . e1 } { (right y) . e2 })
 --   (nat-loop   n initState { i s . body })
 --   (list-loop xs initState { x s . body })
@@ -227,8 +227,8 @@ bool =
 
 
 
--- (if { x } { y })
--- TODO: also allow `(if { true . x } { false . y })`
+-- (if e { e1 } { e2 })
+-- TODO: also allow `(if e { true . e1 } { false . e2 })`
 
 
 ifThenElse : Parser Term
@@ -247,6 +247,7 @@ ifThenElse =
 
 
 -- ==Cartesian Product==
+-- TODO: pair patterns
 -- (pair e e')
 
 
@@ -404,6 +405,7 @@ sumCase =
 
 
 -- ===Nat===
+-- TODO: nat patterns
 
 
 natConstant : Parser Term
@@ -448,7 +450,6 @@ natLoop =
 
 
 
--- (nat-loop n e { i s . body })
 -- ===Lists===
 
 
