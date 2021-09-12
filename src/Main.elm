@@ -6,11 +6,12 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Evaluation as L
+import Evaluation as L exposing (Value)
 import Html as H exposing (Html)
 import Inference as L
-import LambdaBasics as L
+import LambdaBasics as L exposing (Term, Type)
 import Return exposing (Return)
+import Show as L
 import TermParser as L
 
 
@@ -24,12 +25,18 @@ blue =
 
 type alias Model =
     { input : String
+    , -- Nothing means haven't parsed anything yet
+      parsedTerm : Maybe (Result L.TermParsingError Term)
+    , -- Nothing means haven't evaled the term yet
+      evaledTerm : Maybe (Result (List L.EvalError) Value)
     }
 
 
 initModel : Model
 initModel =
     { input = ""
+    , parsedTerm = Nothing
+    , evaledTerm = Nothing
     }
 
 
@@ -42,19 +49,39 @@ type Msg
     | InputChanged String
 
 
+isParsedSuccesfully : Model -> Bool
+isParsedSuccesfully model =
+    case model.parsedTerm of
+        Just (Ok term) ->
+            True
+
+        _ ->
+            False
+
+
 update : Msg -> Model -> Return Msg Model
 update msg model =
     case msg of
         RunButtonClicked ->
-            let
-                _ =
-                    Debug.log "run" ""
-            in
-            model
-                |> Return.singleton
+            case model.parsedTerm of
+                Just (Ok term) ->
+                    let
+                        _ =
+                            Debug.log "wat" ""
+                    in
+                    { model | evaledTerm = Just (L.eval L.emptyTermEnvironment term) }
+                        |> Return.singleton
+
+                _ ->
+                    model
+                        |> Return.singleton
 
         InputChanged input ->
-            { model | input = input }
+            { model
+                | input = input
+                , parsedTerm = Just (L.parseTerm input)
+                , evaledTerm = Nothing
+            }
                 |> Return.singleton
 
 
@@ -74,7 +101,12 @@ view model =
             , E.paddingXY 9 4
             , Border.rounded 2
             ]
-            { onPress = Just RunButtonClicked
+            { onPress =
+                if isParsedSuccesfully model then
+                    Just RunButtonClicked
+
+                else
+                    Nothing
             , label = E.text "Run"
             }
         , E.row [ E.width E.fill, E.paddingEach { top = 5, right = 0, bottom = 0, left = 0 } ]
@@ -93,7 +125,42 @@ view model =
                 , E.width E.fill
                 , E.paddingEach { top = 0, right = 0, bottom = 0, left = 10 }
                 ]
-                (E.text "View")
+                (E.column
+                    []
+                    [ E.text
+                        (String.concat
+                            [ "term = "
+                            , case model.parsedTerm of
+                                Nothing ->
+                                    ""
+
+                                Just result ->
+                                    case result of
+                                        Ok term ->
+                                            L.showTerm term
+
+                                        Err err ->
+                                            "Parsing Error"
+                            ]
+                        )
+                    , E.text
+                        (String.concat
+                            [ "value = "
+                            , case model.evaledTerm of
+                                Nothing ->
+                                    ""
+
+                                Just result ->
+                                    case result of
+                                        Ok val ->
+                                            L.showValue val
+
+                                        Err err ->
+                                            "Evaluation Error"
+                            ]
+                        )
+                    ]
+                )
             ]
         ]
 
