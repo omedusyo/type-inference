@@ -189,6 +189,10 @@ eval env term =
                 Err err ->
                     Err err
 
+        MatchProduct { arg, var0, var1, body } ->
+            -- TODO
+            Debug.todo ""
+
         Abstraction var body ->
             Ok (Closure { env = env, var = var, body = body })
 

@@ -125,6 +125,7 @@ operatorTerm =
             , pair
             , snd
             , fst
+            , matchProduct
             , left
             , right
             , sumCase
@@ -271,6 +272,12 @@ snd =
     Parser.succeed Snd
         |. keyword "second"
         |= Parser.lazy (\() -> term)
+
+
+matchProduct : Parser Term
+matchProduct =
+    -- TODO
+    Debug.todo ""
 
 
 

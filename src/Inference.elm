@@ -447,6 +447,10 @@ infer term =
                 generateFreshVar
                 generateFreshVar
 
+        MatchProduct { arg, var0, var1, body } ->
+            -- TODO
+            Debug.todo ""
+
         Snd productExp ->
             State.andThen3
                 (\typeProduct0 fstTypeVar0 sndTypeVar0 ->

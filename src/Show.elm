@@ -29,6 +29,10 @@ showTerm term =
             -- (second e)
             String.concat [ "(second ", showTerm term1, ")" ]
 
+        MatchProduct { arg, var0, var1, body } ->
+            -- TODO
+            Debug.todo ""
+
         Abstraction var body ->
             -- (fn { x . body })
             String.concat [ "(fn { ", var, " . ", showTerm body, " })" ]
