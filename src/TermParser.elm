@@ -1,7 +1,7 @@
 module TermParser exposing (..)
 
 import Main exposing (..)
-import Parser exposing ((|.), (|=), Parser)
+import Parser exposing ((|.), (|=), DeadEnd, Parser)
 import Set exposing (Set)
 
 
@@ -76,6 +76,11 @@ seq p =
 
 
 -- ===TERM===
+
+
+parseTerm : String -> Result (List DeadEnd) Term
+parseTerm input =
+    Parser.run term input
 
 
 term : Parser Term
@@ -416,7 +421,7 @@ natLoop =
                 , arg = arg
                 }
         )
-        |. keyword "nat-loop"
+        |. keyword "loop-over-nat"
         -- loop argument (the natural number bound)
         |= Parser.lazy (\() -> term)
         -- the initial state of the loop
@@ -463,7 +468,7 @@ listLoop =
                 , arg = arg
                 }
         )
-        |. keyword "list-loop"
+        |. keyword "loop-over-list"
         -- loop argument (the list)
         |= Parser.lazy (\() -> term)
         -- the initial state of the loop
