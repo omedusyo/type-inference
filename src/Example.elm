@@ -75,6 +75,10 @@ matchProduct0 =
     MatchProduct { arg = Pair n0 n1, var0 = "x", var1 = "y", body = VarUse "x" }
 
 
+matchProduct0Type =
+    infer0 matchProduct0
+
+
 id =
     -- \x -> x
     Abstraction "x" (VarUse "x")
@@ -100,6 +104,23 @@ twist =
     Abstraction
         "tuple"
         (Pair (Snd (VarUse "tuple")) (Fst (VarUse "tuple")))
+
+
+twistMatch =
+    -- \p -> (match-pair p { (pair x y) . (pair y x) })
+    Abstraction
+        "p"
+        (MatchProduct
+            { arg = VarUse "p"
+            , var0 = "x"
+            , var1 = "y"
+            , body = Pair (VarUse "y") (VarUse "x")
+            }
+        )
+
+
+twistMatchType =
+    infer0 twistMatch
 
 
 twistType =

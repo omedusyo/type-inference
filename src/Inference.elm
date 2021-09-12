@@ -448,8 +448,46 @@ infer term =
                 generateFreshVar
 
         MatchProduct { arg, var0, var1, body } ->
-            -- TODO
-            Debug.todo ""
+            -- argType0 := infer arg
+            -- varType0 := generateFreshVar
+            -- varType1 := generateFreshVar
+            -- unify (Product varType0 varType1) argType
+            -- updateContext
+            --   (\context ->
+            --     context |> pushVarToContext var0 varType0
+            --                pushVarToContext var1 varType1
+            --   );
+            -- infer body
+            -- updateContext
+            --   (\context ->
+            --     context |> popVarFromContext var1
+            --                popVarFromContext var0
+            --   );
+            State.andThen3
+                (\argType varType0 varType1 ->
+                    State.second
+                        (unify (Product varType0 varType1) argType)
+                        (State.mid
+                            (updateContext0
+                                (\context ->
+                                    context
+                                        |> pushVarToContext var0 varType0
+                                        |> pushVarToContext var1 varType1
+                                )
+                            )
+                            (infer body)
+                            (updateContext0
+                                (\context ->
+                                    context
+                                        |> popVarFromContext var1
+                                        |> popVarFromContext var0
+                                )
+                            )
+                        )
+                )
+                (infer arg)
+                generateFreshVar
+                generateFreshVar
 
         Snd productExp ->
             State.andThen3
