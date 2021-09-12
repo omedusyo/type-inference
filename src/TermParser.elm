@@ -237,7 +237,7 @@ abstraction =
 application : Parser Term
 application =
     Parser.succeed Application
-        |. Parser.keyword "apply"
+        |. Parser.keyword "@"
         |. spaces
         |= Parser.lazy (\() -> term)
         |. spaces
