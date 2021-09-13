@@ -356,5 +356,14 @@ eval env term =
                                 Err [ ExpectedList ]
                     )
 
-        Let var exp body ->
-            Debug.todo ""
+        Let var arg body ->
+            eval env arg
+                |> Result.andThen
+                    (\argVal ->
+                        let
+                            newEnv =
+                                env
+                                    |> extendEnvironment var argVal
+                        in
+                        eval newEnv body
+                    )
