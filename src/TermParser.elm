@@ -8,7 +8,7 @@ import Set exposing (Set)
 
 -- Constants/vars:
 --   true, false
---   0, 1, 2, 3, ...
+--   0n0, 0n1, 0n2, 0n3, ...
 --   empty-list
 --   $foo
 -- Simple Operators
@@ -116,7 +116,7 @@ term =
         , bool
         , natConstant -- TODO: this has to be last constant? why? Does it chomp stuff?
 
-        -- operatorTerm has to be at the ned
+        -- operatorTerm has to be at the end
         , operatorTerm
         ]
 
@@ -471,8 +471,11 @@ sumCase =
 
 natConstant : Parser Term
 natConstant =
-    Parser.int
-        |> Parser.map intToNatTerm
+    Parser.succeed intToNatTerm
+        -- WARNING: It's very important that this uses `Parser.symbol` and not `symbol` because here we don't actually want to consume trailing whitespace after `0n`
+        |. Parser.symbol "0n"
+        |= Parser.int
+        |. spaces
 
 
 natSucc : Parser Term

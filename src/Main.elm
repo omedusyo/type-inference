@@ -231,7 +231,7 @@ view model =
         , E.text "SYNTAX"
         , E.text "Constants"
         , E.text "  true, false"
-        , E.text "  0, 1, 2, 3, ..."
+        , E.text "  0n0, 0n1, 0n2, 0n3, ..."
         , E.text "  empty-list"
         , E.text ""
         , E.text "Variable Use"
