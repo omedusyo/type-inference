@@ -216,16 +216,36 @@ varUse =
 -- ===Bool===
 
 
+trueKeyword : String
+trueKeyword =
+    "true"
+
+
 true : Parser Term
 true =
     Parser.succeed BoolTrue
-        |. keyword "true"
+        |. keyword trueKeyword
+
+
+truePattern : Parser ()
+truePattern =
+    keyword trueKeyword
+
+
+falseKeyword : String
+falseKeyword =
+    "false"
 
 
 false : Parser Term
 false =
     Parser.succeed BoolFalse
-        |. keyword "false"
+        |. keyword falseKeyword
+
+
+falsePattern : Parser ()
+falsePattern =
+    keyword falseKeyword
 
 
 bool : Parser Term
@@ -235,7 +255,7 @@ bool =
 
 
 -- (if e { e1 } { e2 })
--- TODO: also allow `(if e { true . e1 } { false . e2 })`
+-- TODO: also allow pattern matching syntax `(if e { true . e1 } { false . e2 })`
 
 
 ifThenElse : Parser Term
@@ -254,14 +274,18 @@ ifThenElse =
 
 
 -- ==Cartesian Product==
--- TODO: pair patterns
 -- (pair e e')
+
+
+pairKeyword : String
+pairKeyword =
+    "pair"
 
 
 pair : Parser Term
 pair =
     Parser.succeed Pair
-        |. keyword "pair"
+        |. keyword pairKeyword
         |= Parser.lazy (\() -> term)
         |= Parser.lazy (\() -> term)
 
@@ -269,7 +293,7 @@ pair =
 pairPattern : Parser ( TermVarName, TermVarName )
 pairPattern =
     Parser.succeed (\x y -> ( x, y ))
-        |. keyword "pair"
+        |. keyword pairKeyword
         |= varIntro
         |= varIntro
 
@@ -368,31 +392,41 @@ application =
 -- ==Coproduct==
 
 
+leftKeyword : String
+leftKeyword =
+    "left"
+
+
 left : Parser Term
 left =
     Parser.succeed Left
-        |. keyword "left"
+        |. keyword leftKeyword
         |= Parser.lazy (\() -> term)
 
 
 leftPattern : Parser TermVarName
 leftPattern =
     Parser.succeed (\x -> x)
-        |. keyword "left"
+        |. keyword leftKeyword
         |= varIntro
+
+
+rightKeyword : String
+rightKeyword =
+    "right"
 
 
 right : Parser Term
 right =
     Parser.succeed Right
-        |. keyword "right"
+        |. keyword rightKeyword
         |= Parser.lazy (\() -> term)
 
 
 rightPattern : Parser TermVarName
 rightPattern =
     Parser.succeed (\x -> x)
-        |. keyword "right"
+        |. keyword rightKeyword
         |= varIntro
 
 
@@ -466,7 +500,7 @@ natLoop =
                 , arg = arg
                 }
         )
-        |. keyword "loop-over-nat"
+        |. keyword "nat-loop"
         -- loop argument (the natural number bound)
         |= Parser.lazy (\() -> term)
         -- the initial state of the loop
@@ -512,7 +546,7 @@ listLoop =
                 , arg = arg
                 }
         )
-        |. keyword "loop-over-list"
+        |. keyword "list-loop"
         -- loop argument (the list)
         |= Parser.lazy (\() -> term)
         -- the initial state of the loop
