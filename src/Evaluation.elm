@@ -355,3 +355,6 @@ eval env term =
                             _ ->
                                 Err [ ExpectedList ]
                     )
+
+        Let var exp body ->
+            Debug.todo ""

@@ -757,6 +757,9 @@ infer term =
                 generateFreshVar
                 generateFreshVar
 
+        Let var exp body ->
+            Debug.todo ""
+
 
 infer0 : Term -> Result (List TypeError) ( Context, Equations, Type )
 infer0 term =

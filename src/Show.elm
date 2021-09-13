@@ -136,6 +136,9 @@ showTerm term =
                 , " })"
                 ]
 
+        Let var exp body ->
+            Debug.todo ""
+
 
 showTermEnvironment : TermEnvironment -> String
 showTermEnvironment env =

@@ -557,3 +557,12 @@ listLoop =
         |= binding
             (Parser.succeed (\listElementVar stateVar -> ( listElementVar, stateVar )) |= varIntro |= varIntro)
             (Parser.lazy (\() -> term))
+
+
+
+-- ===LET===
+
+
+letBinding : Parser Term
+letBinding =
+    Debug.todo ""

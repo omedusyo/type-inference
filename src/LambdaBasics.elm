@@ -77,6 +77,7 @@ type Term
             }
         , arg : Term
         }
+    | Let TermVarName Term Term
 
 
 type alias TypeVarName =
