@@ -137,7 +137,15 @@ showTerm term =
                 ]
 
         Let var exp body ->
-            Debug.todo ""
+            String.concat
+                [ "(let "
+                , showTerm exp
+                , " { "
+                , var
+                , " . "
+                , showTerm body
+                , " })"
+                ]
 
 
 showTermEnvironment : TermEnvironment -> String
