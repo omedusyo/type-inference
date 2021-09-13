@@ -25,6 +25,7 @@ import Set exposing (Set)
 --   (sum-case e { (left x) . e1 } { (right y) . e2 })
 --   (nat-loop   n initState { i s . body })
 --   (list-loop xs initState { x s . body })
+--   (let exp { x . body })
 
 
 type alias TermParsingError =
@@ -139,6 +140,7 @@ operatorTerm =
             , natLoop
             , cons
             , listLoop
+            , letExpression
             ]
         |. symbol ")"
 
@@ -561,8 +563,14 @@ listLoop =
 
 
 -- ===LET===
+-- (let exp { x . body })
 
 
-letBinding : Parser Term
-letBinding =
-    Debug.todo ""
+letExpression : Parser Term
+letExpression =
+    Parser.succeed (\arg ( var, body ) -> Let var arg body)
+        |. keyword "let"
+        |= Parser.lazy (\() -> term)
+        |= binding
+            varIntro
+            (Parser.lazy (\() -> term))
