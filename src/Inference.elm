@@ -126,6 +126,9 @@ expandType_MAY_INFINITE_CYCLE type0 eqs0 =
         LambdaList type1 ->
             LambdaList (expandType_MAY_INFINITE_CYCLE type1 eqs0)
 
+        ForAll typeVar type1 ->
+            Debug.todo ""
+
 
 
 -- This expansion can't loop. It will detect infinite types.
@@ -175,6 +178,9 @@ expandTypeWithCycleDetection type0 seenVars eqs0 =
         LambdaList type1 ->
             expandTypeWithCycleDetection type1 seenVars eqs0
                 |> Result.map LambdaList
+
+        ForAll typeVar type1 ->
+            Debug.todo ""
 
 
 
@@ -299,6 +305,9 @@ unification type0Unexpanded type1Unexpanded eqs0 =
 
                     ( LambdaList _, _ ) ->
                         Err [ ExpectedListType ]
+
+                    _ ->
+                        Debug.todo ""
             )
 
 
@@ -327,12 +336,24 @@ type alias InferenceContext a =
 
 generateFreshVar : InferenceContext Type
 generateFreshVar =
+    -- TODO: rewrite this in terms of getState/setState
     \({ nextTypeVar } as state0) ->
         let
             ( nextTypeVar1, type1 ) =
                 newTypeVar nextTypeVar
         in
         Ok ( { state0 | nextTypeVar = nextTypeVar1 }, type1 )
+
+
+generateFreshVarName : InferenceContext TypeVarName
+generateFreshVarName =
+    -- TODO: rewrite this in terms of getState/setState
+    \({ nextTypeVar } as state0) ->
+        let
+            ( nextTypeVar1, _ ) =
+                newTypeVar nextTypeVar
+        in
+        Ok ( { state0 | nextTypeVar = nextTypeVar1 }, nextTypeVar1 )
 
 
 getContext : (Context -> InferenceContext a) -> InferenceContext a
@@ -385,6 +406,88 @@ unify type0 type1 =
 
 
 
+-- ===TYPE-VARIABLE RENAMING===
+-- TODO: I actually need a function
+--            generateFreshVarTo term
+--       that generates a type variable that is fresh to the whole term `term`
+
+
+replaceTypeVarWithFreshVar : TypeVarName -> Type -> InferenceContext Type
+replaceTypeVarWithFreshVar var0 type0 =
+    -- WARNING: We assume that `freshVar` is fresh for `var0, type0`
+    -- TODO: fuck... I want more than freshness. I actually don't want any local bound variables in `type0` to have name `freshVar`
+    case type0 of
+        VarType var ->
+            if var == var0 then
+                generateFreshVarName
+                    |> State.andThen
+                        (\freshVar ->
+                            State.return (VarType freshVar)
+                        )
+
+            else
+                State.return (VarType var)
+
+        Product type1 type2 ->
+            State.map2 Product
+                (replaceTypeVarWithFreshVar var0 type1)
+                (replaceTypeVarWithFreshVar var0 type2)
+
+        Sum type1 type2 ->
+            State.map2 Sum
+                (replaceTypeVarWithFreshVar var0 type1)
+                (replaceTypeVarWithFreshVar var0 type2)
+
+        Arrow type1 type2 ->
+            State.map2 Arrow
+                (replaceTypeVarWithFreshVar var0 type1)
+                (replaceTypeVarWithFreshVar var0 type2)
+
+        LambdaBool ->
+            State.return LambdaBool
+
+        LambdaNat ->
+            State.return LambdaNat
+
+        LambdaList type1 ->
+            replaceTypeVarWithFreshVar var0 type1
+                |> State.map LambdaList
+
+        ForAll var type1 ->
+            -- TODO: watch out for shadowing
+            if var == var0 then
+                State.return (ForAll var type1)
+
+            else
+                -- TODO: this is wrong... can still shadow
+                replaceTypeVarWithFreshVar var0 type1
+                    |> State.map (ForAll var)
+
+
+instantiateForAll : Type -> InferenceContext Type
+instantiateForAll type0 =
+    -- This assummes that the `type0` has a core forall-free type wrapped inside with a bunch of foralls
+    -- e.g.
+    --   ForAll "x" (ForAll "y" (Arrow (VarType "x") (VarType "y")))
+    -- but not
+    --   ForAll "x" (Arrow (ForAll "y" (VarType "y")) (VarType "x"))
+    -- It won't instantiate inner foralls.
+    case type0 of
+        ForAll var type1 ->
+            -- I need to generate a fresh var newVar, and then replace each occurence of var
+            -- with newVar in type1
+            -- TODO: this is wrong!
+            replaceTypeVarWithFreshVar var type1
+                |> State.andThen
+                    (\type2 ->
+                        instantiateForAll type2
+                    )
+
+        _ ->
+            State.return type0
+
+
+
 -- ===INFERENCE===
 
 
@@ -395,8 +498,8 @@ infer term =
             getContext
                 (\context0 ->
                     case context0 |> lookupType varName of
-                        Just typeVar ->
-                            State.return typeVar
+                        Just type0 ->
+                            instantiateForAll type0
 
                         Nothing ->
                             -- typeVar := generateFreshVar
@@ -758,7 +861,24 @@ infer term =
                 generateFreshVar
 
         Let var exp body ->
-            Debug.todo ""
+            -- 1. I need to infer exp and somehow close it's vars
+            -- after that... I'll just infer body in a new context (and afterwards I'll remove the new var from context
+            -- TODO: this won't work... this will close too much
+            inferAndClose exp
+                |> State.andThen
+                    (\expType ->
+                        State.mid
+                            (updateContext0 (\context -> context |> pushVarToContext var expType))
+                            (infer exp)
+                            (updateContext0 (\context -> context |> popVarFromContext var))
+                    )
+
+
+inferAndClose : Term -> InferenceContext Type
+inferAndClose term =
+    -- TODO
+    -- I need to close off the vars
+    infer term
 
 
 infer0 : Term -> Result (List TypeError) ( Context, Equations, Type )

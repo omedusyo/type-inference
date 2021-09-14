@@ -94,6 +94,7 @@ type Type
     | LambdaBool
     | LambdaNat
     | LambdaList Type
+    | ForAll TypeVarName Type
 
 
 

@@ -285,6 +285,9 @@ showType type0 =
         LambdaList type1 ->
             String.concat [ "List(", showType type1, ")" ]
 
+        ForAll typeVar type1 ->
+            Debug.todo ""
+
 
 
 -- ===INFERENCE===
