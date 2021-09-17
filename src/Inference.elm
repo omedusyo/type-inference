@@ -18,6 +18,7 @@ type TypeError
     | ExpectedBaseUnifiesWithLoopBodyType
     | ExpectedListType
     | InfiniteType Int
+    | CantPopEmptyTypeVarContext
 
 
 newTypeVar : TypeVarName -> ( TypeVarName, Type )
@@ -83,18 +84,6 @@ emptyTypeVarStack =
 pushTypeVar : TypeVarName -> TypeVarStack -> TypeVarStack
 pushTypeVar =
     StackedSet.pushElement
-
-
-pushTypeVarStackFrame : TypeVarStack -> TypeVarStack
-pushTypeVarStackFrame =
-    StackedSet.pushFrame
-
-
-popTypeVarStackFrame : TypeVarStack -> Maybe TypeVarStack
-popTypeVarStackFrame =
-    -- TODO: Is it possible to remove the `Maybe` wrapper?
-    --       Nah... with it you could catch some weird bugs in type inference.
-    StackedSet.popFrame
 
 
 moveTypeVarStackFrame : TypeVarName -> Set TypeVarName -> TypeVarStack -> TypeVarStack
@@ -441,6 +430,29 @@ updateTypeVarStack0 nextTypeVarStack =
 updateTypeVarStack : (TypeVarStack -> TypeVarStack) -> InferenceContext a -> InferenceContext a
 updateTypeVarStack nextTypeVarStack =
     State.update (\({ typeVarStack } as state) -> { state | typeVarStack = nextTypeVarStack typeVarStack })
+
+
+pushTypeVarStackFrame0 : InferenceContext ()
+pushTypeVarStackFrame0 =
+    updateTypeVarStack0 StackedSet.pushFrame
+
+
+pushTypeVarStackFrame : InferenceContext a -> InferenceContext a
+pushTypeVarStackFrame =
+    updateTypeVarStack StackedSet.pushFrame
+
+
+popTypeVarStackFrame : InferenceContext (Set TypeVarName)
+popTypeVarStackFrame =
+    State.create
+        (\({ typeVarStack } as state) ->
+            case StackedSet.popFrame typeVarStack of
+                Just ( vars, newTypeVarStack ) ->
+                    Ok ( { state | typeVarStack = newTypeVarStack }, vars )
+
+                Nothing ->
+                    Err [ CantPopEmptyTypeVarContext ]
+        )
 
 
 setEquations : Equations -> InferenceContext a -> InferenceContext a

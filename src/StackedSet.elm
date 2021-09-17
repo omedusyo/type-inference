@@ -40,9 +40,10 @@ appendWithMid xs0 a ys =
             NonemptyList.append (NonemptyList.Nonempty x xs1) (NonemptyList.Nonempty a ys)
 
 
-destroyTop : NonemptyList a -> Maybe (NonemptyList a)
-destroyTop stack =
-    NonemptyList.fromList (NonemptyList.toList stack)
+destroyTop : NonemptyList a -> Maybe ( a, NonemptyList a )
+destroyTop stack0 =
+    NonemptyList.fromList (NonemptyList.toList stack0)
+        |> Maybe.map (\stack1 -> ( NonemptyList.head stack0, stack1 ))
 
 
 mapTop : (a -> a) -> NonemptyList a -> NonemptyList a
@@ -80,7 +81,7 @@ pushElement x stackedSet =
         |> mapTop (\set -> Set.insert x set)
 
 
-popFrame : StackedSet a -> Maybe (StackedSet a)
+popFrame : StackedSet a -> Maybe ( Set a, StackedSet a )
 popFrame =
     destroyTop
 
