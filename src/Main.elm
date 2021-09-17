@@ -29,7 +29,7 @@ type alias Model =
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) Value)
-    , inferedType : Maybe (Result (List L.TypeError) ( L.Context, L.Equations, Type ))
+    , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.Equations, Type ))
     }
 
 

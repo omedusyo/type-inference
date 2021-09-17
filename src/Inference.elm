@@ -31,29 +31,29 @@ newTypeVar n =
 -- - any element in the stack shadows everything below it.
 
 
-type alias Context =
+type alias TermVarContext =
     Dict TermVarName (List Type)
 
 
-emptyContext : Context
+emptyContext : TermVarContext
 emptyContext =
     AssocList.empty
 
 
-popVarFromContext : String -> Context -> Context
+popVarFromContext : String -> TermVarContext -> TermVarContext
 popVarFromContext varName context0 =
     AssocList.update varName
         (Maybe.andThen List.tail)
         context0
 
 
-lookupType : TermVarName -> Context -> Maybe Type
+lookupType : TermVarName -> TermVarContext -> Maybe Type
 lookupType varName context0 =
     AssocList.get varName context0
         |> Maybe.andThen List.head
 
 
-pushVarToContext : TermVarName -> Type -> Context -> Context
+pushVarToContext : TermVarName -> Type -> TermVarContext -> TermVarContext
 pushVarToContext varName type0 context0 =
     AssocList.update varName
         (\maybeBinding ->
@@ -318,7 +318,7 @@ unification type0Unexpanded type1Unexpanded eqs0 =
 
 type alias State =
     { nextTypeVar : TypeVarName
-    , context : Context
+    , context : TermVarContext
     , equations : Equations
     }
 
@@ -357,7 +357,7 @@ generateFreshVarName =
         Ok ( { state0 | nextTypeVar = nextTypeVar1 }, nextTypeVar1 )
 
 
-getContext : (Context -> InferenceContext a) -> InferenceContext a
+getContext : (TermVarContext -> InferenceContext a) -> InferenceContext a
 getContext f =
     State.get0 (\{ context } -> f context)
 
@@ -367,12 +367,12 @@ getEquations f =
     State.get0 (\{ equations } -> f equations)
 
 
-updateContext : (Context -> Context) -> InferenceContext a -> InferenceContext a
+updateContext : (TermVarContext -> TermVarContext) -> InferenceContext a -> InferenceContext a
 updateContext nextContext =
     State.update (\({ context } as state) -> { state | context = nextContext context })
 
 
-updateContext0 : (Context -> Context) -> InferenceContext ()
+updateContext0 : (TermVarContext -> TermVarContext) -> InferenceContext ()
 updateContext0 nextContext =
     State.update0 (\({ context } as state) -> { state | context = nextContext context })
 
@@ -882,7 +882,7 @@ inferAndClose term =
     infer term
 
 
-infer0 : Term -> Result (List TypeError) ( Context, Equations, Type )
+infer0 : Term -> Result (List TypeError) ( TermVarContext, Equations, Type )
 infer0 term =
     State.run (infer term)
         emptyState
