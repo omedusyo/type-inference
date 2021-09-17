@@ -62,7 +62,7 @@ type alias StackedSet a =
 
 
 type alias StackedSetWithHole a =
-    { bottom : List (Set a), mid : Set a, top : List (Set a) }
+    { top : List (Set a), bottom : List (Set a), mid : Set a }
 
 
 empty : StackedSet a
