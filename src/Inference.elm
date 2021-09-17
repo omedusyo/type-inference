@@ -374,24 +374,38 @@ type alias InferenceContext a =
 
 generateFreshVar : InferenceContext Type
 generateFreshVar =
-    -- TODO: rewrite this in terms of getState/setState
-    \({ nextTypeVar } as state0) ->
-        let
-            ( nextTypeVar1, type1 ) =
-                newTypeVar nextTypeVar
-        in
-        Ok ( { state0 | nextTypeVar = nextTypeVar1 }, type1 )
+    State.create
+        (\({ nextTypeVar, typeVarStack } as state0) ->
+            let
+                ( nextTypeVar1, type1 ) =
+                    newTypeVar nextTypeVar
+            in
+            Ok
+                ( { state0
+                    | nextTypeVar = nextTypeVar1
+                    , typeVarStack = pushTypeVar nextTypeVar typeVarStack
+                  }
+                , type1
+                )
+        )
 
 
 generateFreshVarName : InferenceContext TypeVarName
 generateFreshVarName =
-    -- TODO: rewrite this in terms of getState/setState
-    \({ nextTypeVar } as state0) ->
-        let
-            ( nextTypeVar1, _ ) =
-                newTypeVar nextTypeVar
-        in
-        Ok ( { state0 | nextTypeVar = nextTypeVar1 }, nextTypeVar1 )
+    State.create
+        (\({ nextTypeVar, typeVarStack } as state0) ->
+            let
+                ( nextTypeVar1, _ ) =
+                    newTypeVar nextTypeVar
+            in
+            Ok
+                ( { state0
+                    | nextTypeVar = nextTypeVar1
+                    , typeVarStack = pushTypeVar nextTypeVar typeVarStack
+                  }
+                , nextTypeVar1
+                )
+        )
 
 
 getContext : (TermVarContext -> InferenceContext a) -> InferenceContext a
@@ -417,6 +431,16 @@ updateContext0 nextContext =
 updateEquations : (Equations -> Equations) -> InferenceContext a -> InferenceContext a
 updateEquations nextEquations =
     State.update (\({ equations } as state) -> { state | equations = nextEquations equations })
+
+
+updateTypeVarStack0 : (TypeVarStack -> TypeVarStack) -> InferenceContext ()
+updateTypeVarStack0 nextTypeVarStack =
+    State.update0 (\({ typeVarStack } as state) -> { state | typeVarStack = nextTypeVarStack typeVarStack })
+
+
+updateTypeVarStack : (TypeVarStack -> TypeVarStack) -> InferenceContext a -> InferenceContext a
+updateTypeVarStack nextTypeVarStack =
+    State.update (\({ typeVarStack } as state) -> { state | typeVarStack = nextTypeVarStack typeVarStack })
 
 
 setEquations : Equations -> InferenceContext a -> InferenceContext a
