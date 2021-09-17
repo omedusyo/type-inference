@@ -3,7 +3,7 @@ module Inference exposing (..)
 import AssocList exposing (Dict)
 import LambdaBasics exposing (..)
 import Set exposing (Set)
-import StackedSet
+import StackedSet exposing (StackedSet)
 import StatefulWithErr as State exposing (StatefulWithErr)
 
 
@@ -65,6 +65,41 @@ pushVarToContext varName type0 context0 =
                     Just [ type0 ]
         )
         context0
+
+
+
+-- ===TYPE VAR STACK===
+
+
+type alias TypeVarStack =
+    StackedSet TypeVarName
+
+
+emptyTypeVarStack : TypeVarStack
+emptyTypeVarStack =
+    StackedSet.empty
+
+
+pushTypeVar : TypeVarName -> TypeVarStack -> TypeVarStack
+pushTypeVar =
+    StackedSet.pushElement
+
+
+pushTypeVarStackFrame : TypeVarStack -> TypeVarStack
+pushTypeVarStackFrame =
+    StackedSet.pushFrame
+
+
+popTypeVarStackFrame : TypeVarStack -> Maybe TypeVarStack
+popTypeVarStackFrame =
+    -- TODO: Is it possible to remove the `Maybe` wrapper?
+    --       Nah... with it you could catch some weird bugs in type inference.
+    StackedSet.popFrame
+
+
+moveTypeVarStackFrame : TypeVarName -> Set TypeVarName -> TypeVarStack -> TypeVarStack
+moveTypeVarStackFrame =
+    StackedSet.move
 
 
 
@@ -320,6 +355,7 @@ type alias State =
     { nextTypeVar : TypeVarName
     , context : TermVarContext
     , equations : Equations
+    , typeVarStack : TypeVarStack
     }
 
 
@@ -328,6 +364,7 @@ emptyState =
     { nextTypeVar = 0
     , context = emptyContext
     , equations = emptyEquations
+    , typeVarStack = emptyTypeVarStack
     }
 
 
