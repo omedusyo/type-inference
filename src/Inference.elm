@@ -3,6 +3,7 @@ module Inference exposing (..)
 import AssocList exposing (Dict)
 import LambdaBasics exposing (..)
 import Set exposing (Set)
+import StackedSet
 import StatefulWithErr as State exposing (StatefulWithErr)
 
 
