@@ -5,6 +5,7 @@ import LambdaBasics exposing (..)
 import Set exposing (Set)
 import StackedSet exposing (StackedSet)
 import StatefulWithErr as State exposing (StatefulWithErr)
+import TypeVarContext
 
 
 type TypeError
@@ -27,7 +28,7 @@ newTypeVar n =
 
 
 
--- ===CONTEXT===
+-- ===TERM VAR CONTEXT===
 -- The list serves as a stack of types
 -- - any element in the stack shadows everything below it.
 
@@ -111,6 +112,9 @@ lookupEquations =
 
 extendEquations : TypeVarName -> Type -> Equations -> Equations
 extendEquations varname type0 eqs =
+    -- TODO: This should actually also modify `typeVarStack`
+    -- TODO: is it ok if we don't expand `type0` here? Seems to be ok... but that may become false in the future and generate an epic bug.
+    --       Seems like this would be a better place to expand
     AssocList.insert varname type0 eqs
 
 
