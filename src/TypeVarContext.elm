@@ -1,4 +1,17 @@
-module TypeVarContext exposing (..)
+module TypeVarContext exposing
+    ( Equations
+    , TypeError(..)
+    , TypeVarContext
+    , UnificationStateful
+    , emptyContext
+    , expandType
+    , generateFreshVar
+    , generateFreshVarName
+    , popTypeVarStackFrame
+    , pushTypeVarStackFrame0
+    , throwTypeError
+    , unification
+    )
 
 import AssocList exposing (Dict)
 import LambdaBasics exposing (Type(..), TypeVarName)
@@ -9,6 +22,10 @@ import StatefulWithErr as State exposing (StatefulWithErr)
 
 
 -- ===Types===
+
+
+type alias TypeVarContext =
+    State
 
 
 type alias State =
@@ -45,6 +62,18 @@ type TypeError
 
 
 
+-- ===State===
+
+
+emptyContext : State
+emptyContext =
+    { nextTypeVar = 0
+    , typeVarStack = emptyTypeVarStack
+    , equations = emptyEquations
+    }
+
+
+
 -- ===Errors===
 
 
@@ -70,6 +99,27 @@ pushTypeVar =
 moveTypeVarStackFrame : TypeVarName -> Set TypeVarName -> TypeVarStack -> TypeVarStack
 moveTypeVarStackFrame =
     StackedSet.move
+
+
+pushTypeVarStackFrame0 : UnificationStateful ()
+pushTypeVarStackFrame0 =
+    State.update0
+        (\({ typeVarStack } as state) ->
+            { state | typeVarStack = StackedSet.pushFrame typeVarStack }
+        )
+
+
+popTypeVarStackFrame : UnificationStateful (Set TypeVarName)
+popTypeVarStackFrame =
+    State.create
+        (\({ typeVarStack } as state) ->
+            case StackedSet.popFrame typeVarStack of
+                Just ( vars, newTypeVarStack ) ->
+                    Ok ( { state | typeVarStack = newTypeVarStack }, vars )
+
+                Nothing ->
+                    Err [ CantPopEmptyTypeVarContext ]
+        )
 
 
 

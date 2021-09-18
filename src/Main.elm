@@ -13,6 +13,7 @@ import LambdaBasics as L exposing (Term, Type)
 import Return exposing (Return)
 import Show as L
 import TermParser as L
+import TypeVarContext as L
 
 
 blue =
@@ -29,7 +30,7 @@ type alias Model =
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) Value)
-    , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.Equations, Type ))
+    , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
     }
 
 
@@ -214,12 +215,13 @@ view model =
                                     case result of
                                         Ok ( context, equations, type0 ) ->
                                             -- TODO: remove the dependence on expandType
-                                            case L.expandType type0 equations of
-                                                Ok type1 ->
-                                                    L.showType type1
-
-                                                Err err ->
-                                                    "Type Error"
+                                            -- TODO: you need to loose the dependence on `expandType`
+                                            -- case L.expandType type0 equations of
+                                            --     Ok type1 ->
+                                            --         L.showType type1
+                                            --     Err err ->
+                                            --         "Type Error"
+                                            L.showType type0
 
                                         Err err ->
                                             "Type Error"

@@ -4,6 +4,7 @@ import AssocList exposing (Dict)
 import Evaluation exposing (..)
 import Inference exposing (..)
 import LambdaBasics exposing (..)
+import TypeVarContext exposing (TypeError(..), TypeVarContext)
 
 
 
@@ -303,7 +304,7 @@ showInfer0 term =
 
 
 
--- This expands the final type according to equations
+-- This expands the final type according to TypeVarContext
 
 
 showFinalInfer : Term -> Result (List TypeError) String
@@ -312,6 +313,8 @@ showFinalInfer term =
         |> Result.andThen
             (\( _, eqs, type1 ) ->
                 -- TODO: you need to show the context, and var bindings
-                expandType type1 eqs
-                    |> Result.map showType
+                -- TODO: You need to somehow loose the dependence on `expandType`...
+                -- TypeVarContext.expandType type1 eqs
+                --     |> Result.map showType
+                Ok (showType type1)
             )
