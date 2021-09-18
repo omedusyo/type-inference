@@ -214,8 +214,14 @@ view model =
 
                             Just result ->
                                 case result of
-                                    Ok ( context, { nextTypeVar, typeVarStack, equations } as typeVarContext, type0 ) ->
+                                    Ok ( termVarContext, { nextTypeVar, typeVarStack, equations } as typeVarContext, type0 ) ->
                                         [ E.text
+                                            (String.concat
+                                                [ "term-var-context = "
+                                                , L.showTermVarContext termVarContext
+                                                ]
+                                            )
+                                        , E.text
                                             (String.concat
                                                 [ "next-type-var = "
                                                 , "'" ++ String.fromInt nextTypeVar

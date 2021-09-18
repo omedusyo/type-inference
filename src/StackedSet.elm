@@ -214,10 +214,10 @@ show toString stackedSet =
                 |> String.join ", "
     in
     String.concat
-        [ "| "
+        [ "|"
         , stackedSet
             |> NonemptyList.map setToString
             |> NonemptyList.toList
             |> List.reverse
-            |> String.join " | "
+            |> String.join "| "
         ]

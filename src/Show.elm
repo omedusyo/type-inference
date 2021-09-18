@@ -293,6 +293,26 @@ showType type0 =
 
 
 
+-- ===Term Var Context===
+
+
+showTermVarContext : TermVarContext -> String
+showTermVarContext termVarContext =
+    termVarContext
+        |> AssocList.toList
+        |> List.concatMap
+            (\( varname, typeStack ) ->
+                case List.head typeStack of
+                    Just type0 ->
+                        [ String.concat [ varname, " := ", showType type0 ] ]
+
+                    Nothing ->
+                        []
+            )
+        |> String.join ", "
+
+
+
 -- ===Type Var Context===
 
 
