@@ -251,12 +251,22 @@ expandType type0 =
 expandTypeAtTypeVarName : TypeVarName -> UnificationStateful (Maybe Type)
 expandTypeAtTypeVarName typeVarName =
     State.get0
-        (\{ equations } ->
-            case lookupEquations typeVarName equations of
+        (\state0 ->
+            case lookupEquations typeVarName state0.equations of
                 Just type0 ->
-                    -- TODO: you can actually update the type var to the expanded type here
                     expandType type0
-                        |> State.map Just
+                        |> State.andThen
+                            (\expandedType0 ->
+                                -- Just being paranoid about `equations` changing during `expandType`
+                                State.second
+                                    (State.update0
+                                        (\state1 ->
+                                            -- TODO: Would it be a good idea to use extendEquations here?
+                                            { state1 | equations = AssocList.insert typeVarName expandedType0 state1.equations }
+                                        )
+                                    )
+                                    (State.return (Just expandedType0))
+                            )
 
                 Nothing ->
                     State.return Nothing

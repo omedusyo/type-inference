@@ -39,8 +39,11 @@ initModel : Model
 initModel =
     let
         input =
-            "(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })"
+            -- "(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })"
+            "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
 
+        -- "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
+        -- "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
         termResult =
             L.parseTerm input
     in
