@@ -183,14 +183,16 @@ lookupEquations =
 
 
 extendEquations : TypeVarName -> Type -> UnificationStateful ()
-extendEquations varname type0 =
-    -- TODO: This should actually also modify `typeVarStack`
+extendEquations typeVarName type0 =
     -- TODO: is it ok if we don't expand `type0` here? Seems to be ok... but that may become false in the future and generate an epic bug.
     --       Seems like this would be a better place to expand
     State.update0
-        (\({ equations } as state) ->
+        (\({ equations, typeVarStack } as state) ->
             { state
-                | equations = AssocList.insert varname type0 equations
+                | equations = AssocList.insert typeVarName type0 equations
+                , typeVarStack =
+                    typeVarStack
+                        |> moveTypeVarStackFrame typeVarName (LambdaBasics.getTypeVars type0)
             }
         )
 
