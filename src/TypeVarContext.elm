@@ -248,6 +248,21 @@ expandType type0 =
     expandTypeWithCycleDetection type0 Set.empty
 
 
+expandTypeAtTypeVarName : TypeVarName -> UnificationStateful (Maybe Type)
+expandTypeAtTypeVarName typeVarName =
+    State.get0
+        (\{ equations } ->
+            case lookupEquations typeVarName equations of
+                Just type0 ->
+                    -- TODO: you can actually update the type var to the expanded type here
+                    expandType type0
+                        |> State.map Just
+
+                Nothing ->
+                    State.return Nothing
+        )
+
+
 
 -- This expansion can't loop. It will detect infinite types.
 
@@ -305,88 +320,121 @@ expandTypeWithCycleDetection type0 seenVars =
 
 
 unification : Type -> Type -> UnificationStateful Type
-unification type0Unexpanded type1Unexpanded =
-    State.map2
-        Tuple.pair
-        (expandType type0Unexpanded)
-        (expandType type1Unexpanded)
-        |> State.andThen
-            (\( type0, type1 ) ->
-                case ( type0, type1 ) of
-                    -- ===TYPE VARS===
-                    ( VarType id0, VarType id1 ) ->
-                        if id0 == id1 then
-                            State.return (VarType id0)
+unification type0 type1 =
+    case ( type0, type1 ) of
+        -- ===TYPE VARS===
+        ( VarType id0, VarType id1 ) ->
+            State.map2
+                Tuple.pair
+                (expandTypeAtTypeVarName id0)
+                (expandTypeAtTypeVarName id1)
+                |> State.andThen
+                    (\( maybeExpandedType0, maybeExpandedType1 ) ->
+                        case ( maybeExpandedType0, maybeExpandedType1 ) of
+                            ( Just expandedType0, Just expandedType1 ) ->
+                                unification expandedType0 expandedType1
 
-                        else if id0 < id1 then
-                            State.second
-                                (extendEquations id0 (VarType id1))
-                                (State.return (VarType id1))
+                            ( Just expandedType0, Nothing ) ->
+                                State.second
+                                    (extendEquations id1 expandedType0)
+                                    (State.return expandedType0)
 
-                        else
-                            State.second
-                                (extendEquations id1 (VarType id0))
-                                (State.return (VarType id1))
+                            ( Nothing, Just expandedType1 ) ->
+                                State.second
+                                    (extendEquations id0 expandedType1)
+                                    (State.return expandedType1)
 
-                    ( VarType id0, _ ) ->
-                        State.second
-                            (extendEquations id0 type1)
-                            (State.return type1)
+                            ( Nothing, Nothing ) ->
+                                if id0 == id1 then
+                                    State.return (VarType id0)
 
-                    ( _, VarType id1 ) ->
-                        State.second
-                            (extendEquations id1 type0)
-                            (State.return type0)
+                                else if id0 < id1 then
+                                    State.second
+                                        (extendEquations id0 (VarType id1))
+                                        (State.return (VarType id1))
 
-                    -- ===PRODUCT===
-                    ( Product type00 type01, Product type10 type11 ) ->
-                        State.map2 Product
-                            (unification type00 type10)
-                            (unification type01 type11)
+                                else
+                                    State.second
+                                        (extendEquations id1 (VarType id0))
+                                        (State.return (VarType id1))
+                    )
 
-                    ( Product _ _, _ ) ->
-                        throwTypeError [ ExpectedProductType ]
+        ( VarType id0, _ ) ->
+            expandTypeAtTypeVarName id0
+                |> State.andThen
+                    (\maybeExpandedType0 ->
+                        case maybeExpandedType0 of
+                            Just expandedType0 ->
+                                unification expandedType0 type1
 
-                    -- ===ARROW===
-                    ( Arrow type00 type01, Arrow type10 type11 ) ->
-                        State.map2 Arrow
-                            (unification type00 type10)
-                            (unification type01 type11)
+                            Nothing ->
+                                State.second
+                                    (extendEquations id0 type1)
+                                    (State.return type1)
+                    )
 
-                    ( Arrow _ _, _ ) ->
-                        throwTypeError [ ExpectedArrowType ]
+        ( _, VarType id1 ) ->
+            expandTypeAtTypeVarName id1
+                |> State.andThen
+                    (\maybeExpandedType1 ->
+                        case maybeExpandedType1 of
+                            Just expandedType1 ->
+                                unification type0 expandedType1
 
-                    -- ===SUM===
-                    ( Sum type00 type01, Sum type10 type11 ) ->
-                        State.map2 Sum
-                            (unification type00 type10)
-                            (unification type01 type11)
+                            Nothing ->
+                                State.second
+                                    (extendEquations id1 type0)
+                                    (State.return type0)
+                    )
 
-                    ( Sum _ _, _ ) ->
-                        throwTypeError [ ExpectedSumType ]
+        -- ===PRODUCT===
+        ( Product type00 type01, Product type10 type11 ) ->
+            State.map2 Product
+                (unification type00 type10)
+                (unification type01 type11)
 
-                    -- ===BOOL===
-                    ( LambdaBool, LambdaBool ) ->
-                        State.return LambdaBool
+        ( Product _ _, _ ) ->
+            throwTypeError [ ExpectedProductType ]
 
-                    ( LambdaBool, _ ) ->
-                        throwTypeError [ ExpectedBoolType ]
+        -- ===ARROW===
+        ( Arrow type00 type01, Arrow type10 type11 ) ->
+            State.map2 Arrow
+                (unification type00 type10)
+                (unification type01 type11)
 
-                    -- ===NAT===
-                    ( LambdaNat, LambdaNat ) ->
-                        State.return LambdaNat
+        ( Arrow _ _, _ ) ->
+            throwTypeError [ ExpectedArrowType ]
 
-                    ( LambdaNat, _ ) ->
-                        throwTypeError [ ExpectedNatType ]
+        -- ===SUM===
+        ( Sum type00 type01, Sum type10 type11 ) ->
+            State.map2 Sum
+                (unification type00 type10)
+                (unification type01 type11)
 
-                    ( LambdaList type00, LambdaList type11 ) ->
-                        unification type00 type11
-                            |> State.map LambdaList
+        ( Sum _ _, _ ) ->
+            throwTypeError [ ExpectedSumType ]
 
-                    ( LambdaList _, _ ) ->
-                        throwTypeError [ ExpectedListType ]
+        -- ===BOOL===
+        ( LambdaBool, LambdaBool ) ->
+            State.return LambdaBool
 
-                    ( ForAll _ _, _ ) ->
-                        -- TODO?
-                        Debug.todo ""
-            )
+        ( LambdaBool, _ ) ->
+            throwTypeError [ ExpectedBoolType ]
+
+        -- ===NAT===
+        ( LambdaNat, LambdaNat ) ->
+            State.return LambdaNat
+
+        ( LambdaNat, _ ) ->
+            throwTypeError [ ExpectedNatType ]
+
+        ( LambdaList type00, LambdaList type11 ) ->
+            unification type00 type11
+                |> State.map LambdaList
+
+        ( LambdaList _, _ ) ->
+            throwTypeError [ ExpectedListType ]
+
+        ( ForAll _ _, _ ) ->
+            -- TODO?
+            Debug.todo ""
