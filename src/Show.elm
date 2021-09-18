@@ -4,7 +4,9 @@ import AssocList exposing (Dict)
 import Evaluation exposing (..)
 import Inference exposing (..)
 import LambdaBasics exposing (..)
-import TypeVarContext exposing (TypeError(..), TypeVarContext)
+import StackedSet
+import StatefulWithErr as State
+import TypeVarContext exposing (Equations, TypeError(..), TypeVarContext, TypeVarStack)
 
 
 
@@ -291,6 +293,85 @@ showType type0 =
 
 
 
+-- ===Type Var Context===
+
+
+showTypeError : TypeError -> String
+showTypeError typeError =
+    case typeError of
+        ExpectedProductType ->
+            "Expected Produc Type"
+
+        ExpectedArrowType ->
+            "Expected Arrow Type"
+
+        ExpectedNatType ->
+            "Expected Nat Type"
+
+        ExpectedSumType ->
+            "Expected Sum Type"
+
+        ExpectedMatchingTypesInCaseBranches ->
+            "Expected matching Types in Case-Expression Branches"
+
+        ExpectedBoolType ->
+            "Expected Bool Type"
+
+        ExpectedMatchingTypesInIfThenElseBranches ->
+            "Expected matching Types in If-Then-Else-Expression Branches"
+
+        ExpectedBaseUnifiesWithLoopBodyType ->
+            "Expected base unifies with loop-body Type"
+
+        ExpectedListType ->
+            "Expected List Type"
+
+        InfiniteType typeVarName ->
+            "Infinite Type detected: the type var " ++ "'" ++ String.fromInt typeVarName
+
+        CantPopEmptyTypeVarContext ->
+            "Cant Pop Empty Type-Var-Context"
+
+
+showTypeVarStack : TypeVarStack -> String
+showTypeVarStack =
+    StackedSet.show String.fromInt
+
+
+showEquations : Equations -> String
+showEquations equations =
+    equations
+        |> AssocList.toList
+        |> List.map
+            (\( typeVarName, type0 ) ->
+                String.concat
+                    [ "'" ++ String.fromInt typeVarName
+                    , " := "
+                    , showType type0
+                    ]
+            )
+        |> String.join "; "
+
+
+showTypeVarContext : TypeVarContext -> String
+showTypeVarContext { nextTypeVar, typeVarStack, equations } =
+    String.concat
+        [ "["
+        , "next-type-var := "
+        , "'" ++ String.fromInt nextTypeVar
+        , "; "
+        , "stack := "
+        , StackedSet.show String.fromInt typeVarStack
+        , "; "
+        , "eq := "
+        , "{"
+        , showEquations equations
+        , "}"
+        , "]"
+        ]
+
+
+
 -- ===INFERENCE===
 
 
@@ -307,14 +388,26 @@ showInfer0 term =
 -- This expands the final type according to TypeVarContext
 
 
-showFinalInfer : Term -> Result (List TypeError) String
+showFinalInfer : Term -> String
 showFinalInfer term =
-    infer0 term
-        |> Result.andThen
-            (\( _, eqs, type1 ) ->
-                -- TODO: you need to show the context, and var bindings
-                -- TODO: You need to somehow loose the dependence on `expandType`...
-                -- TypeVarContext.expandType type1 eqs
-                --     |> Result.map showType
-                Ok (showType type1)
-            )
+    let
+        resultString : Result (List TypeError) String
+        resultString =
+            infer0 term
+                |> Result.andThen
+                    (\( termVarContext, typeVarContext, type1 ) ->
+                        State.run (TypeVarContext.expandType type1) typeVarContext
+                            |> Result.map
+                                (\( _, type2 ) ->
+                                    showType type2
+                                )
+                    )
+    in
+    case resultString of
+        Ok str ->
+            str
+
+        Err typeErrors ->
+            typeErrors
+                |> List.map showTypeError
+                |> String.join ", "

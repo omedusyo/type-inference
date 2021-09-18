@@ -2,6 +2,7 @@ module TypeVarContext exposing
     ( Equations
     , TypeError(..)
     , TypeVarContext
+    , TypeVarStack
     , UnificationStateful
     , emptyContext
     , expandType
