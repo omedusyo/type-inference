@@ -84,7 +84,7 @@ initModel =
             "(@ (fn {. 0n0}) )"
 
         input =
-            input7
+            input0
 
         termResult =
             L.parseTerm input
@@ -362,6 +362,8 @@ view model =
         , E.text "  (nat-loop   n initState { i s . body })"
         , E.text "  (list-loop xs initState { x s . body })"
         , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
+        , E.text "  (fn {. body }) // freezes computation"
+        , E.text "  (@ thunk) // forces computation"
         ]
 
 
