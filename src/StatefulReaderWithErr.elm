@@ -65,6 +65,12 @@ get0 f =
         f r state0 r state0
 
 
+withReadOnly : (r -> s -> r) -> StatefulReaderWithErr e r s b -> StatefulReaderWithErr e r s b
+withReadOnly f stateful_a =
+    \r0 state0 ->
+        stateful_a (f r0 state0) state0
+
+
 update : (r -> s -> s) -> StatefulReaderWithErr e r s a -> StatefulReaderWithErr e r s a
 update nextState stateful_a0 =
     \r state0 ->
