@@ -1,8 +1,7 @@
 module Evaluation exposing (..)
 
 import LambdaBasics exposing (..)
-import Reader
-import StatefulReaderWithErr
+import StatefulReaderWithErr as State exposing (StatefulReaderWithErr)
 import Value exposing (..)
 
 
@@ -42,6 +41,7 @@ import Value exposing (..)
 --            state2 := body in env x := x1, s := state1
 --            state3 := body in env x := x0, s := state2
 --            state3
+-- ===Types===
 
 
 type EvalError
@@ -56,159 +56,179 @@ type EvalError
 
 
 -- State
+
+
+type alias MutState =
+    {}
+
+
+type alias ReadOnlyState =
+    TermEnvironment
+
+
+type alias EvalStateful a =
+    StatefulReaderWithErr (List EvalError) ReadOnlyState MutState a
+
+
+initMutState : MutState
+initMutState =
+    {}
+
+
+initReadOnlyState : ReadOnlyState
+initReadOnlyState =
+    emptyTermEnvironment
+
+
+throwEvalError : List EvalError -> EvalStateful a
+throwEvalError =
+    State.error
+
+
+varLookup : TermVarName -> EvalStateful Value
+varLookup varName =
+    State.get0
+        (\env _ ->
+            case Value.lookupEnvironment varName env of
+                Just val ->
+                    State.return val
+
+                Nothing ->
+                    throwEvalError [ UndefinedVar varName ]
+        )
+
+
+
 -- ===EVALUATION===
 
 
 eval0 : Term -> Result (List EvalError) Value
 eval0 term =
-    eval emptyTermEnvironment term
+    State.run (eval term) initReadOnlyState initMutState
+        |> Result.map (\( _, value ) -> value)
 
 
-eval : TermEnvironment -> Term -> Result (List EvalError) Value
-eval env term =
+eval : Term -> EvalStateful Value
+eval term =
     case term of
         VarUse varName ->
-            case lookupEnvironment varName env of
-                Just result ->
-                    Ok result
-
-                Nothing ->
-                    Err [ UndefinedVar varName ]
+            varLookup varName
 
         Pair fst snd ->
-            let
-                evaledFstResult =
-                    eval env fst
-
-                evaledSndResult =
-                    eval env snd
-            in
-            -- TODO: you should evaluate the first component, and if the first component is error, then short circuit and don't eval second component
-            -- TODO: I guess there are multiple possibilities...?
-            case ( evaledFstResult, evaledSndResult ) of
-                ( Ok evaledFst, Ok evaledSnd ) ->
-                    Ok (PairValue evaledFst evaledSnd)
-
-                ( Err errFst, Ok evaledSnd ) ->
-                    Err errFst
-
-                ( Ok evaledFst, Err errSnd ) ->
-                    Err errSnd
-
-                ( Err errFst, Err errSnd ) ->
-                    Err (errFst ++ errSnd)
+            State.map2 PairValue
+                (eval fst)
+                (eval snd)
 
         MatchProduct { arg, var0, var1, body } ->
-            eval env arg
-                |> Result.andThen
+            eval arg
+                |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             PairValue val0 val1 ->
-                                let
-                                    newEnv =
+                                State.withReadOnly
+                                    (\env _ ->
                                         env
                                             |> extendEnvironment var0 val0
                                             |> extendEnvironment var1 val1
-                                in
-                                eval newEnv body
+                                    )
+                                    (eval body)
 
                             _ ->
-                                Err [ ExpectedPair ]
+                                throwEvalError [ ExpectedPair ]
                     )
 
         Abstraction var body ->
-            Ok (Closure { env = env, var = var, body = body })
+            State.get0
+                (\env _ ->
+                    State.return (Closure { env = env, var = var, body = body })
+                )
 
         Application fn arg ->
-            case eval env fn of
-                Ok (Closure ({ var, body } as closure)) ->
-                    eval env arg
-                        |> Result.andThen
-                            (\argEvaled ->
-                                let
-                                    newEnv =
-                                        extendEnvironment var argEvaled closure.env
-                                in
-                                eval newEnv body
-                            )
+            eval fn
+                |> State.andThen
+                    (\valFn ->
+                        case valFn of
+                            Closure ({ var, body } as closure) ->
+                                eval arg
+                                    |> State.andThen
+                                        (\argEvaled ->
+                                            State.withReadOnly
+                                                (\_ _ ->
+                                                    closure.env |> extendEnvironment var argEvaled
+                                                )
+                                                (eval body)
+                                        )
 
-                Ok _ ->
-                    Err [ ExpectedFunction ]
-
-                Err err ->
-                    Err err
+                            _ ->
+                                throwEvalError [ ExpectedFunction ]
+                    )
 
         Left term1 ->
-            eval env term1
-                |> Result.map LeftValue
+            eval term1
+                |> State.map LeftValue
 
         Right term1 ->
-            eval env term1
-                |> Result.map RightValue
+            eval term1
+                |> State.map RightValue
 
         Case { arg, leftVar, leftBody, rightVar, rightBody } ->
-            eval env arg
-                |> Result.andThen
+            -- Debug.todo ""
+            eval arg
+                |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             LeftValue val ->
-                                let
-                                    newEnv =
-                                        extendEnvironment leftVar val env
-                                in
-                                eval newEnv leftBody
+                                State.withReadOnly (\env _ -> env |> extendEnvironment leftVar val)
+                                    (eval leftBody)
 
                             RightValue val ->
-                                let
-                                    newEnv =
-                                        extendEnvironment rightVar val env
-                                in
-                                eval newEnv rightBody
+                                State.withReadOnly (\env _ -> env |> extendEnvironment rightVar val)
+                                    (eval rightBody)
 
                             _ ->
-                                Err [ ExpectedLeftRight ]
+                                throwEvalError [ ExpectedLeftRight ]
                     )
 
         BoolTrue ->
-            Ok TrueValue
+            State.return TrueValue
 
         BoolFalse ->
-            Ok FalseValue
+            State.return FalseValue
 
         IfThenElse arg leftBody rightBody ->
-            eval env arg
-                |> Result.andThen
+            eval arg
+                |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             TrueValue ->
-                                eval env leftBody
+                                eval leftBody
 
                             FalseValue ->
-                                eval env rightBody
+                                eval rightBody
 
                             _ ->
-                                Err [ ExpectedBoolean ]
+                                throwEvalError [ ExpectedBoolean ]
                     )
 
         NatZero ->
-            Ok (NatValue NatZeroValue)
+            State.return (NatValue NatZeroValue)
 
         NatSucc term1 ->
-            eval env term1
-                |> Result.andThen
+            eval term1
+                |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             NatValue natVal ->
-                                Ok (NatValue (NatSuccValue natVal))
+                                State.return (NatValue (NatSuccValue natVal))
 
                             _ ->
-                                Err [ ExpectedNat ]
+                                throwEvalError [ ExpectedNat ]
                     )
 
         NatLoop { base, loop, arg } ->
             -- TODO: error on same var name? loop.indexVar, loop.stateVar
-            eval env arg
-                |> Result.andThen
+            eval arg
+                |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             NatValue natVal ->
@@ -216,44 +236,42 @@ eval env term =
                                     evalNatLoop natVal0 =
                                         case natVal0 of
                                             NatZeroValue ->
-                                                eval env base
+                                                eval base
 
                                             NatSuccValue natVal1 ->
                                                 evalNatLoop natVal1
-                                                    |> Result.andThen
+                                                    |> State.andThen
                                                         (\prevVal ->
-                                                            let
-                                                                newEnv =
+                                                            State.withReadOnly
+                                                                (\env _ ->
                                                                     env
                                                                         |> extendEnvironment loop.indexVar (NatValue natVal1)
                                                                         |> extendEnvironment loop.stateVar prevVal
-                                                            in
-                                                            eval newEnv loop.body
+                                                                )
+                                                                (eval loop.body)
                                                         )
                                 in
                                 evalNatLoop natVal
 
                             _ ->
-                                Err [ ExpectedNat ]
+                                throwEvalError [ ExpectedNat ]
                     )
 
         EmptyList ->
-            Ok (ListValue EmptyListValue)
+            State.return (ListValue EmptyListValue)
 
         Cons headTerm tailTerm ->
-            eval env headTerm
-                |> Result.andThen
+            eval headTerm
+                |> State.andThen
                     (\headValue ->
-                        eval env tailTerm
-                            |> Result.andThen
-                                (\tailValue ->
-                                    Ok (ListValue (ConsValue headValue tailValue))
-                                )
+                        eval tailTerm
+                            |> State.map
+                                (\tailValue -> ListValue (ConsValue headValue tailValue))
                     )
 
         ListLoop { initState, loop, arg } ->
-            eval env arg
-                |> Result.andThen
+            eval arg
+                |> State.andThen
                     (\argValue ->
                         case argValue of
                             ListValue listValue ->
@@ -261,51 +279,46 @@ eval env term =
                                     evalListLoop listValue0 =
                                         case listValue0 of
                                             EmptyListValue ->
-                                                eval env initState
+                                                eval initState
 
                                             ConsValue headValue restValue ->
                                                 case restValue of
                                                     ListValue listValue1 ->
-                                                        let
-                                                            prevResult =
-                                                                evalListLoop listValue1
-                                                        in
-                                                        prevResult
-                                                            |> Result.andThen
+                                                        evalListLoop listValue1
+                                                            |> State.andThen
                                                                 (\prevVal ->
-                                                                    let
-                                                                        newEnv =
+                                                                    State.withReadOnly
+                                                                        (\env _ ->
                                                                             env
                                                                                 |> extendEnvironment loop.listElementVar headValue
                                                                                 |> extendEnvironment loop.stateVar prevVal
-                                                                    in
-                                                                    eval newEnv loop.body
+                                                                        )
+                                                                        (eval loop.body)
                                                                 )
 
                                                     _ ->
-                                                        Err [ ExpectedList ]
+                                                        throwEvalError [ ExpectedList ]
                                 in
                                 evalListLoop listValue
 
                             _ ->
-                                Err [ ExpectedList ]
+                                throwEvalError [ ExpectedList ]
                     )
 
         Delay body ->
-            Ok (Thunk { env = env, body = body })
+            State.get0
+                (\env _ ->
+                    State.return (Thunk { env = env, body = body })
+                )
 
         Force body ->
             -- TODO
             Debug.todo ""
 
         Let var arg body ->
-            eval env arg
-                |> Result.andThen
+            eval arg
+                |> State.andThen
                     (\argVal ->
-                        let
-                            newEnv =
-                                env
-                                    |> extendEnvironment var argVal
-                        in
-                        eval newEnv body
+                        State.withReadOnly (\env _ -> env |> extendEnvironment var argVal)
+                            (eval body)
                     )

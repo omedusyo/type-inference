@@ -186,15 +186,6 @@ showTermEnvironment env =
 -- ===VALUES===
 
 
-showEval : TermEnvironment -> Term -> Result (List EvalError) String
-showEval env term =
-    eval env term
-        |> Result.map
-            (\val ->
-                String.concat [ showTerm term, "  ~~>  ", showValue val ]
-            )
-
-
 showValue : Value -> String
 showValue val =
     case val of

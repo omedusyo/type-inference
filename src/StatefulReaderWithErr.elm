@@ -29,6 +29,7 @@ module StatefulReaderWithErr exposing
     , throw
     , update
     , update0
+    , withReadOnly
     )
 
 -- Use this when you have both read-only and mutable state

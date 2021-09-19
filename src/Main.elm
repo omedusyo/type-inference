@@ -143,7 +143,7 @@ update msg model =
         RunButtonClicked ->
             case model.parsedTerm of
                 Just (Ok term) ->
-                    { model | evaledTerm = Just (L.eval L.emptyTermEnvironment term) }
+                    { model | evaledTerm = Just (L.eval0 term) }
                         |> Return.singleton
 
                 _ ->
