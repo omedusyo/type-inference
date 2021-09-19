@@ -1,6 +1,6 @@
 module Inference exposing (..)
 
-import AssocList exposing (Dict)
+import Dict exposing (Dict)
 import LambdaBasics exposing (..)
 import Set exposing (Set)
 import StackedSet exposing (StackedSet)
@@ -54,18 +54,18 @@ throwTypeError =
 
 emptyContext : TermVarContext
 emptyContext =
-    AssocList.empty
+    Dict.empty
 
 
 lookupType : TermVarName -> TermVarContext -> Maybe Type
 lookupType varName context0 =
-    AssocList.get varName context0
+    Dict.get varName context0
         |> Maybe.andThen List.head
 
 
 pushVarToContext : TermVarName -> Type -> TermVarContext -> TermVarContext
 pushVarToContext varName type0 context0 =
-    AssocList.update varName
+    Dict.update varName
         (\maybeBinding ->
             case maybeBinding of
                 Just types0 ->
@@ -79,7 +79,7 @@ pushVarToContext varName type0 context0 =
 
 popVarFromContext : String -> TermVarContext -> TermVarContext
 popVarFromContext varName context0 =
-    AssocList.update varName
+    Dict.update varName
         (Maybe.andThen List.tail)
         context0
 
@@ -205,6 +205,10 @@ replaceTypeVarWithFreshVar var0 freshVar type0 =
         LambdaList type1 ->
             replaceTypeVarWithFreshVar var0 freshVar type1
                 |> State.map LambdaList
+
+        Frozen type1 ->
+            replaceTypeVarWithFreshVar var0 freshVar type1
+                |> State.map Frozen
 
         ForAll var type1 ->
             -- TODO: watch out for shadowing
@@ -614,6 +618,29 @@ infer term =
                 generateFreshVar
                 generateFreshVar
 
+        -- ===Freeze===
+        Delay body ->
+            infer body
+                |> State.map Frozen
+
+        Force body ->
+            State.andThen2
+                (\bodyType0 freshVar ->
+                    unify (Frozen freshVar) bodyType0
+                        |> State.andThen
+                            (\bodyType1 ->
+                                case bodyType1 of
+                                    Frozen innerType ->
+                                        State.return innerType
+
+                                    _ ->
+                                        throwTypeError [ ExpectedFrozenType ]
+                            )
+                )
+                (infer body)
+                generateFreshVar
+
+        -- ===Let===
         Let var exp body ->
             inferAndClose exp
                 |> State.andThen

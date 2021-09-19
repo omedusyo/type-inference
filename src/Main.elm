@@ -6,7 +6,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Evaluation as L exposing (Value)
+import Evaluation as L exposing (ThunkContext)
 import Html as H exposing (Html)
 import Inference as L
 import LambdaBasics as L exposing (Term, Type)
@@ -15,6 +15,7 @@ import Show as L
 import StatefulWithErr as State
 import TermParser as L
 import TypeVarContext as L
+import Value as L exposing (Value)
 
 
 blue =
@@ -30,7 +31,7 @@ type alias Model =
     , -- Nothing means haven't parsed anything yet
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
-      evaledTerm : Maybe (Result (List L.EvalError) Value)
+      evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
     }
 
@@ -38,8 +39,7 @@ type alias Model =
 initModel : Model
 initModel =
     let
-        input : String
-        input =
+        input0 =
             """(let 
     (fn { p .
         (match-pair $p
@@ -50,24 +50,42 @@ initModel =
            (@ $flip (pair true false) ) )
     })"""
 
-        -- "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
-        -- "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
-        -- "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
-        -- "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
-        -- "(let (fn { x . $x }) { f . $f })"
-        -- """(let
-        -- (fn {f x . (@ $f (@ $f $x) ) })
-        -- { twice .
-        --    (let
-        --       (fn { x . (succ $x) })
-        --       { plus-one .
-        --          (let (fn { b .  (if $b { false } { true }) })
-        --            { not .
-        --               (pair $twice $plus-one )
-        --            })
-        --       })
-        -- })
-        -- """
+        input1 =
+            "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
+
+        input2 =
+            "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
+
+        input3 =
+            "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
+
+        input4 =
+            "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
+
+        input5 =
+            "(let (fn { x . $x }) { f . $f })"
+
+        input6 =
+            """(let
+        (fn {f x . (@ $f (@ $f $x) ) })
+        { twice .
+           (let
+              (fn { x . (succ $x) })
+              { plus-one .
+                 (let (fn { b .  (if $b { false } { true }) })
+                   { not .
+                      (pair $twice $plus-one )
+                   })
+              })
+        })
+        """
+
+        input7 =
+            "(@ (fn {. 0n0}) )"
+
+        input =
+            input7
+
         termResult =
             L.parseTerm input
     in
@@ -125,7 +143,7 @@ update msg model =
         RunButtonClicked ->
             case model.parsedTerm of
                 Just (Ok term) ->
-                    { model | evaledTerm = Just (L.eval L.emptyTermEnvironment term) }
+                    { model | evaledTerm = Just (L.eval0 term) }
                         |> Return.singleton
 
                 _ ->
@@ -217,21 +235,37 @@ view model =
                                             "Parsing Error"
                             ]
                         )
-                    , E.text
-                        (String.concat
-                            [ "value = "
-                            , case model.evaledTerm of
-                                Nothing ->
-                                    ""
+                    , E.el []
+                        (case model.evaledTerm of
+                            Nothing ->
+                                E.text ""
 
-                                Just result ->
-                                    case result of
-                                        Ok val ->
-                                            L.showValue val
+                            Just result ->
+                                case result of
+                                    Ok ( thunkContext, val ) ->
+                                        E.column []
+                                            [ E.text
+                                                (String.concat
+                                                    [ "next-thunk-id = "
+                                                    , String.fromInt thunkContext.nextThunkId
+                                                    ]
+                                                )
+                                            , E.text
+                                                (String.concat
+                                                    [ "thunk-context = "
+                                                    , L.showThunks thunkContext
+                                                    ]
+                                                )
+                                            , E.text
+                                                (String.concat
+                                                    [ "value = "
+                                                    , L.showValue val
+                                                    ]
+                                                )
+                                            ]
 
-                                        Err err ->
-                                            "Evaluation Error"
-                            ]
+                                    Err err ->
+                                        E.text "Evaluation Error"
                         )
                     , E.text "TYPE INFERENCE"
                     , E.column []

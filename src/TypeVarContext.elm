@@ -15,7 +15,7 @@ module TypeVarContext exposing
     , unification
     )
 
-import AssocList exposing (Dict)
+import Dict exposing (Dict)
 import LambdaBasics exposing (Type(..), TypeVarName)
 import Set exposing (Set)
 import StackedSet exposing (StackedSet)
@@ -59,6 +59,7 @@ type TypeError
     | ExpectedMatchingTypesInIfThenElseBranches
     | ExpectedBaseUnifiesWithLoopBodyType
     | ExpectedListType
+    | ExpectedFrozenType
     | InfiniteType Int
     | CantPopEmptyTypeVarContext
 
@@ -188,12 +189,12 @@ generateFreshVarName =
 
 emptyEquations : Equations
 emptyEquations =
-    AssocList.empty
+    Dict.empty
 
 
 lookupEquations : TypeVarName -> Equations -> Maybe Type
 lookupEquations =
-    AssocList.get
+    Dict.get
 
 
 extendEquations : TypeVarName -> Type -> UnificationStateful ()
@@ -203,7 +204,7 @@ extendEquations typeVarName type0 =
     State.update0
         (\({ equations, typeVarStack } as state) ->
             { state
-                | equations = AssocList.insert typeVarName type0 equations
+                | equations = Dict.insert typeVarName type0 equations
                 , typeVarStack =
                     typeVarStack
                         |> moveTypeVarStackFrame typeVarName (LambdaBasics.getTypeVars type0)
@@ -254,6 +255,10 @@ expandType_MAY_INFINITE_CYCLE type0 =
             expandType_MAY_INFINITE_CYCLE type1
                 |> State.map LambdaList
 
+        Frozen type1 ->
+            expandType_MAY_INFINITE_CYCLE type1
+                |> State.map Frozen
+
         ForAll typeVar type1 ->
             -- TODO
             Debug.todo ""
@@ -278,7 +283,7 @@ expandTypeAtTypeVarName typeVarName =
                                     (State.update0
                                         (\state1 ->
                                             -- TODO: Would it be a good idea to use extendEquations here?
-                                            { state1 | equations = AssocList.insert typeVarName expandedType0 state1.equations }
+                                            { state1 | equations = Dict.insert typeVarName expandedType0 state1.equations }
                                         )
                                     )
                                     (State.return (Just expandedType0))
@@ -335,6 +340,10 @@ expandTypeWithCycleDetection type0 seenVars =
         LambdaList type1 ->
             expandTypeWithCycleDetection type1 seenVars
                 |> State.map LambdaList
+
+        Frozen type1 ->
+            expandTypeWithCycleDetection type1 seenVars
+                |> State.map Frozen
 
         ForAll typeVar type1 ->
             -- TODO
@@ -454,6 +463,7 @@ unification type0 type1 =
         ( LambdaNat, _ ) ->
             throwTypeError [ ExpectedNatType ]
 
+        -- ===List===
         ( LambdaList type00, LambdaList type11 ) ->
             unification type00 type11
                 |> State.map LambdaList
@@ -461,6 +471,15 @@ unification type0 type1 =
         ( LambdaList _, _ ) ->
             throwTypeError [ ExpectedListType ]
 
+        -- ===Frozen===
+        ( Frozen type00, Frozen type11 ) ->
+            unification type00 type11
+                |> State.map Frozen
+
+        ( Frozen _, _ ) ->
+            throwTypeError [ ExpectedFrozenType ]
+
+        -- Forall
         ( ForAll _ _, _ ) ->
             -- TODO?
             Debug.todo ""

@@ -1,12 +1,13 @@
 module Show exposing (..)
 
-import AssocList exposing (Dict)
+import Dict
 import Evaluation exposing (..)
 import Inference exposing (..)
 import LambdaBasics exposing (..)
 import StackedSet
 import StatefulWithErr as State
 import TypeVarContext exposing (Equations, TypeError(..), TypeVarContext, TypeVarStack)
+import Value exposing (..)
 
 
 
@@ -139,6 +140,20 @@ showTerm term =
                 , " })"
                 ]
 
+        Delay body ->
+            String.concat
+                [ "(fn { "
+                , showTerm body
+                , " })"
+                ]
+
+        Force term1 ->
+            String.concat
+                [ "(@ "
+                , showTerm term1
+                , ")"
+                ]
+
         Let var exp body ->
             String.concat
                 [ "(let "
@@ -154,7 +169,7 @@ showTerm term =
 showTermEnvironment : TermEnvironment -> String
 showTermEnvironment env =
     env
-        |> AssocList.toList
+        |> Dict.toList
         |> List.concatMap
             (\( varname, vals ) ->
                 case List.head vals of
@@ -169,15 +184,6 @@ showTermEnvironment env =
 
 
 -- ===VALUES===
-
-
-showEval : TermEnvironment -> Term -> Result (List EvalError) String
-showEval env term =
-    eval env term
-        |> Result.map
-            (\val ->
-                String.concat [ showTerm term, "  ~~>  ", showValue val ]
-            )
 
 
 showValue : Value -> String
@@ -196,7 +202,7 @@ showValue val =
             String.concat
                 [ "<"
                 , showTermEnvironment env
-                , if AssocList.isEmpty env then
+                , if Dict.isEmpty env then
                     "(fn { "
 
                   else
@@ -218,6 +224,13 @@ showValue val =
 
         ListValue listValue ->
             showListValue listValue
+
+        ThunkClosure thunkId ->
+            String.concat
+                [ "<thunk-id := "
+                , String.fromInt thunkId
+                , ">"
+                ]
 
 
 natValToInt : NatValue -> Int
@@ -257,6 +270,36 @@ showListValue listValue =
                 ]
 
 
+showThunks : ThunkContext -> String
+showThunks { thunks } =
+    thunks
+        |> Dict.toList
+        |> List.map
+            (\( thunkId, thunk ) ->
+                case thunk of
+                    DelayedThunk { env, body } ->
+                        String.concat
+                            [ "<thunk-id(frozen) := "
+                            , String.fromInt thunkId
+                            , "; "
+                            , showTermEnvironment env
+                            , " | "
+                            , showTerm body
+                            , ">"
+                            ]
+
+                    ForcedThunk val ->
+                        String.concat
+                            [ "<thunk-id(forced) := "
+                            , String.fromInt thunkId
+                            , " | "
+                            , showValue val
+                            , ">"
+                            ]
+            )
+        |> String.join ", "
+
+
 
 -- ===TYPES===
 
@@ -288,6 +331,9 @@ showType type0 =
         LambdaList type1 ->
             String.concat [ "List(", showType type1, ")" ]
 
+        Frozen type1 ->
+            String.concat [ "Frozen(", showType type1, ")" ]
+
         ForAll typeVar type1 ->
             String.concat [ "Forall ", "'" ++ String.fromInt typeVar, " . ", showType type1 ]
 
@@ -299,7 +345,7 @@ showType type0 =
 showTermVarContext : TermVarContext -> String
 showTermVarContext termVarContext =
     termVarContext
-        |> AssocList.toList
+        |> Dict.toList
         |> List.concatMap
             (\( varname, typeStack ) ->
                 case List.head typeStack of
@@ -346,6 +392,9 @@ showTypeError typeError =
         ExpectedListType ->
             "Expected List Type"
 
+        ExpectedFrozenType ->
+            "Expected Frozen Type"
+
         InfiniteType typeVarName ->
             "Infinite Type detected: the type var " ++ "'" ++ String.fromInt typeVarName
 
@@ -361,7 +410,7 @@ showTypeVarStack =
 showEquations : Equations -> String
 showEquations equations =
     equations
-        |> AssocList.toList
+        |> Dict.toList
         |> List.map
             (\( typeVarName, type0 ) ->
                 String.concat
