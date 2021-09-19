@@ -124,7 +124,7 @@ storeNewThunk env body =
 forceThunk : ThunkId -> EvalStateful Value
 forceThunk thunkId =
     State.get0
-        (\_ ({ thunkContext } as state) ->
+        (\_ { thunkContext } ->
             let
                 maybeThunk : Maybe Thunk
                 maybeThunk =
@@ -136,6 +136,27 @@ forceThunk thunkId =
                         DelayedThunk { env, body } ->
                             State.withReadOnly (\_ _ -> env)
                                 (eval body)
+                                |> State.andThen
+                                    (\thunkVal ->
+                                        State.second
+                                            (State.update0
+                                                (\_ state ->
+                                                    { state
+                                                        | thunkContext =
+                                                            let
+                                                                thunkContext1 =
+                                                                    state.thunkContext
+                                                            in
+                                                            { thunkContext1
+                                                                | thunks =
+                                                                    thunkContext1.thunks
+                                                                        |> Dict.insert thunkId (ForcedThunk thunkVal)
+                                                            }
+                                                    }
+                                                )
+                                            )
+                                            (State.return thunkVal)
+                                    )
 
                         ForcedThunk val ->
                             State.return val
@@ -171,10 +192,10 @@ varLookup varName =
 -- ===EVALUATION===
 
 
-eval0 : Term -> Result (List EvalError) Value
+eval0 : Term -> Result (List EvalError) ( ThunkContext, Value )
 eval0 term =
     State.run (eval term) initReadOnlyState initMutState
-        |> Result.map (\( _, value ) -> value)
+        |> Result.map (\( { thunkContext }, value ) -> ( thunkContext, value ))
 
 
 eval : Term -> EvalStateful Value

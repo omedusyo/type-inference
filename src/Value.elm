@@ -57,7 +57,7 @@ type Thunk
 
 
 type alias TermEnvironment =
-    -- We have `List Value` instead of `Value` because of shadowing of variables
+    -- We have `List Value` instead of `Value` because of shadowing of variables. The list acts as a stack.
     Dict TermVarName (List Value)
 
 

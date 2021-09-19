@@ -270,6 +270,36 @@ showListValue listValue =
                 ]
 
 
+showThunks : ThunkContext -> String
+showThunks { thunks } =
+    thunks
+        |> Dict.toList
+        |> List.map
+            (\( thunkId, thunk ) ->
+                case thunk of
+                    DelayedThunk { env, body } ->
+                        String.concat
+                            [ "<thunk-id(frozen) := "
+                            , String.fromInt thunkId
+                            , "; "
+                            , showTermEnvironment env
+                            , " | "
+                            , showTerm body
+                            , ">"
+                            ]
+
+                    ForcedThunk val ->
+                        String.concat
+                            [ "<thunk-id(forced) := "
+                            , String.fromInt thunkId
+                            , " | "
+                            , showValue val
+                            , ">"
+                            ]
+            )
+        |> String.join ", "
+
+
 
 -- ===TYPES===
 

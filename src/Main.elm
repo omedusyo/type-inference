@@ -6,7 +6,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Evaluation as L
+import Evaluation as L exposing (ThunkContext)
 import Html as H exposing (Html)
 import Inference as L
 import LambdaBasics as L exposing (Term, Type)
@@ -31,7 +31,7 @@ type alias Model =
     , -- Nothing means haven't parsed anything yet
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
-      evaledTerm : Maybe (Result (List L.EvalError) Value)
+      evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
     }
 
@@ -81,7 +81,7 @@ initModel =
         """
 
         input7 =
-            "(fn {. 0n0})"
+            "(@ (fn {. 0n0}) )"
 
         input =
             input7
@@ -235,21 +235,37 @@ view model =
                                             "Parsing Error"
                             ]
                         )
-                    , E.text
-                        (String.concat
-                            [ "value = "
-                            , case model.evaledTerm of
-                                Nothing ->
-                                    ""
+                    , E.el []
+                        (case model.evaledTerm of
+                            Nothing ->
+                                E.text ""
 
-                                Just result ->
-                                    case result of
-                                        Ok val ->
-                                            L.showValue val
+                            Just result ->
+                                case result of
+                                    Ok ( thunkContext, val ) ->
+                                        E.column []
+                                            [ E.text
+                                                (String.concat
+                                                    [ "next-thunk-id = "
+                                                    , String.fromInt thunkContext.nextThunkId
+                                                    ]
+                                                )
+                                            , E.text
+                                                (String.concat
+                                                    [ "thunk-context = "
+                                                    , L.showThunks thunkContext
+                                                    ]
+                                                )
+                                            , E.text
+                                                (String.concat
+                                                    [ "value = "
+                                                    , L.showValue val
+                                                    ]
+                                                )
+                                            ]
 
-                                        Err err ->
-                                            "Evaluation Error"
-                            ]
+                                    Err err ->
+                                        E.text "Evaluation Error"
                         )
                     , E.text "TYPE INFERENCE"
                     , E.column []
