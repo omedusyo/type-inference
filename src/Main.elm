@@ -38,8 +38,7 @@ type alias Model =
 initModel : Model
 initModel =
     let
-        input : String
-        input =
+        input0 =
             """(let 
     (fn { p .
         (match-pair $p
@@ -50,24 +49,42 @@ initModel =
            (@ $flip (pair true false) ) )
     })"""
 
-        -- "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
-        -- "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
-        -- "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
-        -- "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
-        -- "(let (fn { x . $x }) { f . $f })"
-        -- """(let
-        -- (fn {f x . (@ $f (@ $f $x) ) })
-        -- { twice .
-        --    (let
-        --       (fn { x . (succ $x) })
-        --       { plus-one .
-        --          (let (fn { b .  (if $b { false } { true }) })
-        --            { not .
-        --               (pair $twice $plus-one )
-        --            })
-        --       })
-        -- })
-        -- """
+        input1 =
+            "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
+
+        input2 =
+            "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
+
+        input3 =
+            "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
+
+        input4 =
+            "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
+
+        input5 =
+            "(let (fn { x . $x }) { f . $f })"
+
+        input6 =
+            """(let
+        (fn {f x . (@ $f (@ $f $x) ) })
+        { twice .
+           (let
+              (fn { x . (succ $x) })
+              { plus-one .
+                 (let (fn { b .  (if $b { false } { true }) })
+                   { not .
+                      (pair $twice $plus-one )
+                   })
+              })
+        })
+        """
+
+        input7 =
+            "(fn {. 0n0})"
+
+        input =
+            input0
+
         termResult =
             L.parseTerm input
     in

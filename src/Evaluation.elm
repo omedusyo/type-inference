@@ -57,6 +57,8 @@ type Value
     | NatValue NatValue
     | --==Lists==
       ListValue ListValue
+    | --==Frozen==
+      Thunk { env : TermEnvironment, body : Term }
 
 
 type NatValue
@@ -358,9 +360,10 @@ eval env term =
                     )
 
         Delay body ->
-            Debug.todo ""
+            Ok (Thunk { env = env, body = body })
 
         Force body ->
+            -- TODO
             Debug.todo ""
 
         Let var arg body ->

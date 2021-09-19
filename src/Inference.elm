@@ -620,10 +620,25 @@ infer term =
 
         -- ===Freeze===
         Delay body ->
-            Debug.todo ""
+            infer body
+                |> State.map Frozen
 
         Force body ->
-            Debug.todo ""
+            State.andThen2
+                (\bodyType0 freshVar ->
+                    unify (Frozen freshVar) bodyType0
+                        |> State.andThen
+                            (\bodyType1 ->
+                                case bodyType1 of
+                                    Frozen innerType ->
+                                        State.return innerType
+
+                                    _ ->
+                                        throwTypeError [ ExpectedFrozenType ]
+                            )
+                )
+                (infer body)
+                generateFreshVar
 
         -- ===Let===
         Let var exp body ->

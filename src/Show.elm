@@ -233,6 +233,19 @@ showValue val =
         ListValue listValue ->
             showListValue listValue
 
+        Thunk { env, body } ->
+            String.concat
+                [ "<"
+                , showTermEnvironment env
+                , if Dict.isEmpty env then
+                    "(fn { "
+
+                  else
+                    " |- (fn { "
+                , showTerm body
+                , " })>"
+                ]
+
 
 natValToInt : NatValue -> Int
 natValToInt natVal =
