@@ -288,6 +288,9 @@ showType type0 =
         LambdaList type1 ->
             String.concat [ "List(", showType type1, ")" ]
 
+        Frozen type1 ->
+            String.concat [ "Frozen(", showType type1, ")" ]
+
         ForAll typeVar type1 ->
             String.concat [ "Forall ", "'" ++ String.fromInt typeVar, " . ", showType type1 ]
 
@@ -345,6 +348,9 @@ showTypeError typeError =
 
         ExpectedListType ->
             "Expected List Type"
+
+        ExpectedFrozenType ->
+            "Expected Frozen Type"
 
         InfiniteType typeVarName ->
             "Infinite Type detected: the type var " ++ "'" ++ String.fromInt typeVarName

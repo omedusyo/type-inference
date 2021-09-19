@@ -59,6 +59,7 @@ type TypeError
     | ExpectedMatchingTypesInIfThenElseBranches
     | ExpectedBaseUnifiesWithLoopBodyType
     | ExpectedListType
+    | ExpectedFrozenType
     | InfiniteType Int
     | CantPopEmptyTypeVarContext
 
@@ -254,6 +255,10 @@ expandType_MAY_INFINITE_CYCLE type0 =
             expandType_MAY_INFINITE_CYCLE type1
                 |> State.map LambdaList
 
+        Frozen type1 ->
+            expandType_MAY_INFINITE_CYCLE type1
+                |> State.map Frozen
+
         ForAll typeVar type1 ->
             -- TODO
             Debug.todo ""
@@ -335,6 +340,10 @@ expandTypeWithCycleDetection type0 seenVars =
         LambdaList type1 ->
             expandTypeWithCycleDetection type1 seenVars
                 |> State.map LambdaList
+
+        Frozen type1 ->
+            expandTypeWithCycleDetection type1 seenVars
+                |> State.map Frozen
 
         ForAll typeVar type1 ->
             -- TODO
@@ -454,6 +463,7 @@ unification type0 type1 =
         ( LambdaNat, _ ) ->
             throwTypeError [ ExpectedNatType ]
 
+        -- ===List===
         ( LambdaList type00, LambdaList type11 ) ->
             unification type00 type11
                 |> State.map LambdaList
@@ -461,6 +471,15 @@ unification type0 type1 =
         ( LambdaList _, _ ) ->
             throwTypeError [ ExpectedListType ]
 
+        -- ===Frozen===
+        ( Frozen type00, Frozen type11 ) ->
+            unification type00 type11
+                |> State.map Frozen
+
+        ( Frozen _, _ ) ->
+            throwTypeError [ ExpectedFrozenType ]
+
+        -- Forall
         ( ForAll _ _, _ ) ->
             -- TODO?
             Debug.todo ""

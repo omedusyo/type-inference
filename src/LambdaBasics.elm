@@ -93,6 +93,7 @@ type Type
     | LambdaBool
     | LambdaNat
     | LambdaList Type
+    | Frozen Type
     | ForAll TypeVarName Type
 
 
@@ -118,6 +119,9 @@ getTypeVars type0 =
             Set.empty
 
         LambdaList type1 ->
+            getTypeVars type1
+
+        Frozen type1 ->
             getTypeVars type1
 
         ForAll var type1 ->

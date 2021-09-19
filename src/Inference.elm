@@ -206,6 +206,10 @@ replaceTypeVarWithFreshVar var0 freshVar type0 =
             replaceTypeVarWithFreshVar var0 freshVar type1
                 |> State.map LambdaList
 
+        Frozen type1 ->
+            replaceTypeVarWithFreshVar var0 freshVar type1
+                |> State.map Frozen
+
         ForAll var type1 ->
             -- TODO: watch out for shadowing
             if var == var0 then
