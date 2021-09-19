@@ -12,7 +12,9 @@ import Inference as L
 import LambdaBasics as L exposing (Term, Type)
 import Return exposing (Return)
 import Show as L
+import StatefulWithErr as State
 import TermParser as L
+import TypeVarContext as L
 
 
 blue =
@@ -29,16 +31,43 @@ type alias Model =
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) Value)
-    , inferedType : Maybe (Result (List L.TypeError) ( L.Context, L.Equations, Type ))
+    , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
     }
 
 
 initModel : Model
 initModel =
     let
+        input : String
         input =
-            "(fn { p . (match-pair $p { (pair x y) . $p }) })"
+            """(let 
+    (fn { p .
+        (match-pair $p
+            { (pair x y) . (pair $y $x) }) })
+    { flip .
+       (pair
+           (@ $flip (pair 0n0 0n1) )
+           (@ $flip (pair true false) ) )
+    })"""
 
+        -- "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
+        -- "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
+        -- "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
+        -- "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
+        -- "(let (fn { x . $x }) { f . $f })"
+        -- """(let
+        -- (fn {f x . (@ $f (@ $f $x) ) })
+        -- { twice .
+        --    (let
+        --       (fn { x . (succ $x) })
+        --       { plus-one .
+        --          (let (fn { b .  (if $b { false } { true }) })
+        --            { not .
+        --               (pair $twice $plus-one )
+        --            })
+        --       })
+        -- })
+        -- """
         termResult =
             L.parseTerm input
     in
@@ -131,7 +160,7 @@ view model =
             ]
     in
     E.column [ E.width E.fill, E.padding 10 ]
-        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . $p }) })`"
+        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
         , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
         , E.row []
             [ Input.button buttonStyle
@@ -171,7 +200,8 @@ view model =
                 ]
                 (E.column
                     []
-                    [ E.text
+                    [ E.text "TERMS & VALUES"
+                    , E.text
                         (String.concat
                             [ "term = "
                             , case model.parsedTerm of
@@ -203,27 +233,70 @@ view model =
                                             "Evaluation Error"
                             ]
                         )
-                    , E.text
-                        (String.concat
-                            [ "type = "
-                            , case model.inferedType of
-                                Nothing ->
-                                    ""
+                    , E.text "TYPE INFERENCE"
+                    , E.column []
+                        (case model.inferedType of
+                            Nothing ->
+                                []
 
-                                Just result ->
-                                    case result of
-                                        Ok ( context, equations, type0 ) ->
-                                            -- TODO: remove the dependence on expandType
-                                            case L.expandType type0 equations of
-                                                Ok type1 ->
-                                                    L.showType type1
+                            Just result ->
+                                case result of
+                                    Ok ( termVarContext, { nextTypeVar, typeVarStack, equations } as typeVarContext, type0 ) ->
+                                        [ E.text
+                                            (String.concat
+                                                [ "term-var-context = "
+                                                , L.showTermVarContext termVarContext
+                                                ]
+                                            )
+                                        , E.text
+                                            (String.concat
+                                                [ "next-type-var = "
+                                                , "'" ++ String.fromInt nextTypeVar
+                                                ]
+                                            )
+                                        , E.text
+                                            (String.concat
+                                                [ "stack = "
+                                                , L.showTypeVarStack typeVarStack
+                                                ]
+                                            )
+                                        , E.text
+                                            (String.concat
+                                                [ "equations = "
+                                                , L.showEquations equations
+                                                ]
+                                            )
+                                        , E.text
+                                            (String.concat
+                                                [ "type = "
+                                                , L.showType type0
+                                                ]
+                                            )
+                                        , E.text
+                                            (String.concat
+                                                [ "expanded-type = "
+                                                , case State.run (L.expandType type0) typeVarContext of
+                                                    Ok ( _, type1 ) ->
+                                                        L.showType type1
 
-                                                Err err ->
-                                                    "Type Error"
+                                                    Err typeErrors ->
+                                                        typeErrors
+                                                            |> List.map L.showTypeError
+                                                            |> String.join ", "
+                                                ]
+                                            )
+                                        ]
 
-                                        Err err ->
-                                            "Type Error"
-                            ]
+                                    Err typeErrors ->
+                                        [ E.text
+                                            (String.concat
+                                                [ "type-error = "
+                                                , typeErrors
+                                                    |> List.map L.showTypeError
+                                                    |> String.join ", "
+                                                ]
+                                            )
+                                        ]
                         )
                     ]
                 )
@@ -254,6 +327,7 @@ view model =
         , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
         , E.text "  (nat-loop   n initState { i s . body })"
         , E.text "  (list-loop xs initState { x s . body })"
+        , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
         ]
 
 

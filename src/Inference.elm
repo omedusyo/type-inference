@@ -3,56 +3,67 @@ module Inference exposing (..)
 import AssocList exposing (Dict)
 import LambdaBasics exposing (..)
 import Set exposing (Set)
+import StackedSet exposing (StackedSet)
 import StatefulWithErr as State exposing (StatefulWithErr)
-
-
-type TypeError
-    = ExpectedProductType
-    | ExpectedArrowType
-    | ExpectedNatType
-    | ExpectedSumType
-    | ExpectedMatchingTypesInCaseBranches
-    | ExpectedBoolType
-    | ExpectedMatchingTypesInIfThenElseBranches
-    | ExpectedBaseUnifiesWithLoopBodyType
-    | ExpectedListType
-    | InfiniteType Int
-
-
-newTypeVar : TypeVarName -> ( TypeVarName, Type )
-newTypeVar n =
-    ( n + 1, VarType n )
+import TypeVarContext exposing (TypeError(..), TypeVarContext)
 
 
 
--- ===CONTEXT===
--- The list serves as a stack of types
--- - any element in the stack shadows everything below it.
+-- ===Types===
 
 
-type alias Context =
+type alias State =
+    { context : TermVarContext
+    , typeVarContext : TypeVarContext
+    }
+
+
+type alias InferenceContext a =
+    StatefulWithErr (List TypeError) State a
+
+
+type alias TermVarContext =
+    -- The list serves as a stack of types
+    -- - any element in the stack shadows everything below it.
     Dict TermVarName (List Type)
 
 
-emptyContext : Context
+
+-- ===State===
+
+
+emptyState : State
+emptyState =
+    { context = emptyContext
+    , typeVarContext = TypeVarContext.emptyContext
+    }
+
+
+
+-- ===Errors===
+
+
+throwTypeError : List TypeError -> InferenceContext a
+throwTypeError =
+    State.error
+
+
+
+-- ===Term Var Context===
+
+
+emptyContext : TermVarContext
 emptyContext =
     AssocList.empty
 
 
-popVarFromContext : String -> Context -> Context
-popVarFromContext varName context0 =
-    AssocList.update varName
-        (Maybe.andThen List.tail)
-        context0
-
-
-lookupType : TermVarName -> Context -> Maybe Type
+lookupType : TermVarName -> TermVarContext -> Maybe Type
 lookupType varName context0 =
     AssocList.get varName context0
         |> Maybe.andThen List.head
 
 
-pushVarToContext : TermVarName -> Type -> Context -> Context
+pushVarToContext : TermVarName -> Type -> TermVarContext -> TermVarContext
 pushVarToContext varName type0 context0 =
     AssocList.update varName
         (\maybeBinding ->
@@ -66,322 +77,168 @@ pushVarToContext varName type0 context0 =
         context0
 
 
+popVarFromContext : String -> TermVarContext -> TermVarContext
+popVarFromContext varName context0 =
+    AssocList.update varName
+        (Maybe.andThen List.tail)
+        context0
 
--- ===EQUATIONS===
 
-
-type alias Equations =
-    Dict TypeVarName Type
-
-
-emptyEquations : Equations
-emptyEquations =
-    AssocList.empty
-
-
-lookupEquations : TypeVarName -> Equations -> Maybe Type
-lookupEquations =
-    AssocList.get
-
-
-extendEquations : TypeVarName -> Type -> Equations -> Equations
-extendEquations varname type0 eqs =
-    AssocList.insert varname type0 eqs
-
-
-
--- ===EXPANSION===
-
-
-expandType_MAY_INFINITE_CYCLE : Type -> Equations -> Type
-expandType_MAY_INFINITE_CYCLE type0 eqs0 =
-    case type0 of
-        VarType n ->
-            let
-                maybeType1 =
-                    lookupEquations n eqs0
-            in
-            case maybeType1 of
-                Just type1 ->
-                    expandType_MAY_INFINITE_CYCLE type1 eqs0
-
-                Nothing ->
-                    VarType n
-
-        Product type1 type2 ->
-            Product (expandType_MAY_INFINITE_CYCLE type1 eqs0) (expandType_MAY_INFINITE_CYCLE type2 eqs0)
-
-        Sum type1 type2 ->
-            Sum (expandType_MAY_INFINITE_CYCLE type1 eqs0) (expandType_MAY_INFINITE_CYCLE type2 eqs0)
-
-        Arrow type1 type2 ->
-            Arrow (expandType_MAY_INFINITE_CYCLE type1 eqs0) (expandType_MAY_INFINITE_CYCLE type2 eqs0)
-
-        LambdaBool ->
-            LambdaBool
-
-        LambdaNat ->
-            LambdaNat
-
-        LambdaList type1 ->
-            LambdaList (expandType_MAY_INFINITE_CYCLE type1 eqs0)
-
-
-
--- This expansion can't loop. It will detect infinite types.
-
-
-expandType : Type -> Equations -> Result (List TypeError) Type
-expandType type0 eqs0 =
-    expandTypeWithCycleDetection type0 Set.empty eqs0
-
-
-expandTypeWithCycleDetection : Type -> Set TypeVarName -> Equations -> Result (List TypeError) Type
-expandTypeWithCycleDetection type0 seenVars eqs0 =
-    case type0 of
-        VarType n ->
-            if Set.member n seenVars then
-                Err [ InfiniteType n ]
-
-            else
-                case lookupEquations n eqs0 of
-                    Just type1 ->
-                        expandTypeWithCycleDetection type1 (Set.insert n seenVars) eqs0
-
-                    Nothing ->
-                        Ok (VarType n)
-
-        Product type1 type2 ->
-            Result.map2 Product
-                (expandTypeWithCycleDetection type1 seenVars eqs0)
-                (expandTypeWithCycleDetection type2 seenVars eqs0)
-
-        Sum type1 type2 ->
-            Result.map2 Sum
-                (expandTypeWithCycleDetection type1 seenVars eqs0)
-                (expandTypeWithCycleDetection type2 seenVars eqs0)
-
-        Arrow type1 type2 ->
-            Result.map2 Arrow
-                (expandTypeWithCycleDetection type1 seenVars eqs0)
-                (expandTypeWithCycleDetection type2 seenVars eqs0)
-
-        LambdaBool ->
-            Ok LambdaBool
-
-        LambdaNat ->
-            Ok LambdaNat
-
-        LambdaList type1 ->
-            expandTypeWithCycleDetection type1 seenVars eqs0
-                |> Result.map LambdaList
-
-
-
--- ===UNIFICATION===
-
-
-unification : Type -> Type -> Equations -> Result (List TypeError) ( Equations, Type )
-unification type0Unexpanded type1Unexpanded eqs0 =
-    Result.map2
-        Tuple.pair
-        (expandType type0Unexpanded eqs0)
-        (expandType type1Unexpanded eqs0)
-        |> Result.andThen
-            (\( type0, type1 ) ->
-                case ( type0, type1 ) of
-                    -- ===TYPE VARS===
-                    ( VarType id0, VarType id1 ) ->
-                        if id0 == id1 then
-                            Ok ( eqs0, VarType id0 )
-
-                        else if id0 < id1 then
-                            Ok ( eqs0 |> extendEquations id0 (VarType id1), VarType id1 )
-
-                        else
-                            Ok ( eqs0 |> extendEquations id1 (VarType id0), VarType id1 )
-
-                    ( VarType id0, _ ) ->
-                        Ok ( eqs0 |> extendEquations id0 type1, type1 )
-
-                    ( _, VarType id1 ) ->
-                        Ok ( eqs0 |> extendEquations id1 type0, type0 )
-
-                    -- ===PRODUCT===
-                    ( Product type00 type01, Product type10 type11 ) ->
-                        let
-                            maybeEqs1 =
-                                unification type00 type10 eqs0
-                        in
-                        maybeEqs1
-                            |> Result.andThen
-                                (\( eqs1, typeFst ) ->
-                                    let
-                                        maybeEqs2 =
-                                            unification type01 type11 eqs1
-                                    in
-                                    maybeEqs2
-                                        |> Result.map
-                                            (\( eqs2, typeSnd ) ->
-                                                ( eqs2, Product typeFst typeSnd )
-                                            )
-                                )
-
-                    ( Product _ _, _ ) ->
-                        Err [ ExpectedProductType ]
-
-                    -- ===ARROW===
-                    ( Arrow type00 type01, Arrow type10 type11 ) ->
-                        let
-                            maybeEqs1 =
-                                unification type00 type10 eqs0
-                        in
-                        maybeEqs1
-                            |> Result.andThen
-                                (\( eqs1, typeFst ) ->
-                                    let
-                                        maybeEqs2 =
-                                            unification type01 type11 eqs1
-                                    in
-                                    maybeEqs2
-                                        |> Result.map
-                                            (\( eqs2, typeSnd ) ->
-                                                ( eqs2, Arrow typeFst typeSnd )
-                                            )
-                                )
-
-                    ( Arrow _ _, _ ) ->
-                        Err [ ExpectedArrowType ]
-
-                    -- ===SUM===
-                    ( Sum type00 type01, Sum type10 type11 ) ->
-                        let
-                            maybeEqs1 =
-                                unification type00 type10 eqs0
-                        in
-                        maybeEqs1
-                            |> Result.andThen
-                                (\( eqs1, typeFst ) ->
-                                    let
-                                        maybeEqs2 =
-                                            unification type01 type11 eqs1
-                                    in
-                                    maybeEqs2
-                                        |> Result.map
-                                            (\( eqs2, typeSnd ) ->
-                                                ( eqs2, Sum typeFst typeSnd )
-                                            )
-                                )
-
-                    ( Sum _ _, _ ) ->
-                        Err [ ExpectedSumType ]
-
-                    -- ===BOOL===
-                    ( LambdaBool, LambdaBool ) ->
-                        Ok ( eqs0, LambdaBool )
-
-                    ( LambdaBool, _ ) ->
-                        Err [ ExpectedBoolType ]
-
-                    -- ===NAT===
-                    ( LambdaNat, LambdaNat ) ->
-                        Ok ( eqs0, LambdaNat )
-
-                    ( LambdaNat, _ ) ->
-                        Err [ ExpectedNatType ]
-
-                    ( LambdaList type00, LambdaList type11 ) ->
-                        unification type00 type11 eqs0
-                            |> Result.map
-                                (\( eqs1, typeResult ) ->
-                                    ( eqs1, LambdaList typeResult )
-                                )
-
-                    ( LambdaList _, _ ) ->
-                        Err [ ExpectedListType ]
-            )
-
-
-
--- ===STATEFUL MONAD INFERENCE===
-
-
-type alias State =
-    { nextTypeVar : TypeVarName
-    , context : Context
-    , equations : Equations
-    }
-
-
-emptyState : State
-emptyState =
-    { nextTypeVar = 0
-    , context = emptyContext
-    , equations = emptyEquations
-    }
-
-
-type alias InferenceContext a =
-    StatefulWithErr (List TypeError) State a
-
-
-generateFreshVar : InferenceContext Type
-generateFreshVar =
-    \({ nextTypeVar } as state0) ->
-        let
-            ( nextTypeVar1, type1 ) =
-                newTypeVar nextTypeVar
-        in
-        Ok ( { state0 | nextTypeVar = nextTypeVar1 }, type1 )
-
-
-getContext : (Context -> InferenceContext a) -> InferenceContext a
+getContext : (TermVarContext -> InferenceContext a) -> InferenceContext a
 getContext f =
     State.get0 (\{ context } -> f context)
 
 
-getEquations : (Equations -> InferenceContext a) -> InferenceContext a
-getEquations f =
-    State.get0 (\{ equations } -> f equations)
-
-
-updateContext : (Context -> Context) -> InferenceContext a -> InferenceContext a
+updateContext : (TermVarContext -> TermVarContext) -> InferenceContext a -> InferenceContext a
 updateContext nextContext =
     State.update (\({ context } as state) -> { state | context = nextContext context })
 
 
-updateContext0 : (Context -> Context) -> InferenceContext ()
+updateContext0 : (TermVarContext -> TermVarContext) -> InferenceContext ()
 updateContext0 nextContext =
     State.update0 (\({ context } as state) -> { state | context = nextContext context })
 
 
-updateEquations : (Equations -> Equations) -> InferenceContext a -> InferenceContext a
-updateEquations nextEquations =
-    State.update (\({ equations } as state) -> { state | equations = nextEquations equations })
+
+-- ===Type Var Context===
 
 
-setEquations : Equations -> InferenceContext a -> InferenceContext a
-setEquations equations0 =
-    updateEquations (\_ -> equations0)
+liftUnification : TypeVarContext.UnificationStateful a -> InferenceContext a
+liftUnification unificationStateful =
+    State.create
+        (\({ typeVarContext } as state) ->
+            State.run unificationStateful typeVarContext
+                |> Result.map
+                    (\( typeVarContext1, a ) ->
+                        ( { state | typeVarContext = typeVarContext1 }, a )
+                    )
+        )
 
 
-throwTypeError : List TypeError -> InferenceContext a
-throwTypeError =
-    State.error
+
+-- Generation of Fresh Variables
+
+
+generateFreshVar : InferenceContext Type
+generateFreshVar =
+    liftUnification TypeVarContext.generateFreshVar
+
+
+generateFreshVarName : InferenceContext TypeVarName
+generateFreshVarName =
+    liftUnification TypeVarContext.generateFreshVarName
+
+
+
+-- Type Var Stack
+
+
+pushTypeVarStackFrame0 : InferenceContext ()
+pushTypeVarStackFrame0 =
+    liftUnification TypeVarContext.pushTypeVarStackFrame0
+
+
+pushTypeVarStackFrame : InferenceContext a -> InferenceContext a
+pushTypeVarStackFrame inferenceContext =
+    State.first inferenceContext pushTypeVarStackFrame0
+
+
+popTypeVarStackFrame : InferenceContext (Set TypeVarName)
+popTypeVarStackFrame =
+    liftUnification TypeVarContext.popTypeVarStackFrame
+
+
+popTypeVarStackFrameAndExpand : Type -> InferenceContext ( Set TypeVarName, Type )
+popTypeVarStackFrameAndExpand type0 =
+    liftUnification (TypeVarContext.popTypeVarStackFrameAndExpand type0)
+
+
+
+-- ===Unification===
 
 
 unify : Type -> Type -> InferenceContext Type
 unify type0 type1 =
-    getEquations
-        (\equations0 ->
-            case unification type0 type1 equations0 of
-                Ok ( equations1, intersectionType ) ->
-                    State.return intersectionType
-                        |> setEquations equations1
+    liftUnification (TypeVarContext.unification type0 type1)
 
-                Err errs ->
-                    throwTypeError errs
-        )
+
+
+-- ===TYPE-VARIABLE RENAMING===
+-- TODO: I actually need a function
+--            generateFreshVarTo term
+--       that generates a type variable that is fresh to the whole term `term`
+
+
+replaceTypeVarWithFreshVar : TypeVarName -> TypeVarName -> Type -> InferenceContext Type
+replaceTypeVarWithFreshVar var0 freshVar type0 =
+    -- WARNING: We assume that `freshVar` is fresh for `var0, type0`
+    -- TODO: fuck... I want more than freshness. I actually don't want any local bound variables in `type0` to have name `freshVar`
+    case type0 of
+        VarType var ->
+            if var == var0 then
+                State.return (VarType freshVar)
+
+            else
+                State.return (VarType var)
+
+        Product type1 type2 ->
+            State.map2 Product
+                (replaceTypeVarWithFreshVar var0 freshVar type1)
+                (replaceTypeVarWithFreshVar var0 freshVar type2)
+
+        Sum type1 type2 ->
+            State.map2 Sum
+                (replaceTypeVarWithFreshVar var0 freshVar type1)
+                (replaceTypeVarWithFreshVar var0 freshVar type2)
+
+        Arrow type1 type2 ->
+            State.map2 Arrow
+                (replaceTypeVarWithFreshVar var0 freshVar type1)
+                (replaceTypeVarWithFreshVar var0 freshVar type2)
+
+        LambdaBool ->
+            State.return LambdaBool
+
+        LambdaNat ->
+            State.return LambdaNat
+
+        LambdaList type1 ->
+            replaceTypeVarWithFreshVar var0 freshVar type1
+                |> State.map LambdaList
+
+        ForAll var type1 ->
+            -- TODO: watch out for shadowing
+            if var == var0 then
+                State.return (ForAll var type1)
+
+            else
+                -- TODO: this is wrong... can still shadow
+                replaceTypeVarWithFreshVar var0 freshVar type1
+                    |> State.map (ForAll var)
+
+
+instantiateForAll : Type -> InferenceContext Type
+instantiateForAll type0 =
+    -- This assummes that the `type0` has a core forall-free type wrapped inside with a bunch of foralls
+    -- e.g.
+    --   ForAll "x" (ForAll "y" (Arrow (VarType "x") (VarType "y")))
+    -- but not
+    --   ForAll "x" (Arrow (ForAll "y" (VarType "y")) (VarType "x"))
+    -- It won't instantiate inner foralls.
+    case type0 of
+        ForAll var type1 ->
+            generateFreshVarName
+                |> State.andThen
+                    (\freshVarName ->
+                        replaceTypeVarWithFreshVar var freshVarName type1
+                            |> State.andThen
+                                (\type2 ->
+                                    instantiateForAll type2
+                                )
+                    )
+
+        _ ->
+            State.return type0
 
 
 
@@ -395,8 +252,8 @@ infer term =
             getContext
                 (\context0 ->
                     case context0 |> lookupType varName of
-                        Just typeVar ->
-                            State.return typeVar
+                        Just type0 ->
+                            instantiateForAll type0
 
                         Nothing ->
                             -- typeVar := generateFreshVar
@@ -757,12 +614,49 @@ infer term =
                 generateFreshVar
                 generateFreshVar
 
+        Let var exp body ->
+            inferAndClose exp
+                |> State.andThen
+                    (\closedExpType ->
+                        State.mid
+                            (updateContext0 (\context -> context |> pushVarToContext var closedExpType))
+                            (infer body)
+                            (updateContext0 (\context -> context |> popVarFromContext var))
+                    )
 
-infer0 : Term -> Result (List TypeError) ( Context, Equations, Type )
+
+inferAndClose : Term -> InferenceContext Type
+inferAndClose term =
+    State.second
+        pushTypeVarStackFrame0
+        (infer term
+            |> State.andThen
+                (\type0 ->
+                    popTypeVarStackFrameAndExpand type0
+                        |> State.andThen
+                            (\( varsToBeClosed, expandedType0 ) ->
+                                let
+                                    initType =
+                                        expandedType0
+
+                                    update typeVar t =
+                                        ForAll typeVar t
+
+                                    finalType =
+                                        -- TODO: foldl or foldr?
+                                        List.foldl update initType (Set.toList varsToBeClosed)
+                                in
+                                State.return finalType
+                            )
+                )
+        )
+
+
+infer0 : Term -> Result (List TypeError) ( TermVarContext, TypeVarContext, Type )
 infer0 term =
     State.run (infer term)
         emptyState
         |> Result.map
             (\( state, type0 ) ->
-                ( state.context, state.equations, type0 )
+                ( state.context, state.typeVarContext, type0 )
             )

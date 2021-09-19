@@ -7,6 +7,7 @@ module StatefulWithErr exposing
     , andThen4
     , andThen5
     , blank
+    , create
     , error
     , first
     , get
@@ -45,6 +46,11 @@ module StatefulWithErr exposing
 
 type alias StatefulWithErr e s a =
     s -> Result e ( s, a )
+
+
+create : (s -> Result e ( s, a )) -> StatefulWithErr e s a
+create =
+    identity
 
 
 

@@ -355,3 +355,15 @@ eval env term =
                             _ ->
                                 Err [ ExpectedList ]
                     )
+
+        Let var arg body ->
+            eval env arg
+                |> Result.andThen
+                    (\argVal ->
+                        let
+                            newEnv =
+                                env
+                                    |> extendEnvironment var argVal
+                        in
+                        eval newEnv body
+                    )

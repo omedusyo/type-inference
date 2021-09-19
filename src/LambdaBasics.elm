@@ -77,6 +77,7 @@ type Term
             }
         , arg : Term
         }
+    | Let TermVarName Term Term
 
 
 type alias TypeVarName =
@@ -93,6 +94,36 @@ type Type
     | LambdaBool
     | LambdaNat
     | LambdaList Type
+    | ForAll TypeVarName Type
+
+
+getTypeVars : Type -> Set TypeVarName
+getTypeVars type0 =
+    case type0 of
+        VarType var ->
+            Set.singleton var
+
+        Product type1 type2 ->
+            Set.union (getTypeVars type1) (getTypeVars type2)
+
+        Sum type1 type2 ->
+            Set.union (getTypeVars type1) (getTypeVars type2)
+
+        Arrow type1 type2 ->
+            Set.union (getTypeVars type1) (getTypeVars type2)
+
+        LambdaBool ->
+            Set.empty
+
+        LambdaNat ->
+            Set.empty
+
+        LambdaList type1 ->
+            getTypeVars type1
+
+        ForAll var type1 ->
+            -- TODO: I probably won't make use of this in let polymorphism
+            Debug.todo ""
 
 
 
