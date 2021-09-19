@@ -1,6 +1,5 @@
 module LambdaBasics exposing (..)
 
-import AssocList exposing (Dict)
 import Set exposing (Set)
 
 

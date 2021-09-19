@@ -15,7 +15,7 @@ module TypeVarContext exposing
     , unification
     )
 
-import AssocList exposing (Dict)
+import Dict exposing (Dict)
 import LambdaBasics exposing (Type(..), TypeVarName)
 import Set exposing (Set)
 import StackedSet exposing (StackedSet)
@@ -188,12 +188,12 @@ generateFreshVarName =
 
 emptyEquations : Equations
 emptyEquations =
-    AssocList.empty
+    Dict.empty
 
 
 lookupEquations : TypeVarName -> Equations -> Maybe Type
 lookupEquations =
-    AssocList.get
+    Dict.get
 
 
 extendEquations : TypeVarName -> Type -> UnificationStateful ()
@@ -203,7 +203,7 @@ extendEquations typeVarName type0 =
     State.update0
         (\({ equations, typeVarStack } as state) ->
             { state
-                | equations = AssocList.insert typeVarName type0 equations
+                | equations = Dict.insert typeVarName type0 equations
                 , typeVarStack =
                     typeVarStack
                         |> moveTypeVarStackFrame typeVarName (LambdaBasics.getTypeVars type0)
@@ -278,7 +278,7 @@ expandTypeAtTypeVarName typeVarName =
                                     (State.update0
                                         (\state1 ->
                                             -- TODO: Would it be a good idea to use extendEquations here?
-                                            { state1 | equations = AssocList.insert typeVarName expandedType0 state1.equations }
+                                            { state1 | equations = Dict.insert typeVarName expandedType0 state1.equations }
                                         )
                                     )
                                     (State.return (Just expandedType0))

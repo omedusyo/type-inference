@@ -1,6 +1,6 @@
 module Evaluation exposing (..)
 
-import AssocList exposing (Dict)
+import Dict exposing (Dict)
 import LambdaBasics exposing (..)
 
 
@@ -88,13 +88,14 @@ type alias TermEnvironment =
     Dict TermVarName (List Value)
 
 
+emptyTermEnvironment : TermEnvironment
 emptyTermEnvironment =
-    AssocList.empty
+    Dict.empty
 
 
 lookupEnvironment : TermVarName -> TermEnvironment -> Maybe Value
 lookupEnvironment varName env =
-    AssocList.get varName env
+    Dict.get varName env
         |> Maybe.andThen
             (\terms ->
                 case terms of
@@ -108,7 +109,7 @@ lookupEnvironment varName env =
 
 extendEnvironment : TermVarName -> Value -> TermEnvironment -> TermEnvironment
 extendEnvironment varName term env =
-    AssocList.update varName
+    Dict.update varName
         (\maybeBinding ->
             case maybeBinding of
                 Just terms ->

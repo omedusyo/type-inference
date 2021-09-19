@@ -1,6 +1,6 @@
 module Show exposing (..)
 
-import AssocList exposing (Dict)
+import Dict
 import Evaluation exposing (..)
 import Inference exposing (..)
 import LambdaBasics exposing (..)
@@ -154,7 +154,7 @@ showTerm term =
 showTermEnvironment : TermEnvironment -> String
 showTermEnvironment env =
     env
-        |> AssocList.toList
+        |> Dict.toList
         |> List.concatMap
             (\( varname, vals ) ->
                 case List.head vals of
@@ -196,7 +196,7 @@ showValue val =
             String.concat
                 [ "<"
                 , showTermEnvironment env
-                , if AssocList.isEmpty env then
+                , if Dict.isEmpty env then
                     "(fn { "
 
                   else
@@ -299,7 +299,7 @@ showType type0 =
 showTermVarContext : TermVarContext -> String
 showTermVarContext termVarContext =
     termVarContext
-        |> AssocList.toList
+        |> Dict.toList
         |> List.concatMap
             (\( varname, typeStack ) ->
                 case List.head typeStack of
@@ -361,7 +361,7 @@ showTypeVarStack =
 showEquations : Equations -> String
 showEquations equations =
     equations
-        |> AssocList.toList
+        |> Dict.toList
         |> List.map
             (\( typeVarName, type0 ) ->
                 String.concat

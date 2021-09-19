@@ -1,6 +1,6 @@
 module Inference exposing (..)
 
-import AssocList exposing (Dict)
+import Dict exposing (Dict)
 import LambdaBasics exposing (..)
 import Set exposing (Set)
 import StackedSet exposing (StackedSet)
@@ -54,18 +54,18 @@ throwTypeError =
 
 emptyContext : TermVarContext
 emptyContext =
-    AssocList.empty
+    Dict.empty
 
 
 lookupType : TermVarName -> TermVarContext -> Maybe Type
 lookupType varName context0 =
-    AssocList.get varName context0
+    Dict.get varName context0
         |> Maybe.andThen List.head
 
 
 pushVarToContext : TermVarName -> Type -> TermVarContext -> TermVarContext
 pushVarToContext varName type0 context0 =
-    AssocList.update varName
+    Dict.update varName
         (\maybeBinding ->
             case maybeBinding of
                 Just types0 ->
@@ -79,7 +79,7 @@ pushVarToContext varName type0 context0 =
 
 popVarFromContext : String -> TermVarContext -> TermVarContext
 popVarFromContext varName context0 =
-    AssocList.update varName
+    Dict.update varName
         (Maybe.andThen List.tail)
         context0
 
