@@ -6,7 +6,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Evaluation as L exposing (Value)
+import Evaluation as L
 import Html as H exposing (Html)
 import Inference as L
 import LambdaBasics as L exposing (Term, Type)
@@ -15,6 +15,7 @@ import Show as L
 import StatefulWithErr as State
 import TermParser as L
 import TypeVarContext as L
+import Value as L exposing (Value)
 
 
 blue =

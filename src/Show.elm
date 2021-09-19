@@ -7,6 +7,7 @@ import LambdaBasics exposing (..)
 import StackedSet
 import StatefulWithErr as State
 import TypeVarContext exposing (Equations, TypeError(..), TypeVarContext, TypeVarStack)
+import Value exposing (..)
 
 
 
