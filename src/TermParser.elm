@@ -18,6 +18,7 @@ import Set exposing (Set)
 --   (right e)
 --   (succ e)
 --   (cons e1 e2)
+--   (@ e) -- force
 -- Bindings Operators
 --   (fn { x . body })
 --   (match-pair pairExp { (pair x y) . body })
@@ -25,6 +26,7 @@ import Set exposing (Set)
 --   (sum-case e { (left x) . e1 } { (right y) . e2 })
 --   (nat-loop   n initState { i s . body })
 --   (list-loop xs initState { x s . body })
+--   (fn { e }) -- delay
 --   (let exp { x . body })
 
 
@@ -325,9 +327,14 @@ matchProduct =
 
 
 
--- ==Function Space==
+-- ==Function Space/Frozen type==
 --   (fn {x . body})
 --   (fn { x y z . body }) ~> (fn {x . (fn {y . (fn {z . body}) }) })
+-- TODO
+--   (fn { body }) ~> delay expression
+--  but now you have to write
+--   (fn {. body })
+--  make the dot optional somehow
 
 
 abstraction : Parser Term
@@ -337,10 +344,7 @@ abstraction =
         abstractionWithListOfVars vars0 body =
             case vars0 of
                 [] ->
-                    -- TODO: what's the result of 0-ary abstraction?
-                    --       You'll have to introduce a type for Frozen computations (thunks?)
-                    -- Debug.todo "Use of Frozen computation"
-                    Abstraction "_" body
+                    Delay body
 
                 [ var ] ->
                     Abstraction var body
@@ -374,9 +378,7 @@ application =
         applicationWithListOfArgs fn args0 =
             case args0 of
                 [] ->
-                    -- TODO: some sort of "thawing" of `fn`
-                    -- Debug.todo "Use of Thawing of a Computation"
-                    Application fn EmptyList
+                    Force fn
 
                 [ arg ] ->
                     Application fn arg
