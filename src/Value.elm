@@ -2,6 +2,8 @@ module Value exposing
     ( ListValue(..)
     , NatValue(..)
     , TermEnvironment
+    , Thunk(..)
+    , ThunkId
     , Value(..)
     , emptyTermEnvironment
     , extendEnvironment
@@ -28,7 +30,7 @@ type Value
     | --==Lists==
       ListValue ListValue
     | --==Frozen==
-      Thunk { env : TermEnvironment, body : Term }
+      ThunkClosure ThunkId
 
 
 type NatValue
@@ -39,6 +41,15 @@ type NatValue
 type ListValue
     = EmptyListValue
     | ConsValue Value Value
+
+
+type alias ThunkId =
+    Int
+
+
+type Thunk
+    = DelayedThunk { env : TermEnvironment, body : Term }
+    | ForcedThunk Value
 
 
 

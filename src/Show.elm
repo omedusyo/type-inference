@@ -225,17 +225,11 @@ showValue val =
         ListValue listValue ->
             showListValue listValue
 
-        Thunk { env, body } ->
+        ThunkClosure thunkId ->
             String.concat
-                [ "<"
-                , showTermEnvironment env
-                , if Dict.isEmpty env then
-                    "(fn { "
-
-                  else
-                    " |- (fn { "
-                , showTerm body
-                , " })>"
+                [ "<thunk-id := "
+                , String.fromInt thunkId
+                , ">"
                 ]
 
 

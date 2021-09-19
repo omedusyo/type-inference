@@ -84,7 +84,7 @@ initModel =
             "(fn {. 0n0})"
 
         input =
-            input0
+            input7
 
         termResult =
             L.parseTerm input

@@ -1,5 +1,6 @@
 module Evaluation exposing (..)
 
+import Dict exposing (Dict)
 import LambdaBasics exposing (..)
 import StatefulReaderWithErr as State exposing (StatefulReaderWithErr)
 import Value exposing (..)
@@ -45,13 +46,15 @@ import Value exposing (..)
 
 
 type EvalError
-    = UndefinedVar String
+    = UndefinedVar TermVarName
     | ExpectedPair
     | ExpectedFunction
     | ExpectedLeftRight
     | ExpectedBoolean
     | ExpectedNat
     | ExpectedList
+    | FailedToForceThunk ThunkId
+    | ExpectedThunkClosure
 
 
 
@@ -59,7 +62,7 @@ type EvalError
 
 
 type alias MutState =
-    {}
+    { thunkContext : ThunkContext }
 
 
 type alias ReadOnlyState =
@@ -72,12 +75,78 @@ type alias EvalStateful a =
 
 initMutState : MutState
 initMutState =
-    {}
+    { thunkContext = emptyThunkContext }
 
 
 initReadOnlyState : ReadOnlyState
 initReadOnlyState =
     emptyTermEnvironment
+
+
+
+-- ===Thunk Context===
+
+
+type alias ThunkContext =
+    { nextThunkId : ThunkId
+    , thunks : Dict ThunkId Thunk
+    }
+
+
+emptyThunkContext : ThunkContext
+emptyThunkContext =
+    { nextThunkId = 0, thunks = Dict.empty }
+
+
+storeNewThunk : TermEnvironment -> Term -> EvalStateful ThunkId
+storeNewThunk env body =
+    State.create
+        (\_ ({ thunkContext } as state) ->
+            let
+                id =
+                    thunkContext.nextThunkId
+            in
+            Ok
+                ( { state
+                    | thunkContext =
+                        { thunkContext
+                            | nextThunkId = id + 1
+                            , thunks =
+                                thunkContext.thunks
+                                    |> Dict.insert id (DelayedThunk { env = env, body = body })
+                        }
+                  }
+                , id
+                )
+        )
+
+
+forceThunk : ThunkId -> EvalStateful Value
+forceThunk thunkId =
+    State.get0
+        (\_ ({ thunkContext } as state) ->
+            let
+                maybeThunk : Maybe Thunk
+                maybeThunk =
+                    thunkContext.thunks |> Dict.get thunkId
+            in
+            case maybeThunk of
+                Just thunk ->
+                    case thunk of
+                        DelayedThunk { env, body } ->
+                            State.withReadOnly (\_ _ -> env)
+                                (eval body)
+
+                        ForcedThunk val ->
+                            State.return val
+
+                Nothing ->
+                    throwEvalError [ FailedToForceThunk thunkId ]
+        )
+
+
+
+-- helpers
 
 
 throwEvalError : List EvalError -> EvalStateful a
@@ -308,12 +377,22 @@ eval term =
         Delay body ->
             State.get0
                 (\env _ ->
-                    State.return (Thunk { env = env, body = body })
+                    storeNewThunk env body
+                        |> State.andThen
+                            (\thunkId -> State.return (ThunkClosure thunkId))
                 )
 
         Force body ->
-            -- TODO
-            Debug.todo ""
+            eval body
+                |> State.andThen
+                    (\val ->
+                        case val of
+                            ThunkClosure thunkId ->
+                                forceThunk thunkId
+
+                            _ ->
+                                throwEvalError [ ExpectedThunkClosure ]
+                    )
 
         Let var arg body ->
             eval arg
