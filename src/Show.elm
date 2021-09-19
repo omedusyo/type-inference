@@ -289,7 +289,7 @@ showType type0 =
             String.concat [ "List(", showType type1, ")" ]
 
         ForAll typeVar type1 ->
-            Debug.todo ""
+            String.concat [ "Forall ", "'" ++ String.fromInt typeVar, " . ", showType type1 ]
 
 
 

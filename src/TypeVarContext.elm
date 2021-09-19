@@ -9,6 +9,7 @@ module TypeVarContext exposing
     , generateFreshVar
     , generateFreshVarName
     , popTypeVarStackFrame
+    , popTypeVarStackFrameAndExpand
     , pushTypeVarStackFrame0
     , throwTypeError
     , unification
@@ -123,6 +124,19 @@ popTypeVarStackFrame =
         )
 
 
+popTypeVarStackFrameAndExpand : Type -> UnificationStateful ( Set TypeVarName, Type )
+popTypeVarStackFrameAndExpand type0 =
+    -- TODO: You need to clean up the garbage equations here...
+    --       But it shouldn't hurt to not clean them up.
+    --       How to mark certain equations as garbage that should be cleaned up on next pop?
+    popTypeVarStackFrame
+        |> State.andThen
+            (\typeVars ->
+                expandType type0
+                    |> State.map (\expandedType0 -> ( typeVars, expandedType0 ))
+            )
+
+
 
 --===Fresh Type Vars===
 
@@ -163,7 +177,7 @@ generateFreshVarName =
                     | nextTypeVar = nextTypeVar1
                     , typeVarStack = pushTypeVar nextTypeVar typeVarStack
                   }
-                , nextTypeVar1
+                , nextTypeVar
                 )
         )
 

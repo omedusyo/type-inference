@@ -38,12 +38,36 @@ type alias Model =
 initModel : Model
 initModel =
     let
+        input : String
         input =
-            "(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })"
+            """(let 
+    (fn { p .
+        (match-pair $p
+            { (pair x y) . (pair $y $x) }) })
+    { flip .
+       (pair
+           (@ $flip (pair 0n0 0n1) )
+           (@ $flip (pair true false) ) )
+    })"""
 
         -- "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
         -- "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
         -- "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
+        -- "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
+        -- "(let (fn { x . $x }) { f . $f })"
+        -- """(let
+        -- (fn {f x . (@ $f (@ $f $x) ) })
+        -- { twice .
+        --    (let
+        --       (fn { x . (succ $x) })
+        --       { plus-one .
+        --          (let (fn { b .  (if $b { false } { true }) })
+        --            { not .
+        --               (pair $twice $plus-one )
+        --            })
+        --       })
+        -- })
+        -- """
         termResult =
             L.parseTerm input
     in

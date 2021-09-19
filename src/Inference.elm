@@ -148,6 +148,11 @@ popTypeVarStackFrame =
     liftUnification TypeVarContext.popTypeVarStackFrame
 
 
+popTypeVarStackFrameAndExpand : Type -> InferenceContext ( Set TypeVarName, Type )
+popTypeVarStackFrameAndExpand type0 =
+    liftUnification (TypeVarContext.popTypeVarStackFrameAndExpand type0)
+
+
 
 -- ===Unification===
 
@@ -164,36 +169,32 @@ unify type0 type1 =
 --       that generates a type variable that is fresh to the whole term `term`
 
 
-replaceTypeVarWithFreshVar : TypeVarName -> Type -> InferenceContext Type
-replaceTypeVarWithFreshVar var0 type0 =
+replaceTypeVarWithFreshVar : TypeVarName -> TypeVarName -> Type -> InferenceContext Type
+replaceTypeVarWithFreshVar var0 freshVar type0 =
     -- WARNING: We assume that `freshVar` is fresh for `var0, type0`
     -- TODO: fuck... I want more than freshness. I actually don't want any local bound variables in `type0` to have name `freshVar`
     case type0 of
         VarType var ->
             if var == var0 then
-                generateFreshVarName
-                    |> State.andThen
-                        (\freshVar ->
-                            State.return (VarType freshVar)
-                        )
+                State.return (VarType freshVar)
 
             else
                 State.return (VarType var)
 
         Product type1 type2 ->
             State.map2 Product
-                (replaceTypeVarWithFreshVar var0 type1)
-                (replaceTypeVarWithFreshVar var0 type2)
+                (replaceTypeVarWithFreshVar var0 freshVar type1)
+                (replaceTypeVarWithFreshVar var0 freshVar type2)
 
         Sum type1 type2 ->
             State.map2 Sum
-                (replaceTypeVarWithFreshVar var0 type1)
-                (replaceTypeVarWithFreshVar var0 type2)
+                (replaceTypeVarWithFreshVar var0 freshVar type1)
+                (replaceTypeVarWithFreshVar var0 freshVar type2)
 
         Arrow type1 type2 ->
             State.map2 Arrow
-                (replaceTypeVarWithFreshVar var0 type1)
-                (replaceTypeVarWithFreshVar var0 type2)
+                (replaceTypeVarWithFreshVar var0 freshVar type1)
+                (replaceTypeVarWithFreshVar var0 freshVar type2)
 
         LambdaBool ->
             State.return LambdaBool
@@ -202,7 +203,7 @@ replaceTypeVarWithFreshVar var0 type0 =
             State.return LambdaNat
 
         LambdaList type1 ->
-            replaceTypeVarWithFreshVar var0 type1
+            replaceTypeVarWithFreshVar var0 freshVar type1
                 |> State.map LambdaList
 
         ForAll var type1 ->
@@ -212,7 +213,7 @@ replaceTypeVarWithFreshVar var0 type0 =
 
             else
                 -- TODO: this is wrong... can still shadow
-                replaceTypeVarWithFreshVar var0 type1
+                replaceTypeVarWithFreshVar var0 freshVar type1
                     |> State.map (ForAll var)
 
 
@@ -226,13 +227,14 @@ instantiateForAll type0 =
     -- It won't instantiate inner foralls.
     case type0 of
         ForAll var type1 ->
-            -- I need to generate a fresh var newVar, and then replace each occurence of var
-            -- with newVar in type1
-            -- TODO: this is wrong!
-            replaceTypeVarWithFreshVar var type1
+            generateFreshVarName
                 |> State.andThen
-                    (\type2 ->
-                        instantiateForAll type2
+                    (\freshVarName ->
+                        replaceTypeVarWithFreshVar var freshVarName type1
+                            |> State.andThen
+                                (\type2 ->
+                                    instantiateForAll type2
+                                )
                     )
 
         _ ->
@@ -613,24 +615,41 @@ infer term =
                 generateFreshVar
 
         Let var exp body ->
-            -- 1. I need to infer exp and somehow close it's vars
-            -- after that... I'll just infer body in a new context (and afterwards I'll remove the new var from context
-            -- TODO: this won't work... this will close too much
             inferAndClose exp
                 |> State.andThen
-                    (\expType ->
+                    (\closedExpType ->
                         State.mid
-                            (updateContext0 (\context -> context |> pushVarToContext var expType))
-                            (infer exp)
+                            (updateContext0 (\context -> context |> pushVarToContext var closedExpType))
+                            (infer body)
                             (updateContext0 (\context -> context |> popVarFromContext var))
                     )
 
 
 inferAndClose : Term -> InferenceContext Type
 inferAndClose term =
-    -- TODO
-    -- I need to close off the vars
-    infer term
+    State.second
+        pushTypeVarStackFrame0
+        (infer term
+            |> State.andThen
+                (\type0 ->
+                    popTypeVarStackFrameAndExpand type0
+                        |> State.andThen
+                            (\( varsToBeClosed, expandedType0 ) ->
+                                let
+                                    initType =
+                                        expandedType0
+
+                                    update typeVar t =
+                                        ForAll typeVar t
+
+                                    finalType =
+                                        -- TODO: foldl or foldr?
+                                        List.foldl update initType (Set.toList varsToBeClosed)
+                                in
+                                State.return finalType
+                            )
+                )
+        )
 
 
 infer0 : Term -> Result (List TypeError) ( TermVarContext, TypeVarContext, Type )

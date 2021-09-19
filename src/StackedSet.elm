@@ -42,7 +42,7 @@ appendWithMid xs0 a ys =
 
 destroyTop : NonemptyList a -> Maybe ( a, NonemptyList a )
 destroyTop stack0 =
-    NonemptyList.fromList (NonemptyList.toList stack0)
+    NonemptyList.fromList (NonemptyList.tail stack0)
         |> Maybe.map (\stack1 -> ( NonemptyList.head stack0, stack1 ))
 
 
