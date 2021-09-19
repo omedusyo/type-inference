@@ -357,6 +357,12 @@ eval env term =
                                 Err [ ExpectedList ]
                     )
 
+        Delay body ->
+            Debug.todo ""
+
+        Force body ->
+            Debug.todo ""
+
         Let var arg body ->
             eval env arg
                 |> Result.andThen

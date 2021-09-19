@@ -139,6 +139,20 @@ showTerm term =
                 , " })"
                 ]
 
+        Delay body ->
+            String.concat
+                [ "(fn { "
+                , showTerm body
+                , " })"
+                ]
+
+        Force term1 ->
+            String.concat
+                [ "(@ "
+                , showTerm term1
+                , ")"
+                ]
+
         Let var exp body ->
             String.concat
                 [ "(let "

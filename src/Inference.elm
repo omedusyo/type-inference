@@ -618,6 +618,14 @@ infer term =
                 generateFreshVar
                 generateFreshVar
 
+        -- ===Freeze===
+        Delay body ->
+            Debug.todo ""
+
+        Force body ->
+            Debug.todo ""
+
+        -- ===Let===
         Let var exp body ->
             inferAndClose exp
                 |> State.andThen

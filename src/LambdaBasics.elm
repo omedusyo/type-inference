@@ -76,6 +76,10 @@ type Term
             }
         , arg : Term
         }
+      -- ==Freeze==
+    | Delay Term
+    | Force Term
+      -- ==Let==
     | Let TermVarName Term Term
 
 
