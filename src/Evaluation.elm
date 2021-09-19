@@ -2,6 +2,7 @@ module Evaluation exposing (..)
 
 import Dict exposing (Dict)
 import LambdaBasics exposing (..)
+import Reader
 
 
 
