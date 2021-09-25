@@ -460,3 +460,52 @@ listReturn =
 
 listReturnType =
     infer0 listReturn
+
+
+
+-- Modules/Interfaces
+
+
+monoidInterface : Category
+monoidInterface =
+    Interface 0 (Arrow (Product (VarType 0) (VarType 0)) (VarType 0))
+
+
+monoidOnNat : CategoryTerm
+monoidOnNat =
+    Module LambdaNat
+        (Abstraction "x"
+            (Abstraction "y"
+                (NatLoop
+                    { base = VarUse "x"
+                    , loop =
+                        { indexVar = "i"
+                        , stateVar = "s"
+                        , body = NatSucc (VarUse "s")
+                        }
+                    , arg = VarUse "y"
+                    }
+                )
+            )
+        )
+
+
+iterInterface : Category
+iterInterface =
+    Interface 1 (Arrow (Product LambdaNat (VarType 1)) (VarType 1))
+
+
+iterFromNatMonoid : CategoryTerm
+iterFromNatMonoid =
+    MatchModule
+        { arg = monoidOnNat
+        , var0 = 2
+        , var1 = "mul"
+        , body =
+            Module (VarType 2)
+                (Abstraction "n"
+                    (Abstraction "y"
+                        (Debug.todo "")
+                    )
+                )
+        }

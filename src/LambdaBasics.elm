@@ -134,6 +134,31 @@ getTypeVars type0 =
 
 
 
+-- Categories := collections of Structured Types
+--   one of such categories is Type
+--   another could be TypeWithPrint
+--   or Monoid
+
+
+type BasicCategory
+    = SET
+
+
+type CategoryTerm
+    = SETType Type
+    | -- This is Sigma intro
+      Module Type Term
+      -- This is Sigma elim
+    | MatchModule { arg : CategoryTerm, var0 : TypeVarName, var1 : TermVarName, body : CategoryTerm }
+
+
+type Category
+    = BasicCategory BasicCategory
+    | -- This is Sigma
+      Interface TypeVarName Type
+
+
+
 -- helpers
 
 
