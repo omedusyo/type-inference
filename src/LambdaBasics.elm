@@ -76,11 +76,13 @@ type Term
             }
         , arg : Term
         }
-      -- ==Freeze==
-    | Delay Term
+    | -- ==Freeze==
+      Delay Term
     | Force Term
-      -- ==Let==
-    | Let TermVarName Term Term
+    | -- ==Let==
+      Let TermVarName Term Term
+    | -- ==Module Access==
+      ModuleAccess ModuleTerm TermVarName
 
 
 type alias TypeVarName =
@@ -134,50 +136,41 @@ getTypeVars type0 =
 
 
 
--- Categories := collections of Structured Types
---   one of such categories is Type
---   another could be TypeWithPrint
---   or Monoid
+-- Module
 
 
-type BasicCategory
-    = SET
+type alias ModuleVarName =
+    String
 
 
-type CategoryTerm
-    = SETType Type
-    | -- This is Sigma intro
-      Module Type Term
-      -- This is Sigma elim
-    | MatchModule { arg : CategoryTerm, var0 : TypeVarName, var1 : TermVarName, body : CategoryTerm }
-
-
-type Category
-    = BasicCategory BasicCategory
-    | -- This is Sigma
-      Interface TypeVarName Type
-
-
-
--- Program Module
-
-
-type alias ProgramModule =
-    { bindings : List Binding
+type alias ModuleTerm =
+    { bindings : List ModuleLetBinding
     }
 
 
-type Binding
-    = TermBinding { name : TermVarName, term : Term }
+type ModuleLetBinding
+    = LetTerm TermVarName Term
+    | LetType TypeVarName Type
+    | LetModule ModuleVarName ModuleTerm
 
 
-module0 : ProgramModule
-module0 =
-    { bindings =
-        [ TermBinding { name = "foo", term = Abstraction "x" (VarUse "x") }
-        , TermBinding { name = "bar", term = Application (VarUse "foo") NatZero }
-        ]
+
+-- Interface
+
+
+type alias InterfaceVarName =
+    String
+
+
+type alias Interface =
+    { assumptions : List InterfaceAssumption
     }
+
+
+type InterfaceAssumption
+    = AssumeTerm TermVarName Type
+    | AssumeType TypeVarName -- There should be a second argument that's called Kind
+    | AssumeModule InterfaceVarName Interface
 
 
 

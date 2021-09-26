@@ -422,3 +422,6 @@ eval term =
                         State.withReadOnly (\env _ -> env |> extendEnvironment var argVal)
                             (eval body)
                     )
+
+        ModuleAccess module0 var ->
+            Debug.todo ""

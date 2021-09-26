@@ -165,6 +165,9 @@ showTerm term =
                 , " })"
                 ]
 
+        ModuleAccess module0 var ->
+            Debug.todo ""
+
 
 showTermEnvironment : TermEnvironment -> String
 showTermEnvironment env =

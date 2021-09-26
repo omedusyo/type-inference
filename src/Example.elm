@@ -490,22 +490,23 @@ monoidOnNat =
         )
 
 
-iterInterface : Category
-iterInterface =
-    Interface 1 (Arrow (Product LambdaNat (VarType 1)) (VarType 1))
+
+-- Modules/Interfaces
 
 
-iterFromNatMonoid : CategoryTerm
-iterFromNatMonoid =
-    MatchModule
-        { arg = monoidOnNat
-        , var0 = 2
-        , var1 = "mul"
-        , body =
-            Module (VarType 2)
-                (Abstraction "n"
-                    (Abstraction "y"
-                        (Debug.todo "")
-                    )
-                )
-        }
+module0 : ModuleTerm
+module0 =
+    { bindings =
+        [ LetTerm "foo" (Abstraction "x" (VarUse "x"))
+        , LetTerm "bar" NatZero
+        ]
+    }
+
+
+interface0 : Interface
+interface0 =
+    { assumptions =
+        [ AssumeTerm "foo" (Arrow LambdaNat LambdaNat)
+        , AssumeTerm "bar" LambdaNat
+        ]
+    }

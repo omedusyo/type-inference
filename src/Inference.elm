@@ -651,6 +651,10 @@ infer term =
                             (updateContext0 (\context -> context |> popVarFromContext var))
                     )
 
+        -- ===Module Access===
+        ModuleAccess module0 var ->
+            Debug.todo ""
+
 
 inferAndClose : Term -> InferenceContext Type
 inferAndClose term =
