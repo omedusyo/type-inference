@@ -483,3 +483,34 @@ showFinalInfer term =
             typeErrors
                 |> List.map showTypeError
                 |> String.join ", "
+
+
+
+-- Modules
+
+
+showModuleTerm : ModuleTerm -> String
+showModuleTerm module0 =
+    let
+        showModuleLetBinding : ModuleLetBinding -> String
+        showModuleLetBinding binding =
+            case binding of
+                LetTerm var term ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showTerm term
+                        , ")"
+                        ]
+
+                _ ->
+                    Debug.todo ""
+    in
+    String.concat
+        [ "(module "
+        , module0.bindings
+            |> List.map showModuleLetBinding
+            |> String.join " "
+        , ")"
+        ]
