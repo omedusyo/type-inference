@@ -697,8 +697,8 @@ infer0 term =
 -- Module Inference
 
 
-inferModuleInterface : ModuleTerm -> InferenceContext Interface
-inferModuleInterface module0 =
+inferInterface : ModuleTerm -> InferenceContext Interface
+inferInterface module0 =
     let
         inferBindings : List ModuleLetBinding -> InferenceContext (List InterfaceAssumption)
         inferBindings bindings0 =
@@ -709,12 +709,22 @@ inferModuleInterface module0 =
                 binding :: bindings1 ->
                     case binding of
                         LetTerm var term0 ->
-                            State.map2
-                                (\type0 assumptions1 ->
-                                    AssumeTerm var type0 :: assumptions1
-                                )
-                                (inferAndClose term0)
-                                (inferBindings bindings1)
+                            inferAndClose term0
+                                |> State.andThen
+                                    (\type0 ->
+                                        State.second
+                                            (updateContext0
+                                                (\context ->
+                                                    context
+                                                        |> pushVarToContext var type0
+                                                )
+                                            )
+                                            (inferBindings bindings1)
+                                            |> State.map
+                                                (\assumptions1 ->
+                                                    AssumeTerm var type0 :: assumptions1
+                                                )
+                                    )
 
                         _ ->
                             Debug.todo ""

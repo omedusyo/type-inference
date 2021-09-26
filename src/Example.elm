@@ -466,39 +466,11 @@ listReturnType =
 -- Modules/Interfaces
 
 
-monoidInterface : Category
-monoidInterface =
-    Interface 0 (Arrow (Product (VarType 0) (VarType 0)) (VarType 0))
-
-
-monoidOnNat : CategoryTerm
-monoidOnNat =
-    Module LambdaNat
-        (Abstraction "x"
-            (Abstraction "y"
-                (NatLoop
-                    { base = VarUse "x"
-                    , loop =
-                        { indexVar = "i"
-                        , stateVar = "s"
-                        , body = NatSucc (VarUse "s")
-                        }
-                    , arg = VarUse "y"
-                    }
-                )
-            )
-        )
-
-
-
--- Modules/Interfaces
-
-
 module0 : ModuleTerm
 module0 =
     { bindings =
-        [ LetTerm "foo" (Abstraction "x" (VarUse "x"))
-        , LetTerm "bar" NatZero
+        [ LetTerm "n" NatZero
+        , LetTerm "f" (Abstraction "x" (Pair (VarUse "x") (VarUse "n")))
         ]
     }
 
@@ -506,7 +478,7 @@ module0 =
 interface0 : Interface
 interface0 =
     { assumptions =
-        [ AssumeTerm "foo" (Arrow LambdaNat LambdaNat)
-        , AssumeTerm "bar" LambdaNat
+        [ AssumeTerm "n" LambdaNat
+        , AssumeTerm "f" (ForAll 0 (Arrow (VarType 0) (Product (VarType 0) LambdaNat)))
         ]
     }
