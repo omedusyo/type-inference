@@ -10,6 +10,7 @@ import Evaluation as L exposing (ThunkContext)
 import Html as H exposing (Html)
 import Inference as L
 import LambdaBasics as L exposing (Term, Type)
+import List.Extra as List
 import Return exposing (Return)
 import Show as L
 import StatefulWithErr as State
@@ -22,12 +23,67 @@ blue =
     E.rgb255 142 207 245
 
 
+insertAfter : Int -> a -> List a -> List a
+insertAfter n a xs0 =
+    if n == -1 then
+        a :: xs0
 
+    else
+        case xs0 of
+            [] ->
+                []
+
+            x :: xs1 ->
+                x :: insertAfter (n - 1) a xs1
+
+
+
+-- insertAfter 1 a [x, y, z]
+-- x :: insertAfter 0 a [y, z]
+-- x :: a :: y :: z :: []
 -- ===MODEL===
 
 
 type alias Model =
-    { input : String
+    { bindings : List Binding
+    , tab : Tab
+    }
+
+
+type Tab
+    = ProgramBindings
+    | Help
+
+
+tabs : List Tab
+tabs =
+    [ ProgramBindings, Help ]
+
+
+tabToString : Tab -> String
+tabToString tab =
+    case tab of
+        Help ->
+            "Help"
+
+        ProgramBindings ->
+            "Program"
+
+
+initModel : Model
+initModel =
+    { bindings = [ exampleBinding ]
+    , tab = ProgramBindings
+    }
+
+
+type alias BindingName =
+    String
+
+
+type alias Binding =
+    { name : BindingName
+    , input : String
     , -- Nothing means haven't parsed anything yet
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
@@ -36,8 +92,18 @@ type alias Model =
     }
 
 
-initModel : Model
-initModel =
+initBinding : Binding
+initBinding =
+    { name = ""
+    , input = ""
+    , parsedTerm = Nothing
+    , evaledTerm = Nothing
+    , inferedType = Nothing
+    }
+
+
+exampleBinding : Binding
+exampleBinding =
     let
         input0 =
             """(let 
@@ -89,7 +155,8 @@ initModel =
         termResult =
             L.parseTerm input
     in
-    { input = input
+    { name = "foo"
+    , input = input
     , parsedTerm = Just termResult
     , evaledTerm =
         case termResult of
@@ -112,13 +179,24 @@ initModel =
 -- ===MSG===
 
 
+type alias BindingPosition =
+    Int
+
+
 type Msg
+    = ChangeTab Tab
+    | BindingMsg BindingPosition BindingMsg
+    | InsertBindingAtTheStart
+    | InsertBindingAfter BindingPosition
+
+
+type BindingMsg
     = InputChanged String
     | InferButtonClicked
     | RunButtonClicked
 
 
-isParsedSuccesfully : Model -> Bool
+isParsedSuccesfully : Binding -> Bool
 isParsedSuccesfully model =
     case model.parsedTerm of
         Just (Ok term) ->
@@ -130,6 +208,38 @@ isParsedSuccesfully model =
 
 update : Msg -> Model -> Return Msg Model
 update msg model =
+    case msg of
+        ChangeTab tab ->
+            { model | tab = tab }
+                |> Return.singleton
+
+        BindingMsg n bindingMsg ->
+            case List.getAt n model.bindings of
+                Just binding ->
+                    updateBinding bindingMsg binding
+                        |> Return.map
+                            (\newBinding ->
+                                { model
+                                    | bindings = List.setAt n newBinding model.bindings
+                                }
+                            )
+                        |> Return.mapCmd (BindingMsg n)
+
+                Nothing ->
+                    model
+                        |> Return.singleton
+
+        InsertBindingAtTheStart ->
+            { model | bindings = initBinding :: model.bindings }
+                |> Return.singleton
+
+        InsertBindingAfter n ->
+            { model | bindings = insertAfter n initBinding model.bindings }
+                |> Return.singleton
+
+
+updateBinding : BindingMsg -> Binding -> Return BindingMsg Binding
+updateBinding msg model =
     case msg of
         InputChanged input ->
             { model
@@ -165,25 +275,24 @@ update msg model =
 -- ===VIEW===
 
 
-view : Model -> Element Msg
-view model =
+buttonStyle =
+    [ Background.color blue
+    , E.paddingXY 9 4
+    , Border.rounded 2
+    ]
+
+
+viewBinding : Binding -> Element BindingMsg
+viewBinding binding =
     let
         heightPx =
-            450
-
-        buttonStyle =
-            [ Background.color blue
-            , E.paddingXY 9 4
-            , Border.rounded 2
-            ]
+            300
     in
-    E.column [ E.width E.fill, E.padding 10 ]
-        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
-        , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
-        , E.row []
+    E.column [ E.width E.fill ]
+        [ E.row []
             [ Input.button buttonStyle
                 { onPress =
-                    if isParsedSuccesfully model then
+                    if isParsedSuccesfully binding then
                         Just RunButtonClicked
 
                     else
@@ -192,7 +301,7 @@ view model =
                 }
             , Input.button buttonStyle
                 { onPress =
-                    if isParsedSuccesfully model then
+                    if isParsedSuccesfully binding then
                         Just InferButtonClicked
 
                     else
@@ -200,13 +309,14 @@ view model =
                 , label = E.text "Infer"
                 }
             ]
+        , E.el [] (E.text binding.name)
         , E.row [ E.width E.fill, E.paddingEach { top = 5, right = 0, bottom = 0, left = 0 } ]
             [ Input.multiline
                 [ E.height (E.px heightPx)
                 , E.width E.fill
                 ]
                 { onChange = InputChanged
-                , text = model.input
+                , text = binding.input
                 , placeholder = Nothing
                 , label = Input.labelHidden "what is this?"
                 , spellcheck = False
@@ -222,7 +332,7 @@ view model =
                     , E.text
                         (String.concat
                             [ "term = "
-                            , case model.parsedTerm of
+                            , case binding.parsedTerm of
                                 Nothing ->
                                     ""
 
@@ -236,7 +346,7 @@ view model =
                             ]
                         )
                     , E.el []
-                        (case model.evaledTerm of
+                        (case binding.evaledTerm of
                             Nothing ->
                                 E.text ""
 
@@ -269,7 +379,7 @@ view model =
                         )
                     , E.text "TYPE INFERENCE"
                     , E.column []
-                        (case model.inferedType of
+                        (case binding.inferedType of
                             Nothing ->
                                 []
 
@@ -335,35 +445,78 @@ view model =
                     ]
                 )
             ]
-        , E.text "SYNTAX"
-        , E.text "Constants"
-        , E.text "  true, false"
-        , E.text "  0n0, 0n1, 0n2, 0n3, ..."
-        , E.text "  empty-list"
-        , E.text ""
-        , E.text "Variable Use"
-        , E.text "  $foo // when using a variable, you have to prepend a dollar sign to it"
-        , E.text ""
-        , E.text "Simple Operators"
-        , E.text "  (pair e e')"
-        , E.text "  (@ f x) // this is function application"
-        , E.text "  (@ f x y)"
-        , E.text "  (left e)"
-        , E.text "  (right e)"
-        , E.text "  (succ n)      // this is the natural numbers successor function"
-        , E.text "  (cons x xs) // this is consing of an element to a list"
-        , E.text ""
-        , E.text "Bindings Operators"
-        , E.text "  (fn { x . body })"
-        , E.text "  (fn { x y . body })"
-        , E.text "  (match-pair pairExp { (pair x y) . body })"
-        , E.text "  (if e { e1 } { e2 })"
-        , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
-        , E.text "  (nat-loop   n initState { i s . body })"
-        , E.text "  (list-loop xs initState { x s . body })"
-        , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
-        , E.text "  (fn {. body }) // freezes computation"
-        , E.text "  (@ thunk) // forces computation"
+        ]
+
+
+view : Model -> Element Msg
+view model =
+    E.column [ E.width E.fill, E.padding 10 ]
+        [ E.row []
+            (tabs
+                |> List.map
+                    (\tab ->
+                        Input.button buttonStyle
+                            { onPress = Just (ChangeTab tab)
+                            , label = E.text (tabToString tab)
+                            }
+                    )
+            )
+        , case model.tab of
+            ProgramBindings ->
+                E.column [ E.width E.fill ]
+                    [ Input.button buttonStyle
+                        { onPress = Just InsertBindingAtTheStart
+                        , label = E.text "+"
+                        }
+                    , E.column [ E.width E.fill ]
+                        (model.bindings
+                            |> List.indexedMap
+                                (\i binding ->
+                                    E.column [ E.width E.fill ]
+                                        [ viewBinding binding |> E.map (BindingMsg i)
+                                        , Input.button buttonStyle
+                                            { onPress = Just (InsertBindingAfter i)
+                                            , label = E.text "+"
+                                            }
+                                        ]
+                                )
+                        )
+                    ]
+
+            Help ->
+                E.column [ E.width E.fill ]
+                    [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
+                    , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
+                    , E.text "SYNTAX"
+                    , E.text "Constants"
+                    , E.text "  true, false"
+                    , E.text "  0n0, 0n1, 0n2, 0n3, ..."
+                    , E.text "  empty-list"
+                    , E.text ""
+                    , E.text "Variable Use"
+                    , E.text "  $foo // when using a variable, you have to prepend a dollar sign to it"
+                    , E.text ""
+                    , E.text "Simple Operators"
+                    , E.text "  (pair e e')"
+                    , E.text "  (@ f x) // this is function application"
+                    , E.text "  (@ f x y)"
+                    , E.text "  (left e)"
+                    , E.text "  (right e)"
+                    , E.text "  (succ n)      // this is the natural numbers successor function"
+                    , E.text "  (cons x xs) // this is consing of an element to a list"
+                    , E.text ""
+                    , E.text "Bindings Operators"
+                    , E.text "  (fn { x . body })"
+                    , E.text "  (fn { x y . body })"
+                    , E.text "  (match-pair pairExp { (pair x y) . body })"
+                    , E.text "  (if e { e1 } { e2 })"
+                    , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
+                    , E.text "  (nat-loop   n initState { i s . body })"
+                    , E.text "  (list-loop xs initState { x s . body })"
+                    , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
+                    , E.text "  (fn {. body }) // freezes computation"
+                    , E.text "  (@ thunk) // forces computation"
+                    ]
         ]
 
 

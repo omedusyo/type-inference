@@ -159,6 +159,28 @@ type Category
 
 
 
+-- Program Module
+
+
+type alias ProgramModule =
+    { bindings : List Binding
+    }
+
+
+type Binding
+    = TermBinding { name : TermVarName, term : Term }
+
+
+module0 : ProgramModule
+module0 =
+    { bindings =
+        [ TermBinding { name = "foo", term = Abstraction "x" (VarUse "x") }
+        , TermBinding { name = "bar", term = Application (VarUse "foo") NatZero }
+        ]
+    }
+
+
+
 -- helpers
 
 
