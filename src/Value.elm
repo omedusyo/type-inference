@@ -1,17 +1,21 @@
 module Value exposing
     ( ListValue(..)
+    , ModuleEnvironment
     , NatValue(..)
     , TermEnvironment
     , Thunk(..)
     , ThunkId
     , Value(..)
+    , emptyModuleEnvironment
     , emptyTermEnvironment
     , extendEnvironment
+    , extendModuleEnvironment
     , lookupEnvironment
+    , lookupModuleEnvironment
     )
 
 import Dict exposing (Dict)
-import LambdaBasics exposing (Term, TermVarName)
+import LambdaBasics exposing (ModuleTerm, ModuleVarName, Term, TermVarName)
 
 
 type Value
@@ -90,5 +94,47 @@ extendEnvironment varName term env =
 
                 Nothing ->
                     Just [ term ]
+        )
+        env
+
+
+
+-- ===Module Environment===
+-- TODO: this is basically the same code as for TermEnvironment. Abstract away.
+
+
+type alias ModuleEnvironment =
+    Dict ModuleVarName (List ModuleTerm)
+
+
+emptyModuleEnvironment : ModuleEnvironment
+emptyModuleEnvironment =
+    Dict.empty
+
+
+lookupModuleEnvironment : ModuleVarName -> ModuleEnvironment -> Maybe ModuleTerm
+lookupModuleEnvironment varName env =
+    Dict.get varName env
+        |> Maybe.andThen
+            (\modules ->
+                case modules of
+                    [] ->
+                        Nothing
+
+                    module0 :: _ ->
+                        Just module0
+            )
+
+
+extendModuleEnvironment : ModuleVarName -> ModuleTerm -> ModuleEnvironment -> ModuleEnvironment
+extendModuleEnvironment varName module0 env =
+    Dict.update varName
+        (\maybeBinding ->
+            case maybeBinding of
+                Just modules ->
+                    Just (module0 :: modules)
+
+                Nothing ->
+                    Just [ module0 ]
         )
         env
