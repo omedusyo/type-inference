@@ -691,3 +691,33 @@ infer0 term =
             (\( state, type0 ) ->
                 ( state.context, state.typeVarContext, type0 )
             )
+
+
+
+-- Module Inference
+
+
+inferModuleInterface : ModuleTerm -> InferenceContext Interface
+inferModuleInterface module0 =
+    let
+        inferBindings : List ModuleLetBinding -> InferenceContext (List InterfaceAssumption)
+        inferBindings bindings0 =
+            case bindings0 of
+                [] ->
+                    State.return []
+
+                binding :: bindings1 ->
+                    case binding of
+                        LetTerm var term0 ->
+                            State.map2
+                                (\type0 assumptions1 ->
+                                    AssumeTerm var type0 :: assumptions1
+                                )
+                                (inferAndClose term0)
+                                (inferBindings bindings1)
+
+                        _ ->
+                            Debug.todo ""
+    in
+    inferBindings module0.bindings
+        |> State.map (\assumptions -> { assumptions = assumptions })
