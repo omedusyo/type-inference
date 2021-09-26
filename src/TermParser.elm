@@ -576,3 +576,40 @@ letExpression =
         |= binding
             varIntro
             (Parser.lazy (\() -> term))
+
+
+
+-- ===Module===
+
+
+moduleTerm : Parser ModuleTerm
+moduleTerm =
+    Parser.succeed (\bindings -> { bindings = bindings })
+        |. symbol "("
+        |. keyword "module"
+        |= seq moduleLetBinding
+        |. symbol ")"
+
+
+moduleVarIntro : Parser ModuleVarName
+moduleVarIntro =
+    varIntro
+
+
+moduleLetBinding : Parser ModuleLetBinding
+moduleLetBinding =
+    Parser.succeed (\x -> x)
+        |. symbol "("
+        |= Parser.oneOf
+            [ Parser.succeed (\var term0 -> LetTerm var term0)
+                |. keyword "let-term"
+                |= varIntro
+                |= term
+            , Parser.succeed (\var module0 -> LetModule var module0)
+                |. keyword "let-module"
+                |= moduleVarIntro
+                |= Parser.lazy (\() -> moduleTerm)
+
+            -- TODO: types
+            ]
+        |. symbol ")"
