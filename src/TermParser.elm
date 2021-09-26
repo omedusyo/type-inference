@@ -613,3 +613,8 @@ moduleLetBinding =
             -- TODO: types
             ]
         |. symbol ")"
+
+
+parseModuleTerm : String -> Result TermParsingError ModuleTerm
+parseModuleTerm input =
+    Parser.run moduleTerm input

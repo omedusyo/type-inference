@@ -46,34 +46,61 @@ insertAfter n a xs0 =
 
 type alias Model =
     { bindings : List Binding
+    , moduleModel : ModuleModel
     , tab : Tab
+    }
+
+
+type alias ModuleModel =
+    { moduleInput : String
+    , -- Nothing means haven't parsed anything yet
+      parsedModule : Maybe (Result L.TermParsingError L.ModuleTerm)
+
+    -- TODO: repl stuff
+    }
+
+
+initModuleModel : ModuleModel
+initModuleModel =
+    { moduleInput = "(module \n\n)"
+    , parsedModule = Nothing
     }
 
 
 type Tab
     = ProgramBindings
+    | Module
     | Help
 
 
 tabs : List Tab
 tabs =
-    [ ProgramBindings, Help ]
+    [ ProgramBindings, Module, Help ]
+
+
+initTab : Tab
+initTab =
+    Module
 
 
 tabToString : Tab -> String
 tabToString tab =
     case tab of
-        Help ->
-            "Help"
-
         ProgramBindings ->
             "Program"
+
+        Module ->
+            "Module"
+
+        Help ->
+            "Help"
 
 
 initModel : Model
 initModel =
     { bindings = [ exampleBinding ]
-    , tab = ProgramBindings
+    , moduleModel = initModuleModel
+    , tab = initTab
     }
 
 
@@ -186,6 +213,7 @@ type alias BindingPosition =
 type Msg
     = ChangeTab Tab
     | BindingMsg BindingPosition BindingMsg
+    | ModuleMsg ModuleMsg
     | InsertBindingAtTheStart
     | InsertBindingAfter BindingPosition
 
@@ -196,9 +224,23 @@ type BindingMsg
     | RunButtonClicked
 
 
+type ModuleMsg
+    = ModuleInputChanged String
+
+
 isParsedSuccesfully : Binding -> Bool
 isParsedSuccesfully model =
     case model.parsedTerm of
+        Just (Ok term) ->
+            True
+
+        _ ->
+            False
+
+
+isModuleParsedSuccesfully : ModuleModel -> Bool
+isModuleParsedSuccesfully model =
+    case model.parsedModule of
         Just (Ok term) ->
             True
 
@@ -228,6 +270,14 @@ update msg model =
                 Nothing ->
                     model
                         |> Return.singleton
+
+        ModuleMsg moduleMsg ->
+            updateModuleModel moduleMsg model.moduleModel
+                |> Return.map
+                    (\moduleModel ->
+                        { model | moduleModel = moduleModel }
+                    )
+                |> Return.mapCmd ModuleMsg
 
         InsertBindingAtTheStart ->
             { model | bindings = initBinding :: model.bindings }
@@ -269,6 +319,17 @@ updateBinding msg model =
                 _ ->
                     model
                         |> Return.singleton
+
+
+updateModuleModel : ModuleMsg -> ModuleModel -> Return ModuleMsg ModuleModel
+updateModuleModel msg model =
+    case msg of
+        ModuleInputChanged input ->
+            { model
+                | moduleInput = input
+                , parsedModule = Just (L.parseModuleTerm input)
+            }
+                |> Return.singleton
 
 
 
@@ -483,40 +544,80 @@ view model =
                         )
                     ]
 
+            Module ->
+                viewModule model.moduleModel
+                    |> E.map ModuleMsg
+
             Help ->
-                E.column [ E.width E.fill ]
-                    [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
-                    , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
-                    , E.text "SYNTAX"
-                    , E.text "Constants"
-                    , E.text "  true, false"
-                    , E.text "  0n0, 0n1, 0n2, 0n3, ..."
-                    , E.text "  empty-list"
-                    , E.text ""
-                    , E.text "Variable Use"
-                    , E.text "  $foo // when using a variable, you have to prepend a dollar sign to it"
-                    , E.text ""
-                    , E.text "Simple Operators"
-                    , E.text "  (pair e e')"
-                    , E.text "  (@ f x) // this is function application"
-                    , E.text "  (@ f x y)"
-                    , E.text "  (left e)"
-                    , E.text "  (right e)"
-                    , E.text "  (succ n)      // this is the natural numbers successor function"
-                    , E.text "  (cons x xs) // this is consing of an element to a list"
-                    , E.text ""
-                    , E.text "Bindings Operators"
-                    , E.text "  (fn { x . body })"
-                    , E.text "  (fn { x y . body })"
-                    , E.text "  (match-pair pairExp { (pair x y) . body })"
-                    , E.text "  (if e { e1 } { e2 })"
-                    , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
-                    , E.text "  (nat-loop   n initState { i s . body })"
-                    , E.text "  (list-loop xs initState { x s . body })"
-                    , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
-                    , E.text "  (fn {. body }) // freezes computation"
-                    , E.text "  (@ thunk) // forces computation"
-                    ]
+                viewHelp
+        ]
+
+
+viewModule : ModuleModel -> Element ModuleMsg
+viewModule moduleModel =
+    E.column [ E.width E.fill ]
+        [ E.row [ E.width E.fill ]
+            [ Input.multiline
+                [ E.height (E.px 350)
+                , E.width E.fill
+                ]
+                { onChange = ModuleInputChanged
+                , text = moduleModel.moduleInput
+                , placeholder = Nothing
+                , label = Input.labelHidden "what is this?"
+                , spellcheck = False
+                }
+            ]
+        , E.el [ E.width E.fill ]
+            (case moduleModel.parsedModule of
+                Just result ->
+                    case result of
+                        Ok module0 ->
+                            E.text (L.showModuleTerm module0)
+
+                        Err _ ->
+                            E.text "parsing error"
+
+                Nothing ->
+                    E.text ""
+            )
+        ]
+
+
+viewHelp : Element Msg
+viewHelp =
+    E.column [ E.width E.fill ]
+        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
+        , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
+        , E.text "SYNTAX"
+        , E.text "Constants"
+        , E.text "  true, false"
+        , E.text "  0n0, 0n1, 0n2, 0n3, ..."
+        , E.text "  empty-list"
+        , E.text ""
+        , E.text "Variable Use"
+        , E.text "  $foo // when using a variable, you have to prepend a dollar sign to it"
+        , E.text ""
+        , E.text "Simple Operators"
+        , E.text "  (pair e e')"
+        , E.text "  (@ f x) // this is function application"
+        , E.text "  (@ f x y)"
+        , E.text "  (left e)"
+        , E.text "  (right e)"
+        , E.text "  (succ n)      // this is the natural numbers successor function"
+        , E.text "  (cons x xs) // this is consing of an element to a list"
+        , E.text ""
+        , E.text "Bindings Operators"
+        , E.text "  (fn { x . body })"
+        , E.text "  (fn { x y . body })"
+        , E.text "  (match-pair pairExp { (pair x y) . body })"
+        , E.text "  (if e { e1 } { e2 })"
+        , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
+        , E.text "  (nat-loop   n initState { i s . body })"
+        , E.text "  (list-loop xs initState { x s . body })"
+        , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
+        , E.text "  (fn {. body }) // freezes computation"
+        , E.text "  (@ thunk) // forces computation"
         ]
 
 
