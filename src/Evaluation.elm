@@ -263,7 +263,6 @@ eval term =
                 |> State.map RightValue
 
         Case { arg, leftVar, leftBody, rightVar, rightBody } ->
-            -- Debug.todo ""
             eval arg
                 |> State.andThen
                     (\argEvaled ->
@@ -467,12 +466,11 @@ evalModule module0 =
 
 
 
--- Opens all term/module bindings and inserts them directly into the environment
+-- Runs a computation in an environment with opened module
 
 
 evalInModule : ModuleValue -> EvalStateful a -> EvalStateful a
 evalInModule moduleValue st =
-    -- TODO: what do I actually want? Do I want `ModuleValue` or a `Module`
     State.withReadOnly
         (\env _ ->
             openModule moduleValue env
@@ -482,7 +480,6 @@ evalInModule moduleValue st =
 
 openModule : ModuleValue -> Environment -> Environment
 openModule moduleValue0 =
-    -- TODO: you need to think through the reversal
     let
         f : List ModuleAssignment -> Environment -> Environment
         f assignments0 env =
