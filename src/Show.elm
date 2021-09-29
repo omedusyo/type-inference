@@ -185,6 +185,46 @@ showTermEnvironment env =
         |> String.join ", "
 
 
+showModuleEnvironment : ModuleEnvironment -> String
+showModuleEnvironment env =
+    env
+        |> Dict.toList
+        |> List.concatMap
+            (\( moduleName, modules ) ->
+                case List.head modules of
+                    Just module0 ->
+                        [ String.concat [ moduleName, " := ", showModuleTerm module0 ] ]
+
+                    Nothing ->
+                        []
+            )
+        |> String.join ", "
+
+
+showEnvironment : Environment -> String
+showEnvironment env =
+    String.concat
+        [ if not (Dict.isEmpty env.moduleEnv) then
+            String.concat
+                [ "["
+                , showModuleEnvironment env.moduleEnv
+                , "]"
+                ]
+
+          else
+            ""
+        , if not (Dict.isEmpty env.termEnv) then
+            String.concat
+                [ "["
+                , showTermEnvironment env.termEnv
+                , "]"
+                ]
+
+          else
+            ""
+        ]
+
+
 
 -- ===VALUES===
 
@@ -203,17 +243,13 @@ showValue val =
 
         Closure { env, var, body } ->
             String.concat
-                [ "<"
-                , showTermEnvironment env
-                , if Dict.isEmpty env then
-                    "(fn { "
-
-                  else
-                    " |- (fn { "
+                [ "(fn "
+                , showEnvironment env
+                , " { "
                 , var
                 , " . "
                 , showTerm body
-                , " })>"
+                , " })"
                 ]
 
         TrueValue ->
@@ -285,7 +321,7 @@ showThunks { thunks } =
                             [ "<thunk-id(frozen) := "
                             , String.fromInt thunkId
                             , "; "
-                            , showTermEnvironment env
+                            , showEnvironment env
                             , " | "
                             , showTerm body
                             , ">"

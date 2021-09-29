@@ -1,17 +1,19 @@
 module Value exposing
-    ( ListValue(..)
+    ( Environment
+    , ListValue(..)
     , ModuleEnvironment
     , NatValue(..)
     , TermEnvironment
     , Thunk(..)
     , ThunkId
     , Value(..)
+    , emptyEnvironment
     , emptyModuleEnvironment
     , emptyTermEnvironment
-    , extendEnvironment
     , extendModuleEnvironment
-    , lookupEnvironment
+    , extendTermEnvironment
     , lookupModuleEnvironment
+    , lookupTermEnvironment
     )
 
 import Dict exposing (Dict)
@@ -22,7 +24,7 @@ type Value
     = -- ==Cartesian Product==
       PairValue Value Value
       -- ==Function Space==
-    | Closure { env : TermEnvironment, var : TermVarName, body : Term }
+    | Closure { env : Environment, var : TermVarName, body : Term }
       -- ==Coproduct==
     | LeftValue Value
     | RightValue Value
@@ -52,8 +54,21 @@ type alias ThunkId =
 
 
 type Thunk
-    = DelayedThunk { env : TermEnvironment, body : Term }
+    = DelayedThunk { env : Environment, body : Term }
     | ForcedThunk Value
+
+
+type alias Environment =
+    { termEnv : TermEnvironment
+    , moduleEnv : ModuleEnvironment
+    }
+
+
+emptyEnvironment : Environment
+emptyEnvironment =
+    { termEnv = emptyTermEnvironment
+    , moduleEnv = emptyModuleEnvironment
+    }
 
 
 
@@ -70,8 +85,8 @@ emptyTermEnvironment =
     Dict.empty
 
 
-lookupEnvironment : TermVarName -> TermEnvironment -> Maybe Value
-lookupEnvironment varName env =
+lookupTermEnvironment0 : TermVarName -> TermEnvironment -> Maybe Value
+lookupTermEnvironment0 varName env =
     Dict.get varName env
         |> Maybe.andThen
             (\terms ->
@@ -84,8 +99,13 @@ lookupEnvironment varName env =
             )
 
 
-extendEnvironment : TermVarName -> Value -> TermEnvironment -> TermEnvironment
-extendEnvironment varName term env =
+lookupTermEnvironment : TermVarName -> Environment -> Maybe Value
+lookupTermEnvironment varName env =
+    lookupTermEnvironment0 varName env.termEnv
+
+
+extendTermEnvironment0 : TermVarName -> Value -> TermEnvironment -> TermEnvironment
+extendTermEnvironment0 varName term env =
     Dict.update varName
         (\maybeBinding ->
             case maybeBinding of
@@ -96,6 +116,13 @@ extendEnvironment varName term env =
                     Just [ term ]
         )
         env
+
+
+extendTermEnvironment : TermVarName -> Value -> Environment -> Environment
+extendTermEnvironment varName term env =
+    { env
+        | termEnv = extendTermEnvironment0 varName term env.termEnv
+    }
 
 
 
@@ -112,8 +139,8 @@ emptyModuleEnvironment =
     Dict.empty
 
 
-lookupModuleEnvironment : ModuleVarName -> ModuleEnvironment -> Maybe ModuleTerm
-lookupModuleEnvironment varName env =
+lookupModuleEnvironment0 : ModuleVarName -> ModuleEnvironment -> Maybe ModuleTerm
+lookupModuleEnvironment0 varName env =
     Dict.get varName env
         |> Maybe.andThen
             (\modules ->
@@ -126,8 +153,13 @@ lookupModuleEnvironment varName env =
             )
 
 
-extendModuleEnvironment : ModuleVarName -> ModuleTerm -> ModuleEnvironment -> ModuleEnvironment
-extendModuleEnvironment varName module0 env =
+lookupModuleEnvironment : ModuleVarName -> Environment -> Maybe ModuleTerm
+lookupModuleEnvironment varName env =
+    lookupModuleEnvironment0 varName env.moduleEnv
+
+
+extendModuleEnvironment0 : ModuleVarName -> ModuleTerm -> ModuleEnvironment -> ModuleEnvironment
+extendModuleEnvironment0 varName module0 env =
     Dict.update varName
         (\maybeBinding ->
             case maybeBinding of
@@ -138,3 +170,10 @@ extendModuleEnvironment varName module0 env =
                     Just [ module0 ]
         )
         env
+
+
+extendModuleEnvironment : ModuleVarName -> ModuleTerm -> Environment -> Environment
+extendModuleEnvironment varName module0 env =
+    { env
+        | moduleEnv = extendModuleEnvironment0 varName module0 env.moduleEnv
+    }

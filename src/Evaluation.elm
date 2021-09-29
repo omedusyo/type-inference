@@ -66,7 +66,7 @@ type alias MutState =
 
 
 type alias ReadOnlyState =
-    TermEnvironment
+    Environment
 
 
 type alias EvalStateful a =
@@ -80,7 +80,7 @@ initMutState =
 
 initReadOnlyState : ReadOnlyState
 initReadOnlyState =
-    emptyTermEnvironment
+    emptyEnvironment
 
 
 
@@ -98,7 +98,7 @@ emptyThunkContext =
     { nextThunkId = 0, thunks = Dict.empty }
 
 
-storeNewThunk : TermEnvironment -> Term -> EvalStateful ThunkId
+storeNewThunk : Environment -> Term -> EvalStateful ThunkId
 storeNewThunk env body =
     State.create
         (\_ ({ thunkContext } as state) ->
@@ -179,7 +179,7 @@ varLookup : TermVarName -> EvalStateful Value
 varLookup varName =
     State.get0
         (\env _ ->
-            case Value.lookupEnvironment varName env of
+            case Value.lookupTermEnvironment varName env of
                 Just val ->
                     State.return val
 
@@ -218,8 +218,8 @@ eval term =
                                 State.withReadOnly
                                     (\env _ ->
                                         env
-                                            |> extendEnvironment var0 val0
-                                            |> extendEnvironment var1 val1
+                                            |> extendTermEnvironment var0 val0
+                                            |> extendTermEnvironment var1 val1
                                     )
                                     (eval body)
 
@@ -244,7 +244,7 @@ eval term =
                                         (\argEvaled ->
                                             State.withReadOnly
                                                 (\_ _ ->
-                                                    closure.env |> extendEnvironment var argEvaled
+                                                    closure.env |> extendTermEnvironment var argEvaled
                                                 )
                                                 (eval body)
                                         )
@@ -268,11 +268,11 @@ eval term =
                     (\argEvaled ->
                         case argEvaled of
                             LeftValue val ->
-                                State.withReadOnly (\env _ -> env |> extendEnvironment leftVar val)
+                                State.withReadOnly (\env _ -> env |> extendTermEnvironment leftVar val)
                                     (eval leftBody)
 
                             RightValue val ->
-                                State.withReadOnly (\env _ -> env |> extendEnvironment rightVar val)
+                                State.withReadOnly (\env _ -> env |> extendTermEnvironment rightVar val)
                                     (eval rightBody)
 
                             _ ->
@@ -335,8 +335,8 @@ eval term =
                                                             State.withReadOnly
                                                                 (\env _ ->
                                                                     env
-                                                                        |> extendEnvironment loop.indexVar (NatValue natVal1)
-                                                                        |> extendEnvironment loop.stateVar prevVal
+                                                                        |> extendTermEnvironment loop.indexVar (NatValue natVal1)
+                                                                        |> extendTermEnvironment loop.stateVar prevVal
                                                                 )
                                                                 (eval loop.body)
                                                         )
@@ -380,8 +380,8 @@ eval term =
                                                                     State.withReadOnly
                                                                         (\env _ ->
                                                                             env
-                                                                                |> extendEnvironment loop.listElementVar headValue
-                                                                                |> extendEnvironment loop.stateVar prevVal
+                                                                                |> extendTermEnvironment loop.listElementVar headValue
+                                                                                |> extendTermEnvironment loop.stateVar prevVal
                                                                         )
                                                                         (eval loop.body)
                                                                 )
@@ -419,7 +419,7 @@ eval term =
             eval arg
                 |> State.andThen
                     (\argVal ->
-                        State.withReadOnly (\env _ -> env |> extendEnvironment var argVal)
+                        State.withReadOnly (\env _ -> env |> extendTermEnvironment var argVal)
                             (eval body)
                     )
 
