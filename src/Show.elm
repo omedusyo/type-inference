@@ -192,8 +192,8 @@ showModuleEnvironment env =
         |> List.concatMap
             (\( moduleName, modules ) ->
                 case List.head modules of
-                    Just module0 ->
-                        [ String.concat [ moduleName, " := ", showModuleTerm module0 ] ]
+                    Just moduleValue ->
+                        [ String.concat [ moduleName, " := ", showModuleValue moduleValue ] ]
 
                     Nothing ->
                         []
@@ -547,6 +547,33 @@ showModuleTerm module0 =
         [ "(module "
         , module0.bindings
             |> List.map showModuleLetBinding
+            |> String.join " "
+        , ")"
+        ]
+
+
+showModuleValue : ModuleValue -> String
+showModuleValue moduleValue =
+    let
+        showModuleValueAssignment : ModuleAssignment -> String
+        showModuleValueAssignment binding =
+            case binding of
+                AssignValue var value ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showValue value
+                        , ")"
+                        ]
+
+                _ ->
+                    Debug.todo ""
+    in
+    String.concat
+        [ "(module "
+        , moduleValue.assignments
+            |> List.map showModuleValueAssignment
             |> String.join " "
         , ")"
         ]

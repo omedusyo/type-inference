@@ -1,7 +1,9 @@
 module Value exposing
     ( Environment
     , ListValue(..)
+    , ModuleAssignment(..)
     , ModuleEnvironment
+    , ModuleValue
     , NatValue(..)
     , TermEnvironment
     , Thunk(..)
@@ -17,7 +19,7 @@ module Value exposing
     )
 
 import Dict exposing (Dict)
-import LambdaBasics exposing (ModuleTerm, ModuleVarName, Term, TermVarName)
+import LambdaBasics exposing (ModuleTerm, ModuleVarName, Term, TermVarName, Type, TypeVarName)
 
 
 type Value
@@ -56,6 +58,17 @@ type alias ThunkId =
 type Thunk
     = DelayedThunk { env : Environment, body : Term }
     | ForcedThunk Value
+
+
+type alias ModuleValue =
+    { assignments : List ModuleAssignment
+    }
+
+
+type ModuleAssignment
+    = AssignValue TermVarName Value
+    | AssignType TypeVarName Type
+    | AssignModuleValue ModuleVarName ModuleValue
 
 
 type alias Environment =
@@ -131,7 +144,7 @@ extendTermEnvironment varName term env =
 
 
 type alias ModuleEnvironment =
-    Dict ModuleVarName (List ModuleTerm)
+    Dict ModuleVarName (List ModuleValue)
 
 
 emptyModuleEnvironment : ModuleEnvironment
@@ -139,7 +152,7 @@ emptyModuleEnvironment =
     Dict.empty
 
 
-lookupModuleEnvironment0 : ModuleVarName -> ModuleEnvironment -> Maybe ModuleTerm
+lookupModuleEnvironment0 : ModuleVarName -> ModuleEnvironment -> Maybe ModuleValue
 lookupModuleEnvironment0 varName env =
     Dict.get varName env
         |> Maybe.andThen
@@ -153,12 +166,12 @@ lookupModuleEnvironment0 varName env =
             )
 
 
-lookupModuleEnvironment : ModuleVarName -> Environment -> Maybe ModuleTerm
+lookupModuleEnvironment : ModuleVarName -> Environment -> Maybe ModuleValue
 lookupModuleEnvironment varName env =
     lookupModuleEnvironment0 varName env.moduleEnv
 
 
-extendModuleEnvironment0 : ModuleVarName -> ModuleTerm -> ModuleEnvironment -> ModuleEnvironment
+extendModuleEnvironment0 : ModuleVarName -> ModuleValue -> ModuleEnvironment -> ModuleEnvironment
 extendModuleEnvironment0 varName module0 env =
     Dict.update varName
         (\maybeBinding ->
@@ -172,7 +185,7 @@ extendModuleEnvironment0 varName module0 env =
         env
 
 
-extendModuleEnvironment : ModuleVarName -> ModuleTerm -> Environment -> Environment
+extendModuleEnvironment : ModuleVarName -> ModuleValue -> Environment -> Environment
 extendModuleEnvironment varName module0 env =
     { env
         | moduleEnv = extendModuleEnvironment0 varName module0 env.moduleEnv

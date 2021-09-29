@@ -230,6 +230,7 @@ eval term =
         Abstraction var body ->
             State.get0
                 (\env _ ->
+                    -- Note that this captures both term and module environments
                     State.return (Closure { env = env, var = var, body = body })
                 )
 
@@ -425,3 +426,46 @@ eval term =
 
         ModuleAccess module0 var ->
             Debug.todo ""
+
+
+evalModule : ModuleTerm -> EvalStateful ModuleValue
+evalModule module0 =
+    Debug.todo ""
+
+
+
+-- Opens all term/module bindings and inserts them directly into the environment
+
+
+evalInModule : ModuleValue -> EvalStateful a -> EvalStateful a
+evalInModule moduleValue st =
+    -- TODO: what do I actually want? Do I want `ModuleValue` or a `Module`
+    State.withReadOnly
+        (\env _ ->
+            openModule moduleValue env
+        )
+        st
+
+
+openModule : ModuleValue -> Environment -> Environment
+openModule moduleValue0 =
+    -- TODO: you need to think through the reversal
+    let
+        f : List ModuleAssignment -> Environment -> Environment
+        f assignments0 env =
+            case assignments0 of
+                [] ->
+                    env
+
+                assignment :: assignments1 ->
+                    case assignment of
+                        AssignValue varName value ->
+                            extendTermEnvironment varName value env
+
+                        AssignType typeVar type0 ->
+                            f assignments1 env
+
+                        AssignModuleValue moduleName moduleValue1 ->
+                            Debug.todo ""
+    in
+    f moduleValue0.assignments
