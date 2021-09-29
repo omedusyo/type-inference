@@ -430,7 +430,40 @@ eval term =
 
 evalModule : ModuleTerm -> EvalStateful ModuleValue
 evalModule module0 =
-    Debug.todo ""
+    let
+        evalBindings : List ModuleLetBinding -> EvalStateful (List ModuleAssignment)
+        evalBindings bindings0 =
+            case bindings0 of
+                [] ->
+                    State.return []
+
+                binding :: bindings1 ->
+                    case binding of
+                        LetTerm varName term ->
+                            eval term
+                                |> State.andThen
+                                    (\val ->
+                                        State.withReadOnly
+                                            (\env _ -> env |> extendTermEnvironment varName val)
+                                            (evalBindings bindings1)
+                                    )
+
+                        LetType typeVar type0 ->
+                            -- TODO: what to do here? Can't do much yet. Need to make types part of the environment.
+                            --       For now just skip it.
+                            evalBindings bindings1
+
+                        LetModule moduleName moduleTerm ->
+                            evalModule moduleTerm
+                                |> State.andThen
+                                    (\moduleValue ->
+                                        State.withReadOnly
+                                            (\env _ -> env |> extendModuleEnvironment moduleName moduleValue)
+                                            (evalBindings bindings1)
+                                    )
+    in
+    evalBindings module0.bindings
+        |> State.map (\assignments -> { assignments = assignments })
 
 
 
@@ -466,6 +499,6 @@ openModule moduleValue0 =
                             f assignments1 env
 
                         AssignModuleValue moduleName moduleValue1 ->
-                            Debug.todo ""
+                            extendModuleEnvironment moduleName moduleValue1 env
     in
     f moduleValue0.assignments
