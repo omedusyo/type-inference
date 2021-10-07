@@ -540,6 +540,15 @@ showModuleTerm module0 =
                         , ")"
                         ]
 
+                LetModule var module1 ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showModuleTerm module1
+                        , ")"
+                        ]
+
                 _ ->
                     Debug.todo ""
     in

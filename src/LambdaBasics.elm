@@ -82,6 +82,9 @@ type Term
     | -- ==Let==
       Let TermVarName Term Term
     | -- ==Module Access==
+      -- TODO: You should probably create some general Module Expression
+      --       Rename the ModuleTerm to ModuleLiteral, or ModuleForm...
+      --       Here you should use the module expression
       ModuleAccess ModuleTerm TermVarName
 
 
@@ -141,6 +144,17 @@ getTypeVars type0 =
 
 type alias ModuleVarName =
     String
+
+
+
+-- TODO: You should probably create some general Module Expression
+--       Rename the ModuleTerm to ModuleLiteral, or ModuleForm...
+--       The general Module Expression could either be
+--           Module Form
+--        or Module Use (as a variable)
+--        or Functor Application to a Module Expression
+--       q. Will we have Functor expressions? Hopefully not
+--          What sort of operations over functors would I want?
 
 
 type alias ModuleTerm =
