@@ -55,15 +55,30 @@ type alias ModuleModel =
     { moduleInput : String
     , -- Nothing means haven't parsed anything yet
       parsedModule : Maybe (Result L.TermParsingError L.ModuleTerm)
-
-    -- TODO: repl stuff
+    , -- ===REPL===
+      replInput : String
+    , parsedTerm : Maybe (Result L.TermParsingError Term)
+    , evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     }
 
 
 initModuleModel : ModuleModel
 initModuleModel =
-    { moduleInput = "(module \n\n)"
-    , parsedModule = Nothing
+    let
+        input =
+            """(module
+        (let-term x 0n1)
+
+        (let-module M
+               (module (let-term n 0n0)) ) 
+)
+"""
+    in
+    { moduleInput = input
+    , parsedModule = Just (L.parseModuleTerm input)
+    , replInput = ""
+    , parsedTerm = Nothing
+    , evaledTerm = Nothing
     }
 
 
@@ -226,6 +241,8 @@ type BindingMsg
 
 type ModuleMsg
     = ModuleInputChanged String
+    | ReplInputChanged String
+    | ReplRunButtonClicked
 
 
 isParsedSuccesfully : Binding -> Bool
@@ -330,6 +347,28 @@ updateModuleModel msg model =
                 , parsedModule = Just (L.parseModuleTerm input)
             }
                 |> Return.singleton
+
+        ReplInputChanged input ->
+            let
+                parsedTerm =
+                    Just (L.parseTerm input)
+            in
+            { model
+                | replInput = input
+                , parsedTerm = parsedTerm
+                , evaledTerm = Nothing
+            }
+                |> Return.singleton
+
+        ReplRunButtonClicked ->
+            case model.parsedTerm of
+                Just (Ok term) ->
+                    { model | evaledTerm = Just (L.eval0 term) }
+                        |> Return.singleton
+
+                _ ->
+                    model
+                        |> Return.singleton
 
 
 
@@ -570,13 +609,52 @@ viewModule moduleModel =
             ]
         , E.el [ E.width E.fill ]
             (case moduleModel.parsedModule of
-                Just result ->
-                    case result of
+                Just parsingModuleResult ->
+                    case parsingModuleResult of
                         Ok module0 ->
-                            E.text (L.showModuleTerm module0)
+                            -- TODO: shows the parsed output of the module
+                            -- E.text (L.showModuleTerm module0)
+                            E.column [ E.width E.fill ]
+                                [ Input.button buttonStyle
+                                    { onPress =
+                                        Just ReplRunButtonClicked
+                                    , label = E.text "Run"
+                                    }
+                                , Input.multiline
+                                    [ E.height (E.px 45)
+                                    , E.width E.fill
+                                    ]
+                                    { onChange = ReplInputChanged
+                                    , text = moduleModel.replInput
+                                    , placeholder = Nothing
+                                    , label = Input.labelHidden "what is this?"
+                                    , spellcheck = False
+                                    }
+                                , case moduleModel.parsedTerm of
+                                    Just parsingResult ->
+                                        case parsingResult of
+                                            Ok term ->
+                                                case moduleModel.evaledTerm of
+                                                    Just evaledResult ->
+                                                        case evaledResult of
+                                                            Ok ( thunkContext, val ) ->
+                                                                E.text (L.showValue val)
+
+                                                            Err err ->
+                                                                E.text "Evaluation error"
+
+                                                    Nothing ->
+                                                        E.text ""
+
+                                            Err err ->
+                                                E.text "Parsing error"
+
+                                    Nothing ->
+                                        E.text ""
+                                ]
 
                         Err _ ->
-                            E.text "parsing error"
+                            E.text "Parsing error"
 
                 Nothing ->
                     E.text ""
