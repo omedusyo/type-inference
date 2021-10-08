@@ -226,6 +226,48 @@ showEnvironment env =
 
 
 
+-- ===Evaluation Errors===
+
+
+showEvaluationError : EvalError -> String
+showEvaluationError error =
+    case error of
+        UndefinedVar termVarName ->
+            String.concat [ "Use of undefined variable $", termVarName ]
+
+        ExpectedPair ->
+            "Expected Pair"
+
+        ExpectedFunction ->
+            "Expected Function"
+
+        ExpectedLeftRight ->
+            "Expected Left/Right"
+
+        ExpectedBoolean ->
+            "Expected Boolean"
+
+        ExpectedNat ->
+            "Expected Number"
+
+        ExpectedList ->
+            "Expected List"
+
+        FailedToForceThunk thunkId ->
+            String.concat [ "Failed to force thunk with id := ", String.fromInt thunkId ]
+
+        ExpectedThunkClosure ->
+            "Expected Thunk Closure"
+
+
+showEvaluationErrors : List EvalError -> String
+showEvaluationErrors errors =
+    errors
+        |> List.map showEvaluationError
+        |> String.join ", "
+
+
+
 -- ===VALUES===
 
 
@@ -573,6 +615,15 @@ showModuleValue moduleValue =
                         , var
                         , " "
                         , showValue value
+                        , ")"
+                        ]
+
+                AssignModuleValue var moduleValue1 ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showModuleValue moduleValue1
                         , ")"
                         ]
 

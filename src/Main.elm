@@ -16,7 +16,7 @@ import Show as L
 import StatefulWithErr as State
 import TermParser as L
 import TypeVarContext as L
-import Value as L exposing (Value)
+import Value as Value exposing (Value)
 
 
 blue =
@@ -55,10 +55,64 @@ type alias ModuleModel =
     { moduleInput : String
     , -- Nothing means haven't parsed anything yet
       parsedModule : Maybe (Result L.TermParsingError L.ModuleTerm)
+    , evaledModule : Maybe (Result (List L.EvalError) Value.ModuleValue)
+    , env : Value.Environment
     , -- ===REPL===
       replInput : String
     , parsedTerm : Maybe (Result L.TermParsingError Term)
     , evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
+    }
+
+
+parseModule : ModuleModel -> ModuleModel
+parseModule model =
+    { model
+        | parsedModule = Just (L.parseModuleTerm model.moduleInput)
+    }
+
+
+evalModule : ModuleModel -> ModuleModel
+evalModule model =
+    { model
+        | evaledModule =
+            case model.parsedModule of
+                Just parsedModule ->
+                    case parsedModule of
+                        Ok moduleTerm ->
+                            Just (L.evalModule0 moduleTerm)
+
+                        Err _ ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
+    }
+
+
+openModule : ModuleModel -> ModuleModel
+openModule model =
+    { model
+        | env =
+            case model.parsedModule of
+                Just parsedModule ->
+                    case parsedModule of
+                        Ok moduleTerm ->
+                            let
+                                evaledModuleResult =
+                                    L.evalModule0 moduleTerm
+                            in
+                            case evaledModuleResult of
+                                Ok moduleVal ->
+                                    L.openModule moduleVal Value.emptyEnvironment
+
+                                Err _ ->
+                                    Value.emptyEnvironment
+
+                        Err _ ->
+                            Value.emptyEnvironment
+
+                Nothing ->
+                    Value.emptyEnvironment
     }
 
 
@@ -75,11 +129,16 @@ initModuleModel =
 """
     in
     { moduleInput = input
-    , parsedModule = Just (L.parseModuleTerm input)
+    , parsedModule = Nothing
+    , evaledModule = Nothing
+    , env = Value.emptyEnvironment
     , replInput = ""
     , parsedTerm = Nothing
     , evaledTerm = Nothing
     }
+        |> parseModule
+        |> evalModule
+        |> openModule
 
 
 type Tab
@@ -241,6 +300,7 @@ type BindingMsg
 
 type ModuleMsg
     = ModuleInputChanged String
+    | ModuleRunButtonClicked
     | ReplInputChanged String
     | ReplRunButtonClicked
 
@@ -345,7 +405,18 @@ updateModuleModel msg model =
             { model
                 | moduleInput = input
                 , parsedModule = Just (L.parseModuleTerm input)
+                , evaledTerm = Nothing
+                , env = Value.emptyEnvironment
             }
+                |> Return.singleton
+
+        ModuleRunButtonClicked ->
+            { model
+                | evaledTerm = Nothing
+                , env = Value.emptyEnvironment
+            }
+                |> evalModule
+                |> openModule
                 |> Return.singleton
 
         ReplInputChanged input ->
@@ -363,7 +434,7 @@ updateModuleModel msg model =
         ReplRunButtonClicked ->
             case model.parsedTerm of
                 Just (Ok term) ->
-                    { model | evaledTerm = Just (L.eval0 term) }
+                    { model | evaledTerm = Just (L.eval1 model.env term) }
                         |> Return.singleton
 
                 _ ->
@@ -474,8 +545,8 @@ viewBinding binding =
                                                 )
                                             ]
 
-                                    Err err ->
-                                        E.text "Evaluation Error"
+                                    Err errors ->
+                                        E.text (L.showEvaluationErrors errors)
                         )
                     , E.text "TYPE INFERENCE"
                     , E.column []
@@ -595,8 +666,13 @@ view model =
 viewModule : ModuleModel -> Element ModuleMsg
 viewModule moduleModel =
     E.column [ E.width E.fill ]
-        [ E.row [ E.width E.fill ]
-            [ Input.multiline
+        [ E.column [ E.width E.fill ]
+            [ Input.button buttonStyle
+                { onPress =
+                    Just ModuleRunButtonClicked
+                , label = E.text "Run"
+                }
+            , Input.multiline
                 [ E.height (E.px 350)
                 , E.width E.fill
                 ]
@@ -638,10 +714,14 @@ viewModule moduleModel =
                                                     Just evaledResult ->
                                                         case evaledResult of
                                                             Ok ( thunkContext, val ) ->
-                                                                E.text (L.showValue val)
+                                                                E.column []
+                                                                    [ E.text (L.showValue val)
 
-                                                            Err err ->
-                                                                E.text "Evaluation error"
+                                                                    -- , E.text ("env := " ++ L.showEnvironment moduleModel.env)
+                                                                    ]
+
+                                                            Err errors ->
+                                                                E.text (L.showEvaluationErrors errors)
 
                                                     Nothing ->
                                                         E.text ""

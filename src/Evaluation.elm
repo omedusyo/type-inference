@@ -198,6 +198,12 @@ eval0 term =
         |> Result.map (\( { thunkContext }, value ) -> ( thunkContext, value ))
 
 
+eval1 : Environment -> Term -> Result (List EvalError) ( ThunkContext, Value )
+eval1 env term =
+    State.run (eval term) env initMutState
+        |> Result.map (\( { thunkContext }, value ) -> ( thunkContext, value ))
+
+
 eval : Term -> EvalStateful Value
 eval term =
     case term of
@@ -427,6 +433,18 @@ eval term =
             Debug.todo ""
 
 
+evalModule0 : ModuleTerm -> Result (List EvalError) ModuleValue
+evalModule0 module0 =
+    State.run (evalModule module0) initReadOnlyState initMutState
+        |> Result.map (\( {}, value ) -> value)
+
+
+evalModule1 : Environment -> ModuleTerm -> Result (List EvalError) ModuleValue
+evalModule1 env module0 =
+    State.run (evalModule module0) env initMutState
+        |> Result.map (\( {}, value ) -> value)
+
+
 evalModule : ModuleTerm -> EvalStateful ModuleValue
 evalModule module0 =
     let
@@ -445,6 +463,10 @@ evalModule module0 =
                                         State.withReadOnly
                                             (\env _ -> env |> extendTermEnvironment varName val)
                                             (evalBindings bindings1)
+                                            |> State.map
+                                                (\assignments1 ->
+                                                    AssignValue varName val :: assignments1
+                                                )
                                     )
 
                         LetType typeVar type0 ->
@@ -459,6 +481,10 @@ evalModule module0 =
                                         State.withReadOnly
                                             (\env _ -> env |> extendModuleEnvironment moduleName moduleValue)
                                             (evalBindings bindings1)
+                                            |> State.map
+                                                (\assignments1 ->
+                                                    AssignModuleValue moduleName moduleValue :: assignments1
+                                                )
                                     )
     in
     evalBindings module0.bindings
@@ -490,12 +516,12 @@ openModule moduleValue0 =
                 assignment :: assignments1 ->
                     case assignment of
                         AssignValue varName value ->
-                            extendTermEnvironment varName value env
+                            f assignments1 (extendTermEnvironment varName value env)
 
                         AssignType typeVar type0 ->
                             f assignments1 env
 
                         AssignModuleValue moduleName moduleValue1 ->
-                            extendModuleEnvironment moduleName moduleValue1 env
+                            f assignments1 (extendModuleEnvironment moduleName moduleValue1 env)
     in
     f moduleValue0.assignments
