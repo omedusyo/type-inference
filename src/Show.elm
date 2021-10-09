@@ -573,7 +573,7 @@ showModuleTerm moduleTerm =
         ModuleLiteralTerm module0 ->
             showModuleLiteral module0
 
-        ModuleUse moduleName ->
+        ModuleVarUse moduleName ->
             String.concat [ "$", moduleName ]
 
         FunctorApplication ->

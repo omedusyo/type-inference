@@ -154,7 +154,7 @@ type alias ModuleVarName =
 
 type ModuleTerm
     = ModuleLiteralTerm ModuleLiteral
-    | ModuleUse ModuleVarName
+    | ModuleVarUse ModuleVarName
     | FunctorApplication
 
 

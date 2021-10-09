@@ -583,11 +583,16 @@ letExpression =
 -- ===Module===
 
 
-moduleTerm : Parser ModuleTerm
-moduleTerm =
-    Parser.oneOf
-        [ moduleLiteral |> Parser.map ModuleLiteralTerm
-        ]
+moduleVarIntro : Parser ModuleVarName
+moduleVarIntro =
+    varIntro
+
+
+moduleVarUse : Parser ModuleTerm
+moduleVarUse =
+    Parser.succeed ModuleVarUse
+        |. Parser.symbol "$"
+        |= moduleVarIntro
 
 
 moduleLiteral : Parser ModuleLiteral
@@ -597,6 +602,14 @@ moduleLiteral =
         |. keyword "module"
         |= seq moduleLetBinding
         |. symbol ")"
+
+
+moduleTerm : Parser ModuleTerm
+moduleTerm =
+    Parser.oneOf
+        [ moduleLiteral |> Parser.map ModuleLiteralTerm
+        , moduleVarUse
+        ]
 
 
 moduleAccessKeyword : String
@@ -610,11 +623,6 @@ moduleAccess =
         |. keyword moduleAccessKeyword
         |= Parser.lazy (\() -> moduleTerm)
         |= varIntro
-
-
-moduleVarIntro : Parser ModuleVarName
-moduleVarIntro =
-    varIntro
 
 
 moduleLetBinding : Parser ModuleLetBinding

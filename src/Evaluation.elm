@@ -451,7 +451,7 @@ evalModule moduleTerm =
         ModuleLiteralTerm module0 ->
             evalModuleLiteral module0
 
-        ModuleUse moduleName ->
+        ModuleVarUse moduleName ->
             -- TODO
             Debug.todo ""
 

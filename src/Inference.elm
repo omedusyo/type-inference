@@ -703,7 +703,7 @@ inferInterface moduleTerm =
         ModuleLiteralTerm module0 ->
             inferFromModuleLiteral module0
 
-        ModuleUse moduleName ->
+        ModuleVarUse moduleName ->
             -- TODO: What to do here? do we want interface variables?
             Debug.todo ""
 
