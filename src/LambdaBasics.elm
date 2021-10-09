@@ -173,10 +173,6 @@ type ModuleLetBinding
 -- Interface
 
 
-type alias InterfaceVarName =
-    String
-
-
 type alias Interface =
     { assumptions : List InterfaceAssumption
     }
@@ -185,7 +181,7 @@ type alias Interface =
 type InterfaceAssumption
     = AssumeTerm TermVarName Type
     | AssumeType TypeVarName -- There should be a second argument that's called Kind
-    | AssumeModule InterfaceVarName Interface
+    | AssumeModule ModuleVarName Interface
 
 
 
