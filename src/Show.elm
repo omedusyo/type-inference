@@ -591,9 +591,83 @@ showModuleTerm moduleTerm =
         ModuleVarUse moduleName ->
             String.concat [ "$", moduleName ]
 
-        FunctorApplication ->
-            -- TODO
-            Debug.todo ""
+        FunctorApplication functorTerm modules ->
+            String.concat
+                [ "(@ "
+                , showFunctorTerm functorTerm
+                , " "
+                , modules
+                    |> List.map showModuleTerm
+                    |> String.join " "
+                , ")"
+                ]
+
+
+showFunctorTerm : FunctorTerm -> String
+showFunctorTerm functorTerm =
+    case functorTerm of
+        FunctorVarUse functorName ->
+            String.concat [ "$", functorName ]
+
+        FunctorLiteralTerm ({ parameters, body } as functorLiteral) ->
+            String.concat
+                [ "(functor { "
+                , parameters
+                    |> List.map
+                        (\( moduleName, interface ) ->
+                            String.concat
+                                [ "(: "
+                                , moduleName
+                                , " "
+                                , showInterface interface
+                                , ")"
+                                ]
+                        )
+                    |> String.join " "
+                , " . "
+                , showModuleTerm body
+                , " })"
+                ]
+
+
+showInterface : Interface -> String
+showInterface ({ assumptions } as interface) =
+    String.concat
+        [ "(interface "
+        , assumptions
+            |> List.map showInterfaceAssumption
+            |> String.join " "
+        , ")"
+        ]
+
+
+showInterfaceAssumption : InterfaceAssumption -> String
+showInterfaceAssumption assumption =
+    case assumption of
+        AssumeTerm termVarName type0 ->
+            String.concat
+                [ "(assume-term "
+                , termVarName
+                , " "
+                , showType type0
+                , ")"
+                ]
+
+        AssumeType typeVarName ->
+            String.concat
+                [ "(assume-type "
+                , String.fromInt typeVarName
+                , ")"
+                ]
+
+        AssumeModule moduleVarName interface ->
+            String.concat
+                [ "(assume-module "
+                , moduleVarName
+                , " "
+                , showInterface interface
+                , ")"
+                ]
 
 
 showModuleLiteral : ModuleLiteral -> String

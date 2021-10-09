@@ -501,7 +501,7 @@ evalModule moduleTerm =
         ModuleVarUse moduleName ->
             moduleLookup moduleName
 
-        FunctorApplication ->
+        FunctorApplication functor modules ->
             -- TODO
             Debug.todo ""
 
