@@ -490,6 +490,10 @@ lookupModuleTermField field moduleValue =
                         AssignModuleValue _ _ ->
                             -- TODO: Should I be doing something more here?
                             lookup assignments1
+
+                        AssignFunctorLiteral _ _ ->
+                            -- TODO: Should I be doing something more here?
+                            lookup assignments1
     in
     lookup moduleValue.assignments
 
@@ -598,5 +602,8 @@ openModule moduleValue0 =
 
                         AssignModuleValue moduleName moduleValue1 ->
                             f assignments1 (extendModuleEnvironment moduleName moduleValue1 env)
+
+                        AssignFunctorLiteral functorName functorLiteral ->
+                            f assignments1 (extendFunctorEnvironment functorName functorLiteral env)
     in
     f moduleValue0.assignments

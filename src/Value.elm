@@ -12,6 +12,7 @@ module Value exposing
     , emptyEnvironment
     , emptyModuleEnvironment
     , emptyTermEnvironment
+    , extendFunctorEnvironment
     , extendModuleEnvironment
     , extendTermEnvironment
     , lookupFunctorEnvironment
@@ -70,6 +71,7 @@ type ModuleAssignment
     = AssignValue TermVarName Value
     | AssignType TypeVarName Type
     | AssignModuleValue ModuleVarName ModuleValue
+    | AssignFunctorLiteral FunctorVarName FunctorLiteral
 
 
 type alias Environment =
