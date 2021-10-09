@@ -235,6 +235,9 @@ showEvaluationError error =
         UndefinedVar termVarName ->
             String.concat [ "Use of undefined variable $", termVarName ]
 
+        UndefinedModule moduleVarName ->
+            String.concat [ "Use of undefined module variable $", moduleVarName ]
+
         ExpectedPair ->
             "Expected Pair"
 
@@ -258,6 +261,9 @@ showEvaluationError error =
 
         ExpectedThunkClosure ->
             "Expected Thunk Closure"
+
+        UnknownModuleField field ->
+            String.concat [ "Unknown module-field access := ", field ]
 
 
 showEvaluationErrors : List EvalError -> String

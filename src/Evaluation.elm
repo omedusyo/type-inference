@@ -47,6 +47,7 @@ import Value exposing (..)
 
 type EvalError
     = UndefinedVar TermVarName
+    | UndefinedModule ModuleVarName
     | ExpectedPair
     | ExpectedFunction
     | ExpectedLeftRight
@@ -55,6 +56,7 @@ type EvalError
     | ExpectedList
     | FailedToForceThunk ThunkId
     | ExpectedThunkClosure
+    | UnknownModuleField TermVarName
 
 
 
@@ -185,6 +187,19 @@ varLookup varName =
 
                 Nothing ->
                     throwEvalError [ UndefinedVar varName ]
+        )
+
+
+moduleLookup : ModuleVarName -> EvalStateful ModuleValue
+moduleLookup moduleName =
+    State.get0
+        (\env _ ->
+            case Value.lookupModuleEnvironment moduleName env of
+                Just val ->
+                    State.return val
+
+                Nothing ->
+                    throwEvalError [ UndefinedModule moduleName ]
         )
 
 
@@ -429,8 +444,40 @@ eval term =
                             (eval body)
                     )
 
-        ModuleAccess module0 var ->
-            Debug.todo ""
+        ModuleAccess module0 field ->
+            evalModule module0
+                |> State.andThen
+                    (\moduleValue ->
+                        moduleValue |> lookupModuleTermField field
+                    )
+
+
+lookupModuleTermField : TermVarName -> ModuleValue -> EvalStateful Value
+lookupModuleTermField field moduleValue =
+    let
+        lookup : List ModuleAssignment -> EvalStateful Value
+        lookup assignments0 =
+            case assignments0 of
+                [] ->
+                    throwEvalError [ UnknownModuleField field ]
+
+                assignment :: assignments1 ->
+                    case assignment of
+                        AssignValue field0 val ->
+                            if field0 == field then
+                                State.return val
+
+                            else
+                                lookup assignments1
+
+                        AssignType _ _ ->
+                            lookup assignments1
+
+                        AssignModuleValue _ _ ->
+                            -- TODO: Should I be doing something more here?
+                            lookup assignments1
+    in
+    lookup moduleValue.assignments
 
 
 evalModule0 : ModuleTerm -> Result (List EvalError) ModuleValue
@@ -452,8 +499,7 @@ evalModule moduleTerm =
             evalModuleLiteral module0
 
         ModuleVarUse moduleName ->
-            -- TODO
-            Debug.todo ""
+            moduleLookup moduleName
 
         FunctorApplication ->
             -- TODO
