@@ -143,6 +143,7 @@ operatorTerm =
             , cons
             , listLoop
             , letExpression
+            , moduleAccess
             ]
         |. symbol ")"
 
@@ -584,11 +585,31 @@ letExpression =
 
 moduleTerm : Parser ModuleTerm
 moduleTerm =
+    Parser.oneOf
+        [ moduleLiteral |> Parser.map ModuleLiteralTerm
+        ]
+
+
+moduleLiteral : Parser ModuleLiteral
+moduleLiteral =
     Parser.succeed (\bindings -> { bindings = bindings })
         |. symbol "("
         |. keyword "module"
         |= seq moduleLetBinding
         |. symbol ")"
+
+
+moduleAccessKeyword : String
+moduleAccessKeyword =
+    "->"
+
+
+moduleAccess : Parser Term
+moduleAccess =
+    Parser.succeed ModuleAccess
+        |. keyword moduleAccessKeyword
+        |= Parser.lazy (\() -> moduleTerm)
+        |= varIntro
 
 
 moduleVarIntro : Parser ModuleVarName

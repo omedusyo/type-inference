@@ -82,9 +82,6 @@ type Term
     | -- ==Let==
       Let TermVarName Term Term
     | -- ==Module Access==
-      -- TODO: You should probably create some general Module Expression
-      --       Rename the ModuleTerm to ModuleLiteral, or ModuleForm...
-      --       Here you should use the module expression
       ModuleAccess ModuleTerm TermVarName
 
 
@@ -147,9 +144,7 @@ type alias ModuleVarName =
 
 
 
--- TODO: You should probably create some general Module Expression
---       Rename the ModuleTerm to ModuleLiteral, or ModuleForm...
---       The general Module Expression could either be
+-- TODO:  The general Module Expression could either be
 --           Module Form
 --        or Module Use (as a variable)
 --        or Functor Application to a Module Expression
@@ -157,7 +152,13 @@ type alias ModuleVarName =
 --          What sort of operations over functors would I want?
 
 
-type alias ModuleTerm =
+type ModuleTerm
+    = ModuleLiteralTerm ModuleLiteral
+    | ModuleUse ModuleVarName
+    | FunctorApplication
+
+
+type alias ModuleLiteral =
     { bindings : List ModuleLetBinding
     }
 

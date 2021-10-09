@@ -698,7 +698,22 @@ infer0 term =
 
 
 inferInterface : ModuleTerm -> InferenceContext Interface
-inferInterface module0 =
+inferInterface moduleTerm =
+    case moduleTerm of
+        ModuleLiteralTerm module0 ->
+            inferFromModuleLiteral module0
+
+        ModuleUse moduleName ->
+            -- TODO: What to do here? do we want interface variables?
+            Debug.todo ""
+
+        FunctorApplication ->
+            -- TODO: What to do here? do we want interface variables?
+            Debug.todo ""
+
+
+inferFromModuleLiteral : ModuleLiteral -> InferenceContext Interface
+inferFromModuleLiteral module0 =
     let
         inferBindings : List ModuleLetBinding -> InferenceContext (List InterfaceAssumption)
         inferBindings bindings0 =

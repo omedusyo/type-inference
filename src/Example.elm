@@ -466,7 +466,7 @@ listReturnType =
 -- Modules/Interfaces
 
 
-module0 : ModuleTerm
+module0 : ModuleLiteral
 module0 =
     { bindings =
         [ LetTerm "n" NatZero

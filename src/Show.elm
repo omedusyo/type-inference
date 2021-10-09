@@ -568,7 +568,21 @@ showFinalInfer term =
 
 
 showModuleTerm : ModuleTerm -> String
-showModuleTerm module0 =
+showModuleTerm moduleTerm =
+    case moduleTerm of
+        ModuleLiteralTerm module0 ->
+            showModuleLiteral module0
+
+        ModuleUse moduleName ->
+            String.concat [ "$", moduleName ]
+
+        FunctorApplication ->
+            -- TODO
+            Debug.todo ""
+
+
+showModuleLiteral : ModuleLiteral -> String
+showModuleLiteral module0 =
     let
         showModuleLetBinding : ModuleLetBinding -> String
         showModuleLetBinding binding =

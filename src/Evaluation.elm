@@ -446,7 +446,22 @@ evalModule1 env module0 =
 
 
 evalModule : ModuleTerm -> EvalStateful ModuleValue
-evalModule module0 =
+evalModule moduleTerm =
+    case moduleTerm of
+        ModuleLiteralTerm module0 ->
+            evalModuleLiteral module0
+
+        ModuleUse moduleName ->
+            -- TODO
+            Debug.todo ""
+
+        FunctorApplication ->
+            -- TODO
+            Debug.todo ""
+
+
+evalModuleLiteral : ModuleLiteral -> EvalStateful ModuleValue
+evalModuleLiteral module0 =
     let
         evalBindings : List ModuleLetBinding -> EvalStateful (List ModuleAssignment)
         evalBindings bindings0 =
