@@ -244,6 +244,9 @@ showEvaluationError error =
         UndefinedModule moduleVarName ->
             String.concat [ "Use of undefined module variable $", moduleVarName ]
 
+        UndefinedFunctor functorName ->
+            String.concat [ "Use of undefined functor variable $", functorName ]
+
         ExpectedPair ->
             "Expected Pair"
 

@@ -48,6 +48,7 @@ import Value exposing (..)
 type EvalError
     = UndefinedVar TermVarName
     | UndefinedModule ModuleVarName
+    | UndefinedFunctor FunctorVarName
     | ExpectedPair
     | ExpectedFunction
     | ExpectedLeftRight
@@ -200,6 +201,19 @@ moduleLookup moduleName =
 
                 Nothing ->
                     throwEvalError [ UndefinedModule moduleName ]
+        )
+
+
+functorLookup : FunctorVarName -> EvalStateful FunctorLiteral
+functorLookup functorName =
+    State.get0
+        (\env _ ->
+            case Value.lookupFunctorEnvironment functorName env of
+                Just val ->
+                    State.return val
+
+                Nothing ->
+                    throwEvalError [ UndefinedFunctor functorName ]
         )
 
 

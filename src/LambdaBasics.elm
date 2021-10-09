@@ -188,12 +188,12 @@ type InterfaceAssumption
 -- Functors
 
 
-type alias FunctorVarUse =
+type alias FunctorVarName =
     String
 
 
 type FunctorTerm
-    = FunctorVarUse FunctorVarUse
+    = FunctorVarUse FunctorVarName
     | FunctorLiteralTerm FunctorLiteral
 
 

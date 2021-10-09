@@ -14,12 +14,13 @@ module Value exposing
     , emptyTermEnvironment
     , extendModuleEnvironment
     , extendTermEnvironment
+    , lookupFunctorEnvironment
     , lookupModuleEnvironment
     , lookupTermEnvironment
     )
 
 import Dict exposing (Dict)
-import LambdaBasics exposing (ModuleTerm, ModuleVarName, Term, TermVarName, Type, TypeVarName)
+import LambdaBasics exposing (FunctorLiteral, FunctorVarName, ModuleTerm, ModuleVarName, Term, TermVarName, Type, TypeVarName)
 
 
 type Value
@@ -74,6 +75,7 @@ type ModuleAssignment
 type alias Environment =
     { termEnv : TermEnvironment
     , moduleEnv : ModuleEnvironment
+    , functorEnv : FunctorEnvironment
     }
 
 
@@ -81,6 +83,7 @@ emptyEnvironment : Environment
 emptyEnvironment =
     { termEnv = emptyTermEnvironment
     , moduleEnv = emptyModuleEnvironment
+    , functorEnv = emptyFunctorEnvironment
     }
 
 
@@ -189,4 +192,57 @@ extendModuleEnvironment : ModuleVarName -> ModuleValue -> Environment -> Environ
 extendModuleEnvironment varName module0 env =
     { env
         | moduleEnv = extendModuleEnvironment0 varName module0 env.moduleEnv
+    }
+
+
+
+-- ===Functor Environment===
+
+
+type alias FunctorEnvironment =
+    Dict FunctorVarName (List FunctorLiteral)
+
+
+emptyFunctorEnvironment : FunctorEnvironment
+emptyFunctorEnvironment =
+    Dict.empty
+
+
+lookupFunctorEnvironment0 : FunctorVarName -> FunctorEnvironment -> Maybe FunctorLiteral
+lookupFunctorEnvironment0 functorName env =
+    Dict.get functorName env
+        |> Maybe.andThen
+            (\functors ->
+                case functors of
+                    [] ->
+                        Nothing
+
+                    functor :: _ ->
+                        Just functor
+            )
+
+
+lookupFunctorEnvironment : FunctorVarName -> Environment -> Maybe FunctorLiteral
+lookupFunctorEnvironment functorName env =
+    lookupFunctorEnvironment0 functorName env.functorEnv
+
+
+extendFunctorEnvironment0 : FunctorVarName -> FunctorLiteral -> FunctorEnvironment -> FunctorEnvironment
+extendFunctorEnvironment0 functorName functor env =
+    Dict.update functorName
+        (\maybeBinding ->
+            case maybeBinding of
+                Just functors ->
+                    Just (functor :: functors)
+
+                Nothing ->
+                    Just [ functor ]
+        )
+        env
+
+
+extendFunctorEnvironment : FunctorVarName -> FunctorLiteral -> Environment -> Environment
+extendFunctorEnvironment functorName functor env =
+    { env
+        | functorEnv = extendFunctorEnvironment0 functorName functor env.functorEnv
     }
