@@ -651,6 +651,10 @@ infer term =
                             (updateContext0 (\context -> context |> popVarFromContext var))
                     )
 
+        -- ===Module Access===
+        ModuleAccess module0 var ->
+            Debug.todo ""
+
 
 inferAndClose : Term -> InferenceContext Type
 inferAndClose term =
@@ -687,3 +691,58 @@ infer0 term =
             (\( state, type0 ) ->
                 ( state.context, state.typeVarContext, type0 )
             )
+
+
+
+-- Module Inference
+
+
+inferInterface : ModuleTerm -> InferenceContext Interface
+inferInterface moduleTerm =
+    case moduleTerm of
+        ModuleLiteralTerm module0 ->
+            inferFromModuleLiteral module0
+
+        ModuleVarUse moduleName ->
+            -- TODO: What to do here? do we want interface variables?
+            Debug.todo ""
+
+        FunctorApplication ->
+            -- TODO: What to do here? do we want interface variables?
+            Debug.todo ""
+
+
+inferFromModuleLiteral : ModuleLiteral -> InferenceContext Interface
+inferFromModuleLiteral module0 =
+    let
+        inferBindings : List ModuleLetBinding -> InferenceContext (List InterfaceAssumption)
+        inferBindings bindings0 =
+            case bindings0 of
+                [] ->
+                    State.return []
+
+                binding :: bindings1 ->
+                    case binding of
+                        LetTerm var term0 ->
+                            inferAndClose term0
+                                |> State.andThen
+                                    (\type0 ->
+                                        State.second
+                                            (updateContext0
+                                                (\context ->
+                                                    context
+                                                        |> pushVarToContext var type0
+                                                )
+                                            )
+                                            (inferBindings bindings1)
+                                            |> State.map
+                                                (\assumptions1 ->
+                                                    AssumeTerm var type0 :: assumptions1
+                                                )
+                                    )
+
+                        _ ->
+                            Debug.todo ""
+    in
+    inferBindings module0.bindings
+        |> State.map (\assumptions -> { assumptions = assumptions })

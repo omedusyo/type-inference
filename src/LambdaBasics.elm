@@ -76,11 +76,13 @@ type Term
             }
         , arg : Term
         }
-      -- ==Freeze==
-    | Delay Term
+    | -- ==Freeze==
+      Delay Term
     | Force Term
-      -- ==Let==
-    | Let TermVarName Term Term
+    | -- ==Let==
+      Let TermVarName Term Term
+    | -- ==Module Access==
+      ModuleAccess ModuleTerm TermVarName
 
 
 type alias TypeVarName =
@@ -131,6 +133,59 @@ getTypeVars type0 =
         ForAll var type1 ->
             -- TODO: I probably won't make use of this in let polymorphism
             Debug.todo ""
+
+
+
+-- Module
+
+
+type alias ModuleVarName =
+    String
+
+
+
+-- TODO:  The general Module Expression could either be
+--           Module Form
+--        or Module Use (as a variable)
+--        or Functor Application to a Module Expression
+--       q. Will we have Functor expressions? Hopefully not
+--          What sort of operations over functors would I want?
+
+
+type ModuleTerm
+    = ModuleLiteralTerm ModuleLiteral
+    | ModuleVarUse ModuleVarName
+    | FunctorApplication
+
+
+type alias ModuleLiteral =
+    { bindings : List ModuleLetBinding
+    }
+
+
+type ModuleLetBinding
+    = LetTerm TermVarName Term
+    | LetType TypeVarName Type
+    | LetModule ModuleVarName ModuleTerm
+
+
+
+-- Interface
+
+
+type alias InterfaceVarName =
+    String
+
+
+type alias Interface =
+    { assumptions : List InterfaceAssumption
+    }
+
+
+type InterfaceAssumption
+    = AssumeTerm TermVarName Type
+    | AssumeType TypeVarName -- There should be a second argument that's called Kind
+    | AssumeModule InterfaceVarName Interface
 
 
 

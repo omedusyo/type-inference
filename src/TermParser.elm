@@ -143,6 +143,7 @@ operatorTerm =
             , cons
             , listLoop
             , letExpression
+            , moduleAccess
             ]
         |. symbol ")"
 
@@ -576,3 +577,73 @@ letExpression =
         |= binding
             varIntro
             (Parser.lazy (\() -> term))
+
+
+
+-- ===Module===
+
+
+moduleVarIntro : Parser ModuleVarName
+moduleVarIntro =
+    varIntro
+
+
+moduleVarUse : Parser ModuleTerm
+moduleVarUse =
+    Parser.succeed ModuleVarUse
+        |. Parser.symbol "$"
+        |= moduleVarIntro
+
+
+moduleLiteral : Parser ModuleLiteral
+moduleLiteral =
+    Parser.succeed (\bindings -> { bindings = bindings })
+        |. symbol "("
+        |. keyword "module"
+        |= seq moduleLetBinding
+        |. symbol ")"
+
+
+moduleTerm : Parser ModuleTerm
+moduleTerm =
+    Parser.oneOf
+        [ moduleLiteral |> Parser.map ModuleLiteralTerm
+        , moduleVarUse
+        ]
+
+
+moduleAccessKeyword : String
+moduleAccessKeyword =
+    "->"
+
+
+moduleAccess : Parser Term
+moduleAccess =
+    Parser.succeed ModuleAccess
+        |. keyword moduleAccessKeyword
+        |= Parser.lazy (\() -> moduleTerm)
+        |= varIntro
+
+
+moduleLetBinding : Parser ModuleLetBinding
+moduleLetBinding =
+    Parser.succeed (\x -> x)
+        |. symbol "("
+        |= Parser.oneOf
+            [ Parser.succeed (\var term0 -> LetTerm var term0)
+                |. keyword "let-term"
+                |= varIntro
+                |= term
+            , Parser.succeed (\var module0 -> LetModule var module0)
+                |. keyword "let-module"
+                |= moduleVarIntro
+                |= Parser.lazy (\() -> moduleTerm)
+
+            -- TODO: types
+            ]
+        |. symbol ")"
+
+
+parseModuleTerm : String -> Result TermParsingError ModuleTerm
+parseModuleTerm input =
+    Parser.run moduleTerm input

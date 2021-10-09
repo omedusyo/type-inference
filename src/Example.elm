@@ -460,3 +460,25 @@ listReturn =
 
 listReturnType =
     infer0 listReturn
+
+
+
+-- Modules/Interfaces
+
+
+module0 : ModuleLiteral
+module0 =
+    { bindings =
+        [ LetTerm "n" NatZero
+        , LetTerm "f" (Abstraction "x" (Pair (VarUse "x") (VarUse "n")))
+        ]
+    }
+
+
+interface0 : Interface
+interface0 =
+    { assumptions =
+        [ AssumeTerm "n" LambdaNat
+        , AssumeTerm "f" (ForAll 0 (Arrow (VarType 0) (Product (VarType 0) LambdaNat)))
+        ]
+    }

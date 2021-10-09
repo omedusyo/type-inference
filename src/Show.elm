@@ -165,6 +165,15 @@ showTerm term =
                 , " })"
                 ]
 
+        ModuleAccess module0 field ->
+            String.concat
+                [ "(-> "
+                , showModuleTerm module0
+                , " "
+                , field
+                , ")"
+                ]
+
 
 showTermEnvironment : TermEnvironment -> String
 showTermEnvironment env =
@@ -179,6 +188,94 @@ showTermEnvironment env =
                     Nothing ->
                         []
             )
+        |> String.join ", "
+
+
+showModuleEnvironment : ModuleEnvironment -> String
+showModuleEnvironment env =
+    env
+        |> Dict.toList
+        |> List.concatMap
+            (\( moduleName, modules ) ->
+                case List.head modules of
+                    Just moduleValue ->
+                        [ String.concat [ moduleName, " := ", showModuleValue moduleValue ] ]
+
+                    Nothing ->
+                        []
+            )
+        |> String.join ", "
+
+
+showEnvironment : Environment -> String
+showEnvironment env =
+    String.concat
+        [ if not (Dict.isEmpty env.moduleEnv) then
+            String.concat
+                [ "["
+                , showModuleEnvironment env.moduleEnv
+                , "]"
+                ]
+
+          else
+            ""
+        , if not (Dict.isEmpty env.termEnv) then
+            String.concat
+                [ "["
+                , showTermEnvironment env.termEnv
+                , "]"
+                ]
+
+          else
+            ""
+        ]
+
+
+
+-- ===Evaluation Errors===
+
+
+showEvaluationError : EvalError -> String
+showEvaluationError error =
+    case error of
+        UndefinedVar termVarName ->
+            String.concat [ "Use of undefined variable $", termVarName ]
+
+        UndefinedModule moduleVarName ->
+            String.concat [ "Use of undefined module variable $", moduleVarName ]
+
+        ExpectedPair ->
+            "Expected Pair"
+
+        ExpectedFunction ->
+            "Expected Function"
+
+        ExpectedLeftRight ->
+            "Expected Left/Right"
+
+        ExpectedBoolean ->
+            "Expected Boolean"
+
+        ExpectedNat ->
+            "Expected Number"
+
+        ExpectedList ->
+            "Expected List"
+
+        FailedToForceThunk thunkId ->
+            String.concat [ "Failed to force thunk with id := ", String.fromInt thunkId ]
+
+        ExpectedThunkClosure ->
+            "Expected Thunk Closure"
+
+        UnknownModuleField field ->
+            String.concat [ "Unknown module-field access := ", field ]
+
+
+showEvaluationErrors : List EvalError -> String
+showEvaluationErrors errors =
+    errors
+        |> List.map showEvaluationError
         |> String.join ", "
 
 
@@ -200,17 +297,16 @@ showValue val =
 
         Closure { env, var, body } ->
             String.concat
-                [ "<"
-                , showTermEnvironment env
-                , if Dict.isEmpty env then
-                    "(fn { "
+                [ "(fn "
 
-                  else
-                    " |- (fn { "
+                -- TODO: Expose this when you want to see the whole environment, but for even small programs this is too big.
+                -- , showEnvironment env
+                , "[...]"
+                , " { "
                 , var
                 , " . "
                 , showTerm body
-                , " })>"
+                , " })"
                 ]
 
         TrueValue ->
@@ -282,7 +378,7 @@ showThunks { thunks } =
                             [ "<thunk-id(frozen) := "
                             , String.fromInt thunkId
                             , "; "
-                            , showTermEnvironment env
+                            , showEnvironment env
                             , " | "
                             , showTerm body
                             , ">"
@@ -480,3 +576,93 @@ showFinalInfer term =
             typeErrors
                 |> List.map showTypeError
                 |> String.join ", "
+
+
+
+-- Modules
+
+
+showModuleTerm : ModuleTerm -> String
+showModuleTerm moduleTerm =
+    case moduleTerm of
+        ModuleLiteralTerm module0 ->
+            showModuleLiteral module0
+
+        ModuleVarUse moduleName ->
+            String.concat [ "$", moduleName ]
+
+        FunctorApplication ->
+            -- TODO
+            Debug.todo ""
+
+
+showModuleLiteral : ModuleLiteral -> String
+showModuleLiteral module0 =
+    let
+        showModuleLetBinding : ModuleLetBinding -> String
+        showModuleLetBinding binding =
+            case binding of
+                LetTerm var term ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showTerm term
+                        , ")"
+                        ]
+
+                LetModule var module1 ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showModuleTerm module1
+                        , ")"
+                        ]
+
+                _ ->
+                    Debug.todo ""
+    in
+    String.concat
+        [ "(module "
+        , module0.bindings
+            |> List.map showModuleLetBinding
+            |> String.join " "
+        , ")"
+        ]
+
+
+showModuleValue : ModuleValue -> String
+showModuleValue moduleValue =
+    let
+        showModuleValueAssignment : ModuleAssignment -> String
+        showModuleValueAssignment binding =
+            case binding of
+                AssignValue var value ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showValue value
+                        , ")"
+                        ]
+
+                AssignModuleValue var moduleValue1 ->
+                    String.concat
+                        [ "("
+                        , var
+                        , " "
+                        , showModuleValue moduleValue1
+                        , ")"
+                        ]
+
+                _ ->
+                    Debug.todo ""
+    in
+    String.concat
+        [ "(module "
+        , moduleValue.assignments
+            |> List.map showModuleValueAssignment
+            |> String.join " "
+        , ")"
+        ]

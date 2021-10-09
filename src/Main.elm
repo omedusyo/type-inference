@@ -10,24 +10,229 @@ import Evaluation as L exposing (ThunkContext)
 import Html as H exposing (Html)
 import Inference as L
 import LambdaBasics as L exposing (Term, Type)
+import List.Extra as List
 import Return exposing (Return)
 import Show as L
 import StatefulWithErr as State
 import TermParser as L
 import TypeVarContext as L
-import Value as L exposing (Value)
+import Value as Value exposing (Value)
 
 
 blue =
     E.rgb255 142 207 245
 
 
+insertAfter : Int -> a -> List a -> List a
+insertAfter n a xs0 =
+    if n == -1 then
+        a :: xs0
 
+    else
+        case xs0 of
+            [] ->
+                []
+
+            x :: xs1 ->
+                x :: insertAfter (n - 1) a xs1
+
+
+
+-- insertAfter 1 a [x, y, z]
+-- x :: insertAfter 0 a [y, z]
+-- x :: a :: y :: z :: []
 -- ===MODEL===
 
 
 type alias Model =
-    { input : String
+    { bindings : List Binding
+    , moduleModel : ModuleModel
+    , tab : Tab
+    }
+
+
+type alias ModuleModel =
+    { moduleInput : String
+    , -- Nothing means haven't parsed anything yet
+      parsedModule : Maybe (Result L.TermParsingError L.ModuleTerm)
+    , evaledModule : Maybe (Result (List L.EvalError) Value.ModuleValue)
+    , env : Value.Environment
+    , -- ===REPL===
+      replInput : String
+    , parsedTerm : Maybe (Result L.TermParsingError Term)
+    , evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
+    }
+
+
+parseModule : ModuleModel -> ModuleModel
+parseModule model =
+    { model
+        | parsedModule = Just (L.parseModuleTerm model.moduleInput)
+    }
+
+
+evalModule : ModuleModel -> ModuleModel
+evalModule model =
+    { model
+        | evaledModule =
+            case model.parsedModule of
+                Just parsedModule ->
+                    case parsedModule of
+                        Ok moduleTerm ->
+                            Just (L.evalModule0 moduleTerm)
+
+                        Err _ ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
+    }
+
+
+openModule : ModuleModel -> ModuleModel
+openModule model =
+    { model
+        | env =
+            case model.parsedModule of
+                Just parsedModule ->
+                    case parsedModule of
+                        Ok moduleTerm ->
+                            let
+                                evaledModuleResult =
+                                    L.evalModule0 moduleTerm
+                            in
+                            case evaledModuleResult of
+                                Ok moduleVal ->
+                                    L.openModule moduleVal Value.emptyEnvironment
+
+                                Err _ ->
+                                    Value.emptyEnvironment
+
+                        Err _ ->
+                            Value.emptyEnvironment
+
+                Nothing ->
+                    Value.emptyEnvironment
+    }
+
+
+initModuleModel : ModuleModel
+initModuleModel =
+    let
+        input =
+            """(module
+    (let-module Nat (module
+        (let-term plus (fn { x y .
+                 (nat-loop $x $y { i state .
+                    (succ $state)
+                 })
+        })) 
+   
+        (let-term multiply (fn { x y .
+                 (nat-loop $x 0n0 { i state .
+                     (@ $plus $y $state)
+                 })
+        }))
+   
+       (let-term exp (fn { x y .
+                (nat-loop $y 0n1 { i state .
+                      (@ $multiply $x $state)
+                })
+       }))
+   ))
+
+   (let-module List (module
+       (let-term map (fn { f xs .
+                (list-loop $xs empty-list { x ys .
+                      (cons (@ $f $x) $ys)
+                })
+       }))
+
+       (let-term concat (fn { xs ys .
+               (list-loop $xs $ys { x state .
+                     (cons $x $state)
+               })
+       }))
+
+      (let-term singleton (fn { x .
+               (cons $x empty-list)
+      }))
+
+      (let-term and-then (fn { f xs .
+               (list-loop $xs empty-list { x state .
+                     (@ $concat (@ $f $x) $state)
+               }) 
+      }))
+
+   ))
+            
+       (let-term range-reverse (fn { n .
+                (nat-loop $n empty-list { i xs .
+                       (cons $i $xs)
+                })
+       }))
+
+   (let-term square (fn { x . (@ (-> $Nat multiply) $x $x) }))
+)
+"""
+    in
+    { moduleInput = input
+    , parsedModule = Nothing
+    , evaledModule = Nothing
+    , env = Value.emptyEnvironment
+    , replInput = ""
+    , parsedTerm = Nothing
+    , evaledTerm = Nothing
+    }
+        |> parseModule
+        |> evalModule
+        |> openModule
+
+
+type Tab
+    = ProgramBindings
+    | Module
+    | Help
+
+
+tabs : List Tab
+tabs =
+    [ ProgramBindings, Module, Help ]
+
+
+initTab : Tab
+initTab =
+    Module
+
+
+tabToString : Tab -> String
+tabToString tab =
+    case tab of
+        ProgramBindings ->
+            "Program"
+
+        Module ->
+            "Module"
+
+        Help ->
+            "Help"
+
+
+initModel : Model
+initModel =
+    { bindings = [ exampleBinding ]
+    , moduleModel = initModuleModel
+    , tab = initTab
+    }
+
+
+type alias BindingName =
+    String
+
+
+type alias Binding =
+    { name : BindingName
+    , input : String
     , -- Nothing means haven't parsed anything yet
       parsedTerm : Maybe (Result L.TermParsingError Term)
     , -- Nothing means haven't evaled the term yet
@@ -36,8 +241,18 @@ type alias Model =
     }
 
 
-initModel : Model
-initModel =
+initBinding : Binding
+initBinding =
+    { name = ""
+    , input = ""
+    , parsedTerm = Nothing
+    , evaledTerm = Nothing
+    , inferedType = Nothing
+    }
+
+
+exampleBinding : Binding
+exampleBinding =
     let
         input0 =
             """(let 
@@ -89,7 +304,8 @@ initModel =
         termResult =
             L.parseTerm input
     in
-    { input = input
+    { name = "foo"
+    , input = input
     , parsedTerm = Just termResult
     , evaledTerm =
         case termResult of
@@ -112,13 +328,32 @@ initModel =
 -- ===MSG===
 
 
+type alias BindingPosition =
+    Int
+
+
 type Msg
+    = ChangeTab Tab
+    | BindingMsg BindingPosition BindingMsg
+    | ModuleMsg ModuleMsg
+    | InsertBindingAtTheStart
+    | InsertBindingAfter BindingPosition
+
+
+type BindingMsg
     = InputChanged String
     | InferButtonClicked
     | RunButtonClicked
 
 
-isParsedSuccesfully : Model -> Bool
+type ModuleMsg
+    = ModuleInputChanged String
+    | ModuleRunButtonClicked
+    | ReplInputChanged String
+    | ReplRunButtonClicked
+
+
+isParsedSuccesfully : Binding -> Bool
 isParsedSuccesfully model =
     case model.parsedTerm of
         Just (Ok term) ->
@@ -128,8 +363,58 @@ isParsedSuccesfully model =
             False
 
 
+isModuleParsedSuccesfully : ModuleModel -> Bool
+isModuleParsedSuccesfully model =
+    case model.parsedModule of
+        Just (Ok term) ->
+            True
+
+        _ ->
+            False
+
+
 update : Msg -> Model -> Return Msg Model
 update msg model =
+    case msg of
+        ChangeTab tab ->
+            { model | tab = tab }
+                |> Return.singleton
+
+        BindingMsg n bindingMsg ->
+            case List.getAt n model.bindings of
+                Just binding ->
+                    updateBinding bindingMsg binding
+                        |> Return.map
+                            (\newBinding ->
+                                { model
+                                    | bindings = List.setAt n newBinding model.bindings
+                                }
+                            )
+                        |> Return.mapCmd (BindingMsg n)
+
+                Nothing ->
+                    model
+                        |> Return.singleton
+
+        ModuleMsg moduleMsg ->
+            updateModuleModel moduleMsg model.moduleModel
+                |> Return.map
+                    (\moduleModel ->
+                        { model | moduleModel = moduleModel }
+                    )
+                |> Return.mapCmd ModuleMsg
+
+        InsertBindingAtTheStart ->
+            { model | bindings = initBinding :: model.bindings }
+                |> Return.singleton
+
+        InsertBindingAfter n ->
+            { model | bindings = insertAfter n initBinding model.bindings }
+                |> Return.singleton
+
+
+updateBinding : BindingMsg -> Binding -> Return BindingMsg Binding
+updateBinding msg model =
     case msg of
         InputChanged input ->
             { model
@@ -161,29 +446,72 @@ update msg model =
                         |> Return.singleton
 
 
+updateModuleModel : ModuleMsg -> ModuleModel -> Return ModuleMsg ModuleModel
+updateModuleModel msg model =
+    case msg of
+        ModuleInputChanged input ->
+            { model
+                | moduleInput = input
+                , parsedModule = Just (L.parseModuleTerm input)
+                , evaledTerm = Nothing
+                , env = Value.emptyEnvironment
+            }
+                |> Return.singleton
+
+        ModuleRunButtonClicked ->
+            { model
+                | evaledTerm = Nothing
+                , env = Value.emptyEnvironment
+            }
+                |> evalModule
+                |> openModule
+                |> Return.singleton
+
+        ReplInputChanged input ->
+            let
+                parsedTerm =
+                    Just (L.parseTerm input)
+            in
+            { model
+                | replInput = input
+                , parsedTerm = parsedTerm
+                , evaledTerm = Nothing
+            }
+                |> Return.singleton
+
+        ReplRunButtonClicked ->
+            case model.parsedTerm of
+                Just (Ok term) ->
+                    { model | evaledTerm = Just (L.eval1 model.env term) }
+                        |> Return.singleton
+
+                _ ->
+                    model
+                        |> Return.singleton
+
+
 
 -- ===VIEW===
 
 
-view : Model -> Element Msg
-view model =
+buttonStyle =
+    [ Background.color blue
+    , E.paddingXY 9 4
+    , Border.rounded 2
+    ]
+
+
+viewBinding : Binding -> Element BindingMsg
+viewBinding binding =
     let
         heightPx =
-            450
-
-        buttonStyle =
-            [ Background.color blue
-            , E.paddingXY 9 4
-            , Border.rounded 2
-            ]
+            300
     in
-    E.column [ E.width E.fill, E.padding 10 ]
-        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
-        , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
-        , E.row []
+    E.column [ E.width E.fill ]
+        [ E.row []
             [ Input.button buttonStyle
                 { onPress =
-                    if isParsedSuccesfully model then
+                    if isParsedSuccesfully binding then
                         Just RunButtonClicked
 
                     else
@@ -192,7 +520,7 @@ view model =
                 }
             , Input.button buttonStyle
                 { onPress =
-                    if isParsedSuccesfully model then
+                    if isParsedSuccesfully binding then
                         Just InferButtonClicked
 
                     else
@@ -200,13 +528,14 @@ view model =
                 , label = E.text "Infer"
                 }
             ]
+        , E.el [] (E.text binding.name)
         , E.row [ E.width E.fill, E.paddingEach { top = 5, right = 0, bottom = 0, left = 0 } ]
             [ Input.multiline
                 [ E.height (E.px heightPx)
                 , E.width E.fill
                 ]
                 { onChange = InputChanged
-                , text = model.input
+                , text = binding.input
                 , placeholder = Nothing
                 , label = Input.labelHidden "what is this?"
                 , spellcheck = False
@@ -222,7 +551,7 @@ view model =
                     , E.text
                         (String.concat
                             [ "term = "
-                            , case model.parsedTerm of
+                            , case binding.parsedTerm of
                                 Nothing ->
                                     ""
 
@@ -236,7 +565,7 @@ view model =
                             ]
                         )
                     , E.el []
-                        (case model.evaledTerm of
+                        (case binding.evaledTerm of
                             Nothing ->
                                 E.text ""
 
@@ -264,12 +593,12 @@ view model =
                                                 )
                                             ]
 
-                                    Err err ->
-                                        E.text "Evaluation Error"
+                                    Err errors ->
+                                        E.text (L.showEvaluationErrors errors)
                         )
                     , E.text "TYPE INFERENCE"
                     , E.column []
-                        (case model.inferedType of
+                        (case binding.inferedType of
                             Nothing ->
                                 []
 
@@ -335,6 +664,137 @@ view model =
                     ]
                 )
             ]
+        ]
+
+
+view : Model -> Element Msg
+view model =
+    E.column [ E.width E.fill, E.padding 10 ]
+        [ E.row []
+            (tabs
+                |> List.map
+                    (\tab ->
+                        Input.button buttonStyle
+                            { onPress = Just (ChangeTab tab)
+                            , label = E.text (tabToString tab)
+                            }
+                    )
+            )
+        , case model.tab of
+            ProgramBindings ->
+                E.column [ E.width E.fill ]
+                    [ Input.button buttonStyle
+                        { onPress = Just InsertBindingAtTheStart
+                        , label = E.text "+"
+                        }
+                    , E.column [ E.width E.fill ]
+                        (model.bindings
+                            |> List.indexedMap
+                                (\i binding ->
+                                    E.column [ E.width E.fill ]
+                                        [ viewBinding binding |> E.map (BindingMsg i)
+                                        , Input.button buttonStyle
+                                            { onPress = Just (InsertBindingAfter i)
+                                            , label = E.text "+"
+                                            }
+                                        ]
+                                )
+                        )
+                    ]
+
+            Module ->
+                viewModule model.moduleModel
+                    |> E.map ModuleMsg
+
+            Help ->
+                viewHelp
+        ]
+
+
+viewModule : ModuleModel -> Element ModuleMsg
+viewModule moduleModel =
+    E.column [ E.width E.fill ]
+        [ E.column [ E.width E.fill ]
+            [ Input.button buttonStyle
+                { onPress =
+                    Just ModuleRunButtonClicked
+                , label = E.text "Run"
+                }
+            , Input.multiline
+                [ E.height (E.px 700)
+                , E.width E.fill
+                ]
+                { onChange = ModuleInputChanged
+                , text = moduleModel.moduleInput
+                , placeholder = Nothing
+                , label = Input.labelHidden "what is this?"
+                , spellcheck = False
+                }
+            ]
+        , E.el [ E.width E.fill ]
+            (case moduleModel.parsedModule of
+                Just parsingModuleResult ->
+                    case parsingModuleResult of
+                        Ok module0 ->
+                            -- TODO: shows the parsed output of the module
+                            -- E.text (L.showModuleTerm module0)
+                            E.column [ E.width E.fill ]
+                                [ Input.button buttonStyle
+                                    { onPress =
+                                        Just ReplRunButtonClicked
+                                    , label = E.text "Run"
+                                    }
+                                , Input.multiline
+                                    [ E.height (E.px 45)
+                                    , E.width E.fill
+                                    ]
+                                    { onChange = ReplInputChanged
+                                    , text = moduleModel.replInput
+                                    , placeholder = Nothing
+                                    , label = Input.labelHidden "what is this?"
+                                    , spellcheck = False
+                                    }
+                                , case moduleModel.parsedTerm of
+                                    Just parsingResult ->
+                                        case parsingResult of
+                                            Ok term ->
+                                                case moduleModel.evaledTerm of
+                                                    Just evaledResult ->
+                                                        case evaledResult of
+                                                            Ok ( thunkContext, val ) ->
+                                                                E.column []
+                                                                    [ E.text (L.showValue val)
+
+                                                                    -- , E.text ("env := " ++ L.showEnvironment moduleModel.env)
+                                                                    ]
+
+                                                            Err errors ->
+                                                                E.text (L.showEvaluationErrors errors)
+
+                                                    Nothing ->
+                                                        E.text ""
+
+                                            Err err ->
+                                                E.text "Parsing error"
+
+                                    Nothing ->
+                                        E.text ""
+                                ]
+
+                        Err _ ->
+                            E.text "Parsing error"
+
+                Nothing ->
+                    E.text ""
+            )
+        ]
+
+
+viewHelp : Element Msg
+viewHelp =
+    E.column [ E.width E.fill ]
+        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
+        , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
         , E.text "SYNTAX"
         , E.text "Constants"
         , E.text "  true, false"

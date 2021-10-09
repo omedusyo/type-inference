@@ -47,6 +47,7 @@ import Value exposing (..)
 
 type EvalError
     = UndefinedVar TermVarName
+    | UndefinedModule ModuleVarName
     | ExpectedPair
     | ExpectedFunction
     | ExpectedLeftRight
@@ -55,6 +56,7 @@ type EvalError
     | ExpectedList
     | FailedToForceThunk ThunkId
     | ExpectedThunkClosure
+    | UnknownModuleField TermVarName
 
 
 
@@ -66,7 +68,7 @@ type alias MutState =
 
 
 type alias ReadOnlyState =
-    TermEnvironment
+    Environment
 
 
 type alias EvalStateful a =
@@ -80,7 +82,7 @@ initMutState =
 
 initReadOnlyState : ReadOnlyState
 initReadOnlyState =
-    emptyTermEnvironment
+    emptyEnvironment
 
 
 
@@ -98,7 +100,7 @@ emptyThunkContext =
     { nextThunkId = 0, thunks = Dict.empty }
 
 
-storeNewThunk : TermEnvironment -> Term -> EvalStateful ThunkId
+storeNewThunk : Environment -> Term -> EvalStateful ThunkId
 storeNewThunk env body =
     State.create
         (\_ ({ thunkContext } as state) ->
@@ -179,12 +181,25 @@ varLookup : TermVarName -> EvalStateful Value
 varLookup varName =
     State.get0
         (\env _ ->
-            case Value.lookupEnvironment varName env of
+            case Value.lookupTermEnvironment varName env of
                 Just val ->
                     State.return val
 
                 Nothing ->
                     throwEvalError [ UndefinedVar varName ]
+        )
+
+
+moduleLookup : ModuleVarName -> EvalStateful ModuleValue
+moduleLookup moduleName =
+    State.get0
+        (\env _ ->
+            case Value.lookupModuleEnvironment moduleName env of
+                Just val ->
+                    State.return val
+
+                Nothing ->
+                    throwEvalError [ UndefinedModule moduleName ]
         )
 
 
@@ -195,6 +210,12 @@ varLookup varName =
 eval0 : Term -> Result (List EvalError) ( ThunkContext, Value )
 eval0 term =
     State.run (eval term) initReadOnlyState initMutState
+        |> Result.map (\( { thunkContext }, value ) -> ( thunkContext, value ))
+
+
+eval1 : Environment -> Term -> Result (List EvalError) ( ThunkContext, Value )
+eval1 env term =
+    State.run (eval term) env initMutState
         |> Result.map (\( { thunkContext }, value ) -> ( thunkContext, value ))
 
 
@@ -218,8 +239,8 @@ eval term =
                                 State.withReadOnly
                                     (\env _ ->
                                         env
-                                            |> extendEnvironment var0 val0
-                                            |> extendEnvironment var1 val1
+                                            |> extendTermEnvironment var0 val0
+                                            |> extendTermEnvironment var1 val1
                                     )
                                     (eval body)
 
@@ -230,6 +251,7 @@ eval term =
         Abstraction var body ->
             State.get0
                 (\env _ ->
+                    -- Note that this captures both term and module environments
                     State.return (Closure { env = env, var = var, body = body })
                 )
 
@@ -244,7 +266,7 @@ eval term =
                                         (\argEvaled ->
                                             State.withReadOnly
                                                 (\_ _ ->
-                                                    closure.env |> extendEnvironment var argEvaled
+                                                    closure.env |> extendTermEnvironment var argEvaled
                                                 )
                                                 (eval body)
                                         )
@@ -262,17 +284,16 @@ eval term =
                 |> State.map RightValue
 
         Case { arg, leftVar, leftBody, rightVar, rightBody } ->
-            -- Debug.todo ""
             eval arg
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             LeftValue val ->
-                                State.withReadOnly (\env _ -> env |> extendEnvironment leftVar val)
+                                State.withReadOnly (\env _ -> env |> extendTermEnvironment leftVar val)
                                     (eval leftBody)
 
                             RightValue val ->
-                                State.withReadOnly (\env _ -> env |> extendEnvironment rightVar val)
+                                State.withReadOnly (\env _ -> env |> extendTermEnvironment rightVar val)
                                     (eval rightBody)
 
                             _ ->
@@ -335,8 +356,8 @@ eval term =
                                                             State.withReadOnly
                                                                 (\env _ ->
                                                                     env
-                                                                        |> extendEnvironment loop.indexVar (NatValue natVal1)
-                                                                        |> extendEnvironment loop.stateVar prevVal
+                                                                        |> extendTermEnvironment loop.indexVar (NatValue natVal1)
+                                                                        |> extendTermEnvironment loop.stateVar prevVal
                                                                 )
                                                                 (eval loop.body)
                                                         )
@@ -380,8 +401,8 @@ eval term =
                                                                     State.withReadOnly
                                                                         (\env _ ->
                                                                             env
-                                                                                |> extendEnvironment loop.listElementVar headValue
-                                                                                |> extendEnvironment loop.stateVar prevVal
+                                                                                |> extendTermEnvironment loop.listElementVar headValue
+                                                                                |> extendTermEnvironment loop.stateVar prevVal
                                                                         )
                                                                         (eval loop.body)
                                                                 )
@@ -419,6 +440,149 @@ eval term =
             eval arg
                 |> State.andThen
                     (\argVal ->
-                        State.withReadOnly (\env _ -> env |> extendEnvironment var argVal)
+                        State.withReadOnly (\env _ -> env |> extendTermEnvironment var argVal)
                             (eval body)
                     )
+
+        ModuleAccess module0 field ->
+            evalModule module0
+                |> State.andThen
+                    (\moduleValue ->
+                        moduleValue |> lookupModuleTermField field
+                    )
+
+
+lookupModuleTermField : TermVarName -> ModuleValue -> EvalStateful Value
+lookupModuleTermField field moduleValue =
+    let
+        lookup : List ModuleAssignment -> EvalStateful Value
+        lookup assignments0 =
+            case assignments0 of
+                [] ->
+                    throwEvalError [ UnknownModuleField field ]
+
+                assignment :: assignments1 ->
+                    case assignment of
+                        AssignValue field0 val ->
+                            if field0 == field then
+                                State.return val
+
+                            else
+                                lookup assignments1
+
+                        AssignType _ _ ->
+                            lookup assignments1
+
+                        AssignModuleValue _ _ ->
+                            -- TODO: Should I be doing something more here?
+                            lookup assignments1
+    in
+    lookup moduleValue.assignments
+
+
+evalModule0 : ModuleTerm -> Result (List EvalError) ModuleValue
+evalModule0 module0 =
+    State.run (evalModule module0) initReadOnlyState initMutState
+        |> Result.map (\( {}, value ) -> value)
+
+
+evalModule1 : Environment -> ModuleTerm -> Result (List EvalError) ModuleValue
+evalModule1 env module0 =
+    State.run (evalModule module0) env initMutState
+        |> Result.map (\( {}, value ) -> value)
+
+
+evalModule : ModuleTerm -> EvalStateful ModuleValue
+evalModule moduleTerm =
+    case moduleTerm of
+        ModuleLiteralTerm module0 ->
+            evalModuleLiteral module0
+
+        ModuleVarUse moduleName ->
+            moduleLookup moduleName
+
+        FunctorApplication ->
+            -- TODO
+            Debug.todo ""
+
+
+evalModuleLiteral : ModuleLiteral -> EvalStateful ModuleValue
+evalModuleLiteral module0 =
+    let
+        evalBindings : List ModuleLetBinding -> EvalStateful (List ModuleAssignment)
+        evalBindings bindings0 =
+            case bindings0 of
+                [] ->
+                    State.return []
+
+                binding :: bindings1 ->
+                    case binding of
+                        LetTerm varName term ->
+                            eval term
+                                |> State.andThen
+                                    (\val ->
+                                        State.withReadOnly
+                                            (\env _ -> env |> extendTermEnvironment varName val)
+                                            (evalBindings bindings1)
+                                            |> State.map
+                                                (\assignments1 ->
+                                                    AssignValue varName val :: assignments1
+                                                )
+                                    )
+
+                        LetType typeVar type0 ->
+                            -- TODO: what to do here? Can't do much yet. Need to make types part of the environment.
+                            --       For now just skip it.
+                            evalBindings bindings1
+
+                        LetModule moduleName moduleTerm ->
+                            evalModule moduleTerm
+                                |> State.andThen
+                                    (\moduleValue ->
+                                        State.withReadOnly
+                                            (\env _ -> env |> extendModuleEnvironment moduleName moduleValue)
+                                            (evalBindings bindings1)
+                                            |> State.map
+                                                (\assignments1 ->
+                                                    AssignModuleValue moduleName moduleValue :: assignments1
+                                                )
+                                    )
+    in
+    evalBindings module0.bindings
+        |> State.map (\assignments -> { assignments = assignments })
+
+
+
+-- Runs a computation in an environment with opened module
+
+
+evalInModule : ModuleValue -> EvalStateful a -> EvalStateful a
+evalInModule moduleValue st =
+    State.withReadOnly
+        (\env _ ->
+            openModule moduleValue env
+        )
+        st
+
+
+openModule : ModuleValue -> Environment -> Environment
+openModule moduleValue0 =
+    let
+        f : List ModuleAssignment -> Environment -> Environment
+        f assignments0 env =
+            case assignments0 of
+                [] ->
+                    env
+
+                assignment :: assignments1 ->
+                    case assignment of
+                        AssignValue varName value ->
+                            f assignments1 (extendTermEnvironment varName value env)
+
+                        AssignType typeVar type0 ->
+                            f assignments1 env
+
+                        AssignModuleValue moduleName moduleValue1 ->
+                            f assignments1 (extendModuleEnvironment moduleName moduleValue1 env)
+    in
+    f moduleValue0.assignments

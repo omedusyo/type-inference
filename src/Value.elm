@@ -1,24 +1,32 @@
 module Value exposing
-    ( ListValue(..)
+    ( Environment
+    , ListValue(..)
+    , ModuleAssignment(..)
+    , ModuleEnvironment
+    , ModuleValue
     , NatValue(..)
     , TermEnvironment
     , Thunk(..)
     , ThunkId
     , Value(..)
+    , emptyEnvironment
+    , emptyModuleEnvironment
     , emptyTermEnvironment
-    , extendEnvironment
-    , lookupEnvironment
+    , extendModuleEnvironment
+    , extendTermEnvironment
+    , lookupModuleEnvironment
+    , lookupTermEnvironment
     )
 
 import Dict exposing (Dict)
-import LambdaBasics exposing (Term, TermVarName)
+import LambdaBasics exposing (ModuleTerm, ModuleVarName, Term, TermVarName, Type, TypeVarName)
 
 
 type Value
     = -- ==Cartesian Product==
       PairValue Value Value
       -- ==Function Space==
-    | Closure { env : TermEnvironment, var : TermVarName, body : Term }
+    | Closure { env : Environment, var : TermVarName, body : Term }
       -- ==Coproduct==
     | LeftValue Value
     | RightValue Value
@@ -48,8 +56,32 @@ type alias ThunkId =
 
 
 type Thunk
-    = DelayedThunk { env : TermEnvironment, body : Term }
+    = DelayedThunk { env : Environment, body : Term }
     | ForcedThunk Value
+
+
+type alias ModuleValue =
+    { assignments : List ModuleAssignment
+    }
+
+
+type ModuleAssignment
+    = AssignValue TermVarName Value
+    | AssignType TypeVarName Type
+    | AssignModuleValue ModuleVarName ModuleValue
+
+
+type alias Environment =
+    { termEnv : TermEnvironment
+    , moduleEnv : ModuleEnvironment
+    }
+
+
+emptyEnvironment : Environment
+emptyEnvironment =
+    { termEnv = emptyTermEnvironment
+    , moduleEnv = emptyModuleEnvironment
+    }
 
 
 
@@ -66,8 +98,8 @@ emptyTermEnvironment =
     Dict.empty
 
 
-lookupEnvironment : TermVarName -> TermEnvironment -> Maybe Value
-lookupEnvironment varName env =
+lookupTermEnvironment0 : TermVarName -> TermEnvironment -> Maybe Value
+lookupTermEnvironment0 varName env =
     Dict.get varName env
         |> Maybe.andThen
             (\terms ->
@@ -80,8 +112,13 @@ lookupEnvironment varName env =
             )
 
 
-extendEnvironment : TermVarName -> Value -> TermEnvironment -> TermEnvironment
-extendEnvironment varName term env =
+lookupTermEnvironment : TermVarName -> Environment -> Maybe Value
+lookupTermEnvironment varName env =
+    lookupTermEnvironment0 varName env.termEnv
+
+
+extendTermEnvironment0 : TermVarName -> Value -> TermEnvironment -> TermEnvironment
+extendTermEnvironment0 varName term env =
     Dict.update varName
         (\maybeBinding ->
             case maybeBinding of
@@ -92,3 +129,64 @@ extendEnvironment varName term env =
                     Just [ term ]
         )
         env
+
+
+extendTermEnvironment : TermVarName -> Value -> Environment -> Environment
+extendTermEnvironment varName term env =
+    { env
+        | termEnv = extendTermEnvironment0 varName term env.termEnv
+    }
+
+
+
+-- ===Module Environment===
+-- TODO: this is basically the same code as for TermEnvironment. Abstract away.
+
+
+type alias ModuleEnvironment =
+    Dict ModuleVarName (List ModuleValue)
+
+
+emptyModuleEnvironment : ModuleEnvironment
+emptyModuleEnvironment =
+    Dict.empty
+
+
+lookupModuleEnvironment0 : ModuleVarName -> ModuleEnvironment -> Maybe ModuleValue
+lookupModuleEnvironment0 varName env =
+    Dict.get varName env
+        |> Maybe.andThen
+            (\modules ->
+                case modules of
+                    [] ->
+                        Nothing
+
+                    module0 :: _ ->
+                        Just module0
+            )
+
+
+lookupModuleEnvironment : ModuleVarName -> Environment -> Maybe ModuleValue
+lookupModuleEnvironment varName env =
+    lookupModuleEnvironment0 varName env.moduleEnv
+
+
+extendModuleEnvironment0 : ModuleVarName -> ModuleValue -> ModuleEnvironment -> ModuleEnvironment
+extendModuleEnvironment0 varName module0 env =
+    Dict.update varName
+        (\maybeBinding ->
+            case maybeBinding of
+                Just modules ->
+                    Just (module0 :: modules)
+
+                Nothing ->
+                    Just [ module0 ]
+        )
+        env
+
+
+extendModuleEnvironment : ModuleVarName -> ModuleValue -> Environment -> Environment
+extendModuleEnvironment varName module0 env =
+    { env
+        | moduleEnv = extendModuleEnvironment0 varName module0 env.moduleEnv
+    }
