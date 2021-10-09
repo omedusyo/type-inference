@@ -721,7 +721,7 @@ viewModule moduleModel =
                 , label = E.text "Run"
                 }
             , Input.multiline
-                [ E.height (E.px 350)
+                [ E.height (E.px 700)
                 , E.width E.fill
                 ]
                 { onChange = ModuleInputChanged
