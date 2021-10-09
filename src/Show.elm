@@ -165,8 +165,14 @@ showTerm term =
                 , " })"
                 ]
 
-        ModuleAccess module0 var ->
-            Debug.todo ""
+        ModuleAccess module0 field ->
+            String.concat
+                [ "(-> "
+                , showModuleTerm module0
+                , " "
+                , field
+                , ")"
+                ]
 
 
 showTermEnvironment : TermEnvironment -> String
@@ -292,7 +298,10 @@ showValue val =
         Closure { env, var, body } ->
             String.concat
                 [ "(fn "
-                , showEnvironment env
+
+                -- TODO: Expose this when you want to see the whole environment, but for even small programs this is too big.
+                -- , showEnvironment env
+                , "[...]"
                 , " { "
                 , var
                 , " . "

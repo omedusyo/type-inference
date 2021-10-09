@@ -121,10 +121,58 @@ initModuleModel =
     let
         input =
             """(module
-        (let-term x 0n1)
+    (let-module Nat (module
+        (let-term plus (fn { x y .
+                 (nat-loop $x $y { i state .
+                    (succ $state)
+                 })
+        })) 
+   
+        (let-term multiply (fn { x y .
+                 (nat-loop $x 0n0 { i state .
+                     (@ $plus $y $state)
+                 })
+        }))
+   
+       (let-term exp (fn { x y .
+                (nat-loop $y 0n1 { i state .
+                      (@ $multiply $x $state)
+                })
+       }))
+   ))
 
-        (let-module M
-               (module (let-term n 0n0)) ) 
+   (let-module List (module
+       (let-term map (fn { f xs .
+                (list-loop $xs empty-list { x ys .
+                      (cons (@ $f $x) $ys)
+                })
+       }))
+
+       (let-term concat (fn { xs ys .
+               (list-loop $xs $ys { x state .
+                     (cons $x $state)
+               })
+       }))
+
+      (let-term singleton (fn { x .
+               (cons $x empty-list)
+      }))
+
+      (let-term and-then (fn { f xs .
+               (list-loop $xs empty-list { x state .
+                     (@ $concat (@ $f $x) $state)
+               }) 
+      }))
+
+   ))
+            
+       (let-term range-reverse (fn { n .
+                (nat-loop $n empty-list { i xs .
+                       (cons $i $xs)
+                })
+       }))
+
+   (let-term square (fn { x . (@ (-> $Nat multiply) $x $x) }))
 )
 """
     in
