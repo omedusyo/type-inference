@@ -726,9 +726,11 @@ parseModuleTerm input =
 interfaceLiteral : Parser Interface
 interfaceLiteral =
     -- (interface interface-assumption0 interface-assumption1 ... )
-    Parser.succeed (\assumptions -> Interface assumptions)
-        |. keyword "interface"
-        |= seq interfaceAssumption
+    paren
+        (Parser.succeed (\assumptions -> Interface assumptions)
+            |. keyword "interface"
+            |= seq interfaceAssumption
+        )
 
 
 interfaceAssumption : Parser InterfaceAssumption
@@ -743,8 +745,9 @@ interfaceAssumption =
                 |. keyword "assume-module"
                 |= moduleVarIntro
                 |= Parser.lazy (\() -> interfaceLiteral)
-
-            -- TODO: Type assumption
+            , Parser.succeed (\typeVarName -> AssumeType typeVarName)
+                |. keyword "assume-type"
+                |= typeVarIntro
             ]
         )
 
