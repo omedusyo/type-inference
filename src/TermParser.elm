@@ -764,10 +764,12 @@ functorVarIntro =
 
 functorTerm : Parser FunctorTerm
 functorTerm =
-    Parser.oneOf
-        [ functorVarUse
-        , functorLiteral |> Parser.map FunctorLiteralTerm
-        ]
+    paren
+        (Parser.oneOf
+            [ functorVarUse
+            , functorLiteral |> Parser.map FunctorLiteralTerm
+            ]
+        )
 
 
 functorLiteral : Parser FunctorLiteral
