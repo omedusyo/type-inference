@@ -167,6 +167,7 @@ type ModuleLetBinding
     = LetTerm TermVarName Term
     | LetType TypeVarName Type
     | LetModule ModuleVarName ModuleTerm
+    | LetFunctor FunctorVarName FunctorLiteral
 
 
 

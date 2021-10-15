@@ -712,8 +712,10 @@ moduleLetBinding =
             |. keyword "let-type"
             |= typeVarIntro
             |= Parser.lazy (\() -> typeExpression)
-
-        -- TODO: functors
+        , Parser.succeed (\functorName functorLiteral0 -> LetFunctor functorName functorLiteral0)
+            |. keyword "let-functor"
+            |= functorVarIntro
+            |= Parser.lazy (\() -> functorLiteral)
         ]
 
 

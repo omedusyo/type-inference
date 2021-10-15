@@ -565,6 +565,15 @@ evalModuleLiteral module0 =
                                                     AssignModuleValue moduleName moduleValue :: assignments1
                                                 )
                                     )
+
+                        LetFunctor functorName functorLiteral ->
+                            State.withReadOnly
+                                (\env _ -> env |> extendFunctorEnvironment functorName functorLiteral)
+                                (evalBindings bindings1)
+                                |> State.map
+                                    (\assignments1 ->
+                                        AssignFunctorLiteral functorName functorLiteral :: assignments1
+                                    )
     in
     evalBindings module0.bindings
         |> State.map (\assignments -> { assignments = assignments })
