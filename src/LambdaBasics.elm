@@ -178,7 +178,9 @@ type alias Interface =
     }
 
 
-type InterfaceAssumption
+type
+    InterfaceAssumption
+    -- TODO: What about functors? Should they be allowed in interfaces?
     = AssumeTerm TermVarName Type
     | AssumeType TypeVarName -- There should be a second argument that's called Kind
     | AssumeModule ModuleVarName Interface
