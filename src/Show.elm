@@ -675,6 +675,28 @@ showInterfaceAssumption assumption =
                 , ")"
                 ]
 
+        AssumeFunctor functorName functorType ->
+            String.concat
+                [ "(assume-functor "
+                , functorName
+                , " "
+                , showFunctorType functorType
+                , ")"
+                ]
+
+
+showFunctorType : FunctorType -> String
+showFunctorType ( inputInterfaces, outputInterface ) =
+    String.concat
+        [ "(-> ["
+        , inputInterfaces
+            |> List.map showInterface
+            |> String.join " "
+        , "] "
+        , showInterface outputInterface
+        , ")"
+        ]
+
 
 showModuleLiteral : ModuleLiteral -> String
 showModuleLiteral module0 =

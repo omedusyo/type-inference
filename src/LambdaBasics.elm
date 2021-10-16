@@ -179,12 +179,11 @@ type alias Interface =
     }
 
 
-type
-    InterfaceAssumption
-    -- TODO: What about functors? Should they be allowed in interfaces?
+type InterfaceAssumption
     = AssumeTerm TermVarName Type
     | AssumeType TypeVarName -- There should be a second argument that's called Kind
     | AssumeModule ModuleVarName Interface
+    | AssumeFunctor FunctorVarName FunctorType
 
 
 
@@ -204,6 +203,10 @@ type alias FunctorLiteral =
     { parameters : List ( ModuleVarName, Interface )
     , body : ModuleTerm
     }
+
+
+type alias FunctorType =
+    ( List Interface, Interface )
 
 
 
