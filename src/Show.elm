@@ -244,6 +244,9 @@ showEvaluationError error =
         UndefinedModule moduleVarName ->
             String.concat [ "Use of undefined module variable $", moduleVarName ]
 
+        UndefinedFunctor functorName ->
+            String.concat [ "Use of undefined functor variable $", functorName ]
+
         ExpectedPair ->
             "Expected Pair"
 
@@ -270,6 +273,9 @@ showEvaluationError error =
 
         UnknownModuleField field ->
             String.concat [ "Unknown module-field access := ", field ]
+
+        FunctorApplicationNumberOfModuleParametersShouldBeEqualToNumberOfArguments ->
+            "Functor Application Error: Number of parameters is not equal to the number of arguments"
 
 
 showEvaluationErrors : List EvalError -> String
@@ -591,9 +597,105 @@ showModuleTerm moduleTerm =
         ModuleVarUse moduleName ->
             String.concat [ "$", moduleName ]
 
-        FunctorApplication ->
-            -- TODO
-            Debug.todo ""
+        FunctorApplication functorTerm modules ->
+            String.concat
+                [ "(@ "
+                , showFunctorTerm functorTerm
+                , " "
+                , modules
+                    |> List.map showModuleTerm
+                    |> String.join " "
+                , ")"
+                ]
+
+
+showFunctorTerm : FunctorTerm -> String
+showFunctorTerm functorTerm =
+    case functorTerm of
+        FunctorVarUse functorName ->
+            String.concat [ "$", functorName ]
+
+        FunctorLiteralTerm ({ parameters, body } as functorLiteral) ->
+            String.concat
+                [ "(functor { "
+                , parameters
+                    |> List.map
+                        (\( moduleName, interface ) ->
+                            String.concat
+                                [ "(: "
+                                , moduleName
+                                , " "
+                                , showInterface interface
+                                , ")"
+                                ]
+                        )
+                    |> String.join " "
+                , " . "
+                , showModuleTerm body
+                , " })"
+                ]
+
+
+showInterface : Interface -> String
+showInterface ({ assumptions } as interface) =
+    String.concat
+        [ "(interface "
+        , assumptions
+            |> List.map showInterfaceAssumption
+            |> String.join " "
+        , ")"
+        ]
+
+
+showInterfaceAssumption : InterfaceAssumption -> String
+showInterfaceAssumption assumption =
+    case assumption of
+        AssumeTerm termVarName type0 ->
+            String.concat
+                [ "(assume-term "
+                , termVarName
+                , " "
+                , showType type0
+                , ")"
+                ]
+
+        AssumeType typeVarName ->
+            String.concat
+                [ "(assume-type "
+                , String.fromInt typeVarName
+                , ")"
+                ]
+
+        AssumeModule moduleVarName interface ->
+            String.concat
+                [ "(assume-module "
+                , moduleVarName
+                , " "
+                , showInterface interface
+                , ")"
+                ]
+
+        AssumeFunctor functorName functorType ->
+            String.concat
+                [ "(assume-functor "
+                , functorName
+                , " "
+                , showFunctorType functorType
+                , ")"
+                ]
+
+
+showFunctorType : FunctorType -> String
+showFunctorType ( inputInterfaces, outputInterface ) =
+    String.concat
+        [ "(-> ["
+        , inputInterfaces
+            |> List.map showInterface
+            |> String.join " "
+        , "] "
+        , showInterface outputInterface
+        , ")"
+        ]
 
 
 showModuleLiteral : ModuleLiteral -> String

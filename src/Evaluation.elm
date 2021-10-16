@@ -48,6 +48,7 @@ import Value exposing (..)
 type EvalError
     = UndefinedVar TermVarName
     | UndefinedModule ModuleVarName
+    | UndefinedFunctor FunctorVarName
     | ExpectedPair
     | ExpectedFunction
     | ExpectedLeftRight
@@ -57,6 +58,7 @@ type EvalError
     | FailedToForceThunk ThunkId
     | ExpectedThunkClosure
     | UnknownModuleField TermVarName
+    | FunctorApplicationNumberOfModuleParametersShouldBeEqualToNumberOfArguments
 
 
 
@@ -200,6 +202,19 @@ moduleLookup moduleName =
 
                 Nothing ->
                     throwEvalError [ UndefinedModule moduleName ]
+        )
+
+
+functorLookup : FunctorVarName -> EvalStateful FunctorLiteral
+functorLookup functorName =
+    State.get0
+        (\env _ ->
+            case Value.lookupFunctorEnvironment functorName env of
+                Just val ->
+                    State.return val
+
+                Nothing ->
+                    throwEvalError [ UndefinedFunctor functorName ]
         )
 
 
@@ -476,6 +491,10 @@ lookupModuleTermField field moduleValue =
                         AssignModuleValue _ _ ->
                             -- TODO: Should I be doing something more here?
                             lookup assignments1
+
+                        AssignFunctorLiteral _ _ ->
+                            -- TODO: Should I be doing something more here?
+                            lookup assignments1
     in
     lookup moduleValue.assignments
 
@@ -501,9 +520,60 @@ evalModule moduleTerm =
         ModuleVarUse moduleName ->
             moduleLookup moduleName
 
-        FunctorApplication ->
-            -- TODO
-            Debug.todo ""
+        FunctorApplication functorTerm modules ->
+            case functorTerm of
+                FunctorVarUse functorName ->
+                    functorLookup functorName
+                        |> State.andThen
+                            (\functorLiteral ->
+                                evalFunctorApplication functorLiteral modules
+                            )
+
+                FunctorLiteralTerm functorLiteral ->
+                    evalFunctorApplication functorLiteral modules
+
+
+evalFunctorApplication : FunctorLiteral -> List ModuleTerm -> EvalStateful ModuleValue
+evalFunctorApplication functorLiteral modules =
+    let
+        -- zips two lists together of the same length together. In case the lists are not of the same length, it throws an error
+        zipSame : List a -> List b -> Maybe (List ( a, b ))
+        zipSame xs0 ys0 =
+            case ( xs0, ys0 ) of
+                ( [], [] ) ->
+                    Just []
+
+                ( x :: xs1, y :: ys1 ) ->
+                    zipSame xs1 ys1 |> Maybe.map (\zs1 -> ( x, y ) :: zs1)
+
+                _ ->
+                    Nothing
+    in
+    -- 1. check and zip together functor literal parameters and modules
+    -- 2. evalute each module argument to a module value
+    -- 3. then evaluate the module term in a new functor envronment extended with the new module bindings
+    case zipSame functorLiteral.parameters modules of
+        Just bindingsWithInterfaces ->
+            let
+                moduleTermBindings : EvalStateful (List ( ModuleVarName, ModuleValue ))
+                moduleTermBindings =
+                    bindingsWithInterfaces
+                        |> List.map
+                            (\( ( moduleName, _ ), moduleTerm ) ->
+                                evalModule moduleTerm
+                                    |> State.map (\moduleValue -> ( moduleName, moduleValue ))
+                            )
+                        |> State.sequence
+            in
+            moduleTermBindings
+                |> State.andThen
+                    (\bindings ->
+                        State.withReadOnly (\env _ -> env |> extendModuleEnvironmentWithBindings bindings)
+                            (evalModule functorLiteral.body)
+                    )
+
+        Nothing ->
+            throwEvalError [ FunctorApplicationNumberOfModuleParametersShouldBeEqualToNumberOfArguments ]
 
 
 evalModuleLiteral : ModuleLiteral -> EvalStateful ModuleValue
@@ -547,6 +617,15 @@ evalModuleLiteral module0 =
                                                     AssignModuleValue moduleName moduleValue :: assignments1
                                                 )
                                     )
+
+                        LetFunctor functorName functorLiteral ->
+                            State.withReadOnly
+                                (\env _ -> env |> extendFunctorEnvironment functorName functorLiteral)
+                                (evalBindings bindings1)
+                                |> State.map
+                                    (\assignments1 ->
+                                        AssignFunctorLiteral functorName functorLiteral :: assignments1
+                                    )
     in
     evalBindings module0.bindings
         |> State.map (\assignments -> { assignments = assignments })
@@ -584,5 +663,8 @@ openModule moduleValue0 =
 
                         AssignModuleValue moduleName moduleValue1 ->
                             f assignments1 (extendModuleEnvironment moduleName moduleValue1 env)
+
+                        AssignFunctorLiteral functorName functorLiteral ->
+                            f assignments1 (extendFunctorEnvironment functorName functorLiteral env)
     in
     f moduleValue0.assignments

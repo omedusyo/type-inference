@@ -155,7 +155,7 @@ type alias ModuleVarName =
 type ModuleTerm
     = ModuleLiteralTerm ModuleLiteral
     | ModuleVarUse ModuleVarName
-    | FunctorApplication
+    | FunctorApplication FunctorTerm (List ModuleTerm)
 
 
 type alias ModuleLiteral =
@@ -167,14 +167,11 @@ type ModuleLetBinding
     = LetTerm TermVarName Term
     | LetType TypeVarName Type
     | LetModule ModuleVarName ModuleTerm
+    | LetFunctor FunctorVarName FunctorLiteral
 
 
 
 -- Interface
-
-
-type alias InterfaceVarName =
-    String
 
 
 type alias Interface =
@@ -185,7 +182,31 @@ type alias Interface =
 type InterfaceAssumption
     = AssumeTerm TermVarName Type
     | AssumeType TypeVarName -- There should be a second argument that's called Kind
-    | AssumeModule InterfaceVarName Interface
+    | AssumeModule ModuleVarName Interface
+    | AssumeFunctor FunctorVarName FunctorType
+
+
+
+-- Functors
+
+
+type alias FunctorVarName =
+    String
+
+
+type FunctorTerm
+    = FunctorVarUse FunctorVarName
+    | FunctorLiteralTerm FunctorLiteral
+
+
+type alias FunctorLiteral =
+    { parameters : List ( ModuleVarName, Interface )
+    , body : ModuleTerm
+    }
+
+
+type alias FunctorType =
+    ( List Interface, Interface )
 
 
 

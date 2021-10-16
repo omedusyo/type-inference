@@ -707,7 +707,7 @@ inferInterface moduleTerm =
             -- TODO: What to do here? do we want interface variables?
             Debug.todo ""
 
-        FunctorApplication ->
+        FunctorApplication functor modules ->
             -- TODO: What to do here? do we want interface variables?
             Debug.todo ""
 

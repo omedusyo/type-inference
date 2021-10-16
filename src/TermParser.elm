@@ -1,6 +1,7 @@
 module TermParser exposing (..)
 
 import LambdaBasics exposing (..)
+import NatParser
 import Parser exposing ((|.), (|=), DeadEnd, Parser)
 import Set exposing (Set)
 
@@ -126,10 +127,8 @@ term =
 
 operatorTerm : Parser Term
 operatorTerm =
-    -- TODO: how to refactor this identity?
-    Parser.succeed (\x -> x)
-        |. symbol "("
-        |= Parser.oneOf
+    paren
+        (Parser.oneOf
             [ abstraction
             , application
             , ifThenElse
@@ -145,7 +144,7 @@ operatorTerm =
             , letExpression
             , moduleAccess
             ]
-        |. symbol ")"
+        )
 
 
 
@@ -580,6 +579,79 @@ letExpression =
 
 
 
+-- ===Types===
+
+
+typeVarIntro : Parser TypeVarName
+typeVarIntro =
+    -- Why can't we just use `Parser.int`?
+    -- Because it consumes spaces and dots in `123  .`. WTF?
+    NatParser.nat
+        |. spaces
+
+
+typeVar : Parser Type
+typeVar =
+    Parser.succeed (\typeVarName -> VarType typeVarName)
+        |. Parser.symbol "'"
+        |= typeVarIntro
+
+
+typeConstant : Parser Type
+typeConstant =
+    let
+        p : String -> Type -> Parser Type
+        p typeConstantName type0 =
+            Parser.succeed (\() -> type0)
+                |= keyword typeConstantName
+    in
+    Parser.oneOf
+        [ p "Bool" LambdaBool
+        , p "Nat" LambdaNat
+        ]
+
+
+typeExpression : Parser Type
+typeExpression =
+    Parser.oneOf
+        [ typeVar
+        , typeConstant
+        , typeOperatorExpression
+        ]
+
+
+typeOperatorExpression : Parser Type
+typeOperatorExpression =
+    paren
+        (Parser.oneOf
+            [ Parser.succeed Arrow
+                |. keyword "->"
+                |= Parser.lazy (\() -> typeExpression)
+                |= Parser.lazy (\() -> typeExpression)
+            , Parser.succeed Product
+                |. keyword "*"
+                |= Parser.lazy (\() -> typeExpression)
+                |= Parser.lazy (\() -> typeExpression)
+            , Parser.succeed Sum
+                |. keyword "+"
+                |= Parser.lazy (\() -> typeExpression)
+                |= Parser.lazy (\() -> typeExpression)
+            , Parser.succeed LambdaList
+                |. keyword "List"
+                |= Parser.lazy (\() -> typeExpression)
+            , Parser.succeed Frozen
+                |. keyword "Frozen"
+                |= Parser.lazy (\() -> typeExpression)
+            , Parser.succeed (\( typeVarName, type0 ) -> ForAll typeVarName type0)
+                |. keyword "forall"
+                |= binding
+                    typeVarIntro
+                    (Parser.lazy (\() -> typeExpression))
+            ]
+        )
+
+
+
 -- ===Module===
 
 
@@ -598,17 +670,20 @@ moduleVarUse =
 moduleLiteral : Parser ModuleLiteral
 moduleLiteral =
     Parser.succeed (\bindings -> { bindings = bindings })
-        |. symbol "("
         |. keyword "module"
         |= seq moduleLetBinding
-        |. symbol ")"
 
 
 moduleTerm : Parser ModuleTerm
 moduleTerm =
     Parser.oneOf
-        [ moduleLiteral |> Parser.map ModuleLiteralTerm
-        , moduleVarUse
+        [ moduleVarUse
+        , paren
+            (Parser.oneOf
+                [ moduleLiteral |> Parser.map ModuleLiteralTerm
+                , Parser.lazy (\() -> functorApplication)
+                ]
+            )
         ]
 
 
@@ -627,9 +702,8 @@ moduleAccess =
 
 moduleLetBinding : Parser ModuleLetBinding
 moduleLetBinding =
-    Parser.succeed (\x -> x)
-        |. symbol "("
-        |= Parser.oneOf
+    paren
+        (Parser.oneOf
             [ Parser.succeed (\var term0 -> LetTerm var term0)
                 |. keyword "let-term"
                 |= varIntro
@@ -638,12 +712,115 @@ moduleLetBinding =
                 |. keyword "let-module"
                 |= moduleVarIntro
                 |= Parser.lazy (\() -> moduleTerm)
-
-            -- TODO: types
+            , Parser.succeed (\typeVarName type0 -> LetType typeVarName type0)
+                |. keyword "let-type"
+                |= typeVarIntro
+                |= Parser.lazy (\() -> typeExpression)
+            , Parser.succeed (\functorName functorLiteral0 -> LetFunctor functorName functorLiteral0)
+                |. keyword "let-functor"
+                |= functorVarIntro
+                |= Parser.lazy (\() -> functorLiteral)
             ]
-        |. symbol ")"
+        )
 
 
 parseModuleTerm : String -> Result TermParsingError ModuleTerm
 parseModuleTerm input =
     Parser.run moduleTerm input
+
+
+
+-- ===Interface===
+
+
+interfaceLiteral : Parser Interface
+interfaceLiteral =
+    -- (interface interface-assumption0 interface-assumption1 ... )
+    paren
+        (Parser.succeed (\assumptions -> Interface assumptions)
+            |. keyword "interface"
+            |= seq interfaceAssumption
+        )
+
+
+interfaceAssumption : Parser InterfaceAssumption
+interfaceAssumption =
+    paren
+        (Parser.oneOf
+            [ Parser.succeed (\termName type0 -> AssumeTerm termName type0)
+                |. keyword "assume-term"
+                |= varIntro
+                |= typeExpression
+            , Parser.succeed (\moduleName interface -> AssumeModule moduleName interface)
+                |. keyword "assume-module"
+                |= moduleVarIntro
+                |= Parser.lazy (\() -> interfaceLiteral)
+            , Parser.succeed (\typeVarName -> AssumeType typeVarName)
+                |. keyword "assume-type"
+                |= typeVarIntro
+            ]
+        )
+
+
+
+-- ===Functor===
+-- (functor { (: M (interface (assume-term x Int) (assume-type T) (assume-module N (interface ...
+
+
+functorVarIntro : Parser FunctorVarName
+functorVarIntro =
+    varIntro
+
+
+functorTerm : Parser FunctorTerm
+functorTerm =
+    Parser.oneOf
+        [ functorVarUse
+        , functorLiteral |> Parser.map FunctorLiteralTerm
+        ]
+
+
+functorLiteral : Parser FunctorLiteral
+functorLiteral =
+    -- (functor { (: M1 I1) (: M2 I2) .  module-term })
+    paren
+        (Parser.succeed (\( parameters, body ) -> FunctorLiteral parameters body)
+            |. keyword "functor"
+            |= binding
+                functorParameters
+                moduleTerm
+        )
+
+
+functorVarUse : Parser FunctorTerm
+functorVarUse =
+    -- $F
+    Parser.succeed FunctorVarUse
+        |. Parser.symbol "$"
+        |= functorVarIntro
+
+
+
+-- (@ $F $M1 $M2)
+
+
+functorApplication : Parser ModuleTerm
+functorApplication =
+    Parser.succeed (\arg parameters -> FunctorApplication arg parameters)
+        |. keyword "@"
+        |= Parser.lazy (\() -> functorTerm)
+        |= seq moduleTerm
+
+
+functorParameters : Parser (List ( ModuleVarName, Interface ))
+functorParameters =
+    seq (paren functorParameter)
+
+
+functorParameter : Parser ( ModuleVarName, Interface )
+functorParameter =
+    -- (: ${moduleIntro} ${interfaceLiteral})
+    Parser.succeed (\moduleVar interface -> ( moduleVar, interface ))
+        |. keyword ":"
+        |= moduleVarIntro
+        |= interfaceLiteral
