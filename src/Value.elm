@@ -14,6 +14,7 @@ module Value exposing
     , emptyTermEnvironment
     , extendFunctorEnvironment
     , extendModuleEnvironment
+    , extendModuleEnvironmentWithBindings
     , extendTermEnvironment
     , lookupFunctorEnvironment
     , lookupModuleEnvironment
@@ -195,6 +196,14 @@ extendModuleEnvironment varName module0 env =
     { env
         | moduleEnv = extendModuleEnvironment0 varName module0 env.moduleEnv
     }
+
+
+extendModuleEnvironmentWithBindings : List ( ModuleVarName, ModuleValue ) -> Environment -> Environment
+extendModuleEnvironmentWithBindings bindings env0 =
+    List.foldl
+        (\( moduleName, moduleValue ) env -> extendModuleEnvironment moduleName moduleValue env)
+        env0
+        bindings
 
 
 

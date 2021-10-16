@@ -274,6 +274,9 @@ showEvaluationError error =
         UnknownModuleField field ->
             String.concat [ "Unknown module-field access := ", field ]
 
+        FunctorApplicationNumberOfModuleParametersShouldBeEqualToNumberOfArguments ->
+            "Functor Application Error: Number of parameters is not equal to the number of arguments"
+
 
 showEvaluationErrors : List EvalError -> String
 showEvaluationErrors errors =
