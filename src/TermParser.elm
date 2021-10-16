@@ -670,17 +670,20 @@ moduleVarUse =
 moduleLiteral : Parser ModuleLiteral
 moduleLiteral =
     Parser.succeed (\bindings -> { bindings = bindings })
-        |. symbol "("
         |. keyword "module"
-        |= seq (paren moduleLetBinding)
-        |. symbol ")"
+        |= seq moduleLetBinding
 
 
 moduleTerm : Parser ModuleTerm
 moduleTerm =
     Parser.oneOf
-        [ moduleLiteral |> Parser.map ModuleLiteralTerm
-        , moduleVarUse
+        [ moduleVarUse
+        , paren
+            (Parser.oneOf
+                [ moduleLiteral |> Parser.map ModuleLiteralTerm
+                , Parser.lazy (\() -> functorApplication)
+                ]
+            )
         ]
 
 
@@ -699,24 +702,26 @@ moduleAccess =
 
 moduleLetBinding : Parser ModuleLetBinding
 moduleLetBinding =
-    Parser.oneOf
-        [ Parser.succeed (\var term0 -> LetTerm var term0)
-            |. keyword "let-term"
-            |= varIntro
-            |= term
-        , Parser.succeed (\var module0 -> LetModule var module0)
-            |. keyword "let-module"
-            |= moduleVarIntro
-            |= Parser.lazy (\() -> moduleTerm)
-        , Parser.succeed (\typeVarName type0 -> LetType typeVarName type0)
-            |. keyword "let-type"
-            |= typeVarIntro
-            |= Parser.lazy (\() -> typeExpression)
-        , Parser.succeed (\functorName functorLiteral0 -> LetFunctor functorName functorLiteral0)
-            |. keyword "let-functor"
-            |= functorVarIntro
-            |= Parser.lazy (\() -> functorLiteral)
-        ]
+    paren
+        (Parser.oneOf
+            [ Parser.succeed (\var term0 -> LetTerm var term0)
+                |. keyword "let-term"
+                |= varIntro
+                |= term
+            , Parser.succeed (\var module0 -> LetModule var module0)
+                |. keyword "let-module"
+                |= moduleVarIntro
+                |= Parser.lazy (\() -> moduleTerm)
+            , Parser.succeed (\typeVarName type0 -> LetType typeVarName type0)
+                |. keyword "let-type"
+                |= typeVarIntro
+                |= Parser.lazy (\() -> typeExpression)
+            , Parser.succeed (\functorName functorLiteral0 -> LetFunctor functorName functorLiteral0)
+                |. keyword "let-functor"
+                |= functorVarIntro
+                |= Parser.lazy (\() -> functorLiteral)
+            ]
+        )
 
 
 parseModuleTerm : String -> Result TermParsingError ModuleTerm
@@ -769,22 +774,22 @@ functorVarIntro =
 
 functorTerm : Parser FunctorTerm
 functorTerm =
-    paren
-        (Parser.oneOf
-            [ functorVarUse
-            , functorLiteral |> Parser.map FunctorLiteralTerm
-            ]
-        )
+    Parser.oneOf
+        [ functorVarUse
+        , functorLiteral |> Parser.map FunctorLiteralTerm
+        ]
 
 
 functorLiteral : Parser FunctorLiteral
 functorLiteral =
     -- (functor { (: M1 I1) (: M2 I2) .  module-term })
-    Parser.succeed (\( parameters, body ) -> FunctorLiteral parameters body)
-        |. keyword "functor"
-        |= binding
-            functorParameters
-            moduleTerm
+    paren
+        (Parser.succeed (\( parameters, body ) -> FunctorLiteral parameters body)
+            |. keyword "functor"
+            |= binding
+                functorParameters
+                moduleTerm
+        )
 
 
 functorVarUse : Parser FunctorTerm
