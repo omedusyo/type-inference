@@ -1,8 +1,5 @@
 module Calculus.Type.Inference exposing
-    (  TermVarContext
-       -- , emptyContext
-       -- , emptyState
-
+    ( TermVarContext
     , infer
     , infer0
     , inferAndClose

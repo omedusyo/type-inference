@@ -1,7 +1,7 @@
 module Example exposing (..)
 
-import Inference exposing (..)
-import LambdaBasics exposing (..)
+import Calculus.Base as Base exposing (Interface, ModuleLiteral)
+import Calculus.Type.Inference as TypeInference
 
 
 
@@ -9,148 +9,148 @@ import LambdaBasics exposing (..)
 
 
 x =
-    VarUse "X"
+    Base.VarUse "X"
 
 
 xType =
     -- '0
-    infer0 x
+    TypeInference.infer0 x
 
 
 y =
-    VarUse "Y"
+    Base.VarUse "Y"
 
 
 yType =
     -- '0
-    infer0 y
+    TypeInference.infer0 y
 
 
 n0 =
-    NatZero
+    Base.ConstZero
 
 
 n0Type =
     -- Nat
-    infer0 n0
+    TypeInference.infer0 n0
 
 
 n1 =
-    NatSucc n0
+    Base.Succ n0
 
 
 n2 =
-    NatSucc n1
+    Base.Succ n1
 
 
 n3 =
-    NatSucc n2
+    Base.Succ n2
 
 
 n4 =
-    NatSucc n3
+    Base.Succ n3
 
 
 pair0 =
     -- (x, y)
-    Pair x y
+    Base.Pair x y
 
 
 pair0Type =
     -- ('0, '1)
-    infer0 pair0
+    TypeInference.infer0 pair0
 
 
 pair1 =
     -- (x, x)
-    Pair x x
+    Base.Pair x x
 
 
 pair1Type =
     -- ('0, '0)
-    infer0 pair1
+    TypeInference.infer0 pair1
 
 
 matchProduct0 =
-    MatchProduct { arg = Pair n0 n1, var0 = "x", var1 = "y", body = VarUse "x" }
+    Base.MatchProduct { arg = Base.Pair n0 n1, var0 = "x", var1 = "y", body = Base.VarUse "x" }
 
 
 matchProduct0Type =
-    infer0 matchProduct0
+    TypeInference.infer0 matchProduct0
 
 
 id =
     -- \x -> x
-    Abstraction "x" (VarUse "x")
+    Base.Abstraction "x" (Base.VarUse "x")
 
 
 idType =
     -- '0 -> '0
-    infer0 id
+    TypeInference.infer0 id
 
 
 dup =
     -- \x -> (x, x)
-    Abstraction "x" (Pair (VarUse "x") (VarUse "x"))
+    Base.Abstraction "x" (Base.Pair (Base.VarUse "x") (Base.VarUse "x"))
 
 
 dupType =
     -- '0 -> ('0, '0)
-    infer0 dup
+    TypeInference.infer0 dup
 
 
 twist =
     -- \p -> (match-pair p { (pair x y) . (pair y x) })
-    Abstraction
+    Base.Abstraction
         "p"
-        (MatchProduct
-            { arg = VarUse "p"
+        (Base.MatchProduct
+            { arg = Base.VarUse "p"
             , var0 = "x"
             , var1 = "y"
-            , body = Pair (VarUse "y") (VarUse "x")
+            , body = Base.Pair (Base.VarUse "y") (Base.VarUse "x")
             }
         )
 
 
 twistType =
     -- ('0, '1) -> ('1, '0)
-    infer0 twist
+    TypeInference.infer0 twist
 
 
 apply =
     --  \f x -> f x
-    Abstraction "f"
-        (Abstraction "x"
-            (Application (VarUse "f") (VarUse "x"))
+    Base.Abstraction "f"
+        (Base.Abstraction "x"
+            (Base.Application (Base.VarUse "f") (Base.VarUse "x"))
         )
 
 
 applyType =
     -- ('0 -> '1) -> '0 -> '1
-    infer0 apply
+    TypeInference.infer0 apply
 
 
 pairing =
     -- \x y -> (x, y)
-    Abstraction "x"
-        (Abstraction "y"
-            (Pair (VarUse "x") (VarUse "y"))
+    Base.Abstraction "x"
+        (Base.Abstraction "y"
+            (Base.Pair (Base.VarUse "x") (Base.VarUse "y"))
         )
 
 
 pairingType =
     -- '0 -> '1 -> ('0, '1)
-    infer0 pairing
+    TypeInference.infer0 pairing
 
 
 curry =
     -- \f x y -> f (x, y)
-    Abstraction "f"
-        (Abstraction "x"
-            (Abstraction "y"
-                (Application
-                    (VarUse "f")
-                    (Pair (VarUse "x") (VarUse "y"))
+    Base.Abstraction "f"
+        (Base.Abstraction "x"
+            (Base.Abstraction "y"
+                (Base.Application
+                    (Base.VarUse "f")
+                    (Base.Pair (Base.VarUse "x") (Base.VarUse "y"))
                 )
             )
         )
@@ -158,18 +158,18 @@ curry =
 
 curryType =
     -- (('0, '1) -> '2) -> '0 -> '1 -> '2
-    infer0 curry
+    TypeInference.infer0 curry
 
 
 uncurry =
     -- (fn { f p . (match-pair p { x y . (@ f x y) }) })
-    Abstraction "f"
-        (Abstraction "p"
-            (MatchProduct
-                { arg = VarUse "p"
+    Base.Abstraction "f"
+        (Base.Abstraction "p"
+            (Base.MatchProduct
+                { arg = Base.VarUse "p"
                 , var0 = "x"
                 , var1 = "y"
-                , body = Application (Application (VarUse "f") (VarUse "x")) (VarUse "y")
+                , body = Base.Application (Base.Application (Base.VarUse "f") (Base.VarUse "x")) (Base.VarUse "y")
                 }
             )
         )
@@ -177,69 +177,69 @@ uncurry =
 
 uncurryType =
     -- ('0 -> '1 -> '2) -> ('0, '1) -> '2
-    infer0 uncurry
+    TypeInference.infer0 uncurry
 
 
 apply0 =
-    Application (Application apply dup) n0
+    Base.Application (Base.Application apply dup) n0
 
 
 apply0Type =
     -- (Nat, Nat)
-    infer0 apply0
+    TypeInference.infer0 apply0
 
 
 evalAt0 =
     -- \f -> f 0
-    Abstraction "f" (Application (VarUse "f") n0)
+    Base.Abstraction "f" (Base.Application (Base.VarUse "f") n0)
 
 
 evalAt0Type =
     -- (Nat -> '0) -> '0
-    infer0 evalAt0
+    TypeInference.infer0 evalAt0
 
 
 succ0 =
     -- \n -> S n
-    Abstraction "n" (NatSucc (VarUse "n"))
+    Base.Abstraction "n" (Base.Succ (Base.VarUse "n"))
 
 
 succ0Type =
     -- Nat -> Nat
-    infer0 succ0
+    TypeInference.infer0 succ0
 
 
 case0 =
     -- \z -> case z of Left x -> x + 1, Right y -> y
-    Abstraction "z"
-        (Case
-            { arg = VarUse "z"
+    Base.Abstraction "z"
+        (Base.Case
+            { arg = Base.VarUse "z"
             , leftVar = "x"
-            , leftBody = NatSucc (VarUse "x")
+            , leftBody = Base.Succ (Base.VarUse "x")
             , rightVar = "y"
-            , rightBody = VarUse "y"
+            , rightBody = Base.VarUse "y"
             }
         )
 
 
 case0Type =
     -- [Nat + Nat] -> Nat
-    infer0 case0
+    TypeInference.infer0 case0
 
 
 add =
     -- Addition
     -- \x y -> x + y
-    Abstraction "x"
-        (Abstraction "y"
-            (NatLoop
-                { base = VarUse "x"
+    Base.Abstraction "x"
+        (Base.Abstraction "y"
+            (Base.NatLoop
+                { base = Base.VarUse "x"
                 , loop =
                     { indexVar = "i"
                     , stateVar = "s"
-                    , body = NatSucc (VarUse "s")
+                    , body = Base.Succ (Base.VarUse "s")
                     }
-                , arg = VarUse "y"
+                , arg = Base.VarUse "y"
                 }
             )
         )
@@ -247,22 +247,22 @@ add =
 
 addType =
     -- Nat -> Nat
-    infer0 add
+    TypeInference.infer0 add
 
 
 mul =
     -- Multiplication
     -- \x y -> x * y
-    Abstraction "x"
-        (Abstraction "y"
-            (NatLoop
+    Base.Abstraction "x"
+        (Base.Abstraction "y"
+            (Base.NatLoop
                 { base = n0
                 , loop =
                     { indexVar = "i"
                     , stateVar = "s"
-                    , body = Application (Application add (VarUse "x")) (VarUse "s")
+                    , body = Base.Application (Base.Application add (Base.VarUse "x")) (Base.VarUse "s")
                     }
-                , arg = VarUse "y"
+                , arg = Base.VarUse "y"
                 }
             )
         )
@@ -270,22 +270,22 @@ mul =
 
 mulType =
     -- Nat -> Nat
-    infer0 mul
+    TypeInference.infer0 mul
 
 
 exp =
     -- Multiplication
     -- \x y -> x ^ y
-    Abstraction "x"
-        (Abstraction "y"
-            (NatLoop
+    Base.Abstraction "x"
+        (Base.Abstraction "y"
+            (Base.NatLoop
                 { base = n1
                 , loop =
                     { indexVar = "i"
                     , stateVar = "s"
-                    , body = Application (Application mul (VarUse "x")) (VarUse "s")
+                    , body = Base.Application (Base.Application mul (Base.VarUse "x")) (Base.VarUse "s")
                     }
-                , arg = VarUse "y"
+                , arg = Base.VarUse "y"
                 }
             )
         )
@@ -293,38 +293,38 @@ exp =
 
 expType =
     -- Nat -> Nat
-    infer0 exp
+    TypeInference.infer0 exp
 
 
 sumTerm =
     -- Sum
     -- \N -> (N - 1) + ... + 2 + 3 + 1 + 0
-    Abstraction "N"
-        (NatLoop
+    Base.Abstraction "N"
+        (Base.NatLoop
             { base = n0
             , loop =
                 { indexVar = "j"
                 , stateVar = "sum"
-                , body = Application (Application add (VarUse "j")) (VarUse "sum")
+                , body = Base.Application (Base.Application add (Base.VarUse "j")) (Base.VarUse "sum")
                 }
-            , arg = VarUse "N"
+            , arg = Base.VarUse "N"
             }
         )
 
 
 sumTermType =
     -- Nat -> Nat
-    infer0 sumTerm
+    TypeInference.infer0 sumTerm
 
 
 selfApply =
     -- \f -> f f
-    Abstraction "f" (Application (VarUse "f") (VarUse "f"))
+    Base.Abstraction "f" (Base.Application (Base.VarUse "f") (Base.VarUse "f"))
 
 
 selfApplyType =
     -- infinite type
-    infer0 selfApply
+    TypeInference.infer0 selfApply
 
 
 
@@ -332,134 +332,134 @@ selfApplyType =
 
 
 range4 =
-    Cons n0 (Cons n1 (Cons n2 (Cons n3 EmptyList)))
+    Base.Cons n0 (Base.Cons n1 (Base.Cons n2 (Base.Cons n3 Base.ConstEmpty)))
 
 
 range4Type =
-    infer0 range4
+    TypeInference.infer0 range4
 
 
 constList =
-    Abstraction "x"
-        (Abstraction "n"
-            (NatLoop
-                { base = EmptyList
+    Base.Abstraction "x"
+        (Base.Abstraction "n"
+            (Base.NatLoop
+                { base = Base.ConstEmpty
                 , loop =
                     { indexVar = "i"
                     , stateVar = "xs"
                     , body =
-                        Cons (VarUse "x") (VarUse "xs")
+                        Base.Cons (Base.VarUse "x") (Base.VarUse "xs")
                     }
-                , arg = VarUse "n"
+                , arg = Base.VarUse "n"
                 }
             )
         )
 
 
 constListType =
-    infer0 constList
+    TypeInference.infer0 constList
 
 
 constTrue =
-    Application (Application constList BoolTrue) n4
+    Base.Application (Base.Application constList Base.ConstTrue) n4
 
 
 sumList =
-    Abstraction "xs"
-        (ListLoop
+    Base.Abstraction "xs"
+        (Base.ListLoop
             { initState = n0
             , loop =
                 { listElementVar = "x"
                 , stateVar = "s"
                 , body =
-                    Application (Application add (VarUse "x")) (VarUse "s")
+                    Base.Application (Base.Application add (Base.VarUse "x")) (Base.VarUse "s")
                 }
-            , arg = VarUse "xs"
+            , arg = Base.VarUse "xs"
             }
         )
 
 
 sumListType =
-    infer0 sumList
+    TypeInference.infer0 sumList
 
 
 sumRange4 =
-    Application sumList range4
+    Base.Application sumList range4
 
 
 sumRange4Type =
-    infer0 sumRange4
+    TypeInference.infer0 sumRange4
 
 
 listMap =
-    Abstraction "f"
-        (Abstraction "xs"
-            (ListLoop
-                { initState = EmptyList
+    Base.Abstraction "f"
+        (Base.Abstraction "xs"
+            (Base.ListLoop
+                { initState = Base.ConstEmpty
                 , loop =
                     { listElementVar = "x"
                     , stateVar = "ys"
                     , body =
-                        Cons (Application (VarUse "f") (VarUse "x")) (VarUse "ys")
+                        Base.Cons (Base.Application (Base.VarUse "f") (Base.VarUse "x")) (Base.VarUse "ys")
                     }
-                , arg = VarUse "xs"
+                , arg = Base.VarUse "xs"
                 }
             )
         )
 
 
 listMapType =
-    infer0 listMap
+    TypeInference.infer0 listMap
 
 
 listConcat =
-    Abstraction "xs"
-        (Abstraction "ys"
-            (ListLoop
-                { initState = VarUse "ys"
+    Base.Abstraction "xs"
+        (Base.Abstraction "ys"
+            (Base.ListLoop
+                { initState = Base.VarUse "ys"
                 , loop =
                     { listElementVar = "x"
                     , stateVar = "zs"
                     , body =
-                        Cons (VarUse "x") (VarUse "zs")
+                        Base.Cons (Base.VarUse "x") (Base.VarUse "zs")
                     }
-                , arg = VarUse "xs"
+                , arg = Base.VarUse "xs"
                 }
             )
         )
 
 
 listConcatType =
-    infer0 listConcat
+    TypeInference.infer0 listConcat
 
 
 listAndThen =
-    Abstraction "f"
-        (Abstraction "xs"
-            (ListLoop
-                { initState = EmptyList
+    Base.Abstraction "f"
+        (Base.Abstraction "xs"
+            (Base.ListLoop
+                { initState = Base.ConstEmpty
                 , loop =
                     { listElementVar = "x"
                     , stateVar = "ys"
                     , body =
-                        Application
-                            (Application listConcat
-                                (Application (VarUse "f") (VarUse "x"))
+                        Base.Application
+                            (Base.Application listConcat
+                                (Base.Application (Base.VarUse "f") (Base.VarUse "x"))
                             )
-                            (VarUse "ys")
+                            (Base.VarUse "ys")
                     }
-                , arg = VarUse "xs"
+                , arg = Base.VarUse "xs"
                 }
             )
         )
 
 
 listReturn =
-    Abstraction "x" (Cons (VarUse "x") EmptyList)
+    Base.Abstraction "x" (Base.Cons (Base.VarUse "x") Base.ConstEmpty)
 
 
 listReturnType =
-    infer0 listReturn
+    TypeInference.infer0 listReturn
 
 
 
@@ -469,8 +469,8 @@ listReturnType =
 module0 : ModuleLiteral
 module0 =
     { bindings =
-        [ LetTerm "n" NatZero
-        , LetTerm "f" (Abstraction "x" (Pair (VarUse "x") (VarUse "n")))
+        [ Base.LetTerm "n" Base.ConstZero
+        , Base.LetTerm "f" (Base.Abstraction "x" (Base.Pair (Base.VarUse "x") (Base.VarUse "n")))
         ]
     }
 
@@ -478,7 +478,7 @@ module0 =
 interface0 : Interface
 interface0 =
     { assumptions =
-        [ AssumeTerm "n" LambdaNat
-        , AssumeTerm "f" (ForAll 0 (Arrow (VarType 0) (Product (VarType 0) LambdaNat)))
+        [ Base.AssumeTerm "n" Base.ConstNat
+        , Base.AssumeTerm "f" (Base.ForAll 0 (Base.Arrow (Base.VarType 0) (Base.Product (Base.VarType 0) Base.ConstNat)))
         ]
     }
