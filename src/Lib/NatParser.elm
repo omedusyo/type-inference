@@ -1,4 +1,4 @@
-module NatParser exposing (..)
+module Lib.NatParser exposing (..)
 
 import Parser exposing ((|.), (|=), DeadEnd, Parser)
 

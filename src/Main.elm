@@ -4,6 +4,7 @@ import Browser
 import Calculus.Base as L exposing (Term, Type)
 import Calculus.Evaluation.Evaluation as L exposing (ThunkContext)
 import Calculus.Evaluation.Value as Value exposing (Value)
+import Calculus.Example
 import Calculus.Parser as L
 import Calculus.Show as L
 import Calculus.Type.Inference as L
@@ -14,9 +15,9 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html as H exposing (Html)
+import Lib.State.StatefulWithErr as State
 import List.Extra as List
 import Return exposing (Return)
-import StatefulWithErr as State
 
 
 blue =

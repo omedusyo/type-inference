@@ -27,8 +27,8 @@ import Calculus.Evaluation.Value as Value
 import Calculus.Type.Inference as TypeInference exposing (TermVarContext)
 import Calculus.Type.TypeVarContext as TypeVarContext exposing (Equations, TypeError, TypeVarContext, TypeVarStack)
 import Dict
-import StackedSet
-import StatefulWithErr as State
+import Lib.StackedSet as StackedSet
+import Lib.State.StatefulWithErr as State
 
 
 

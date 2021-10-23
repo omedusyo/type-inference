@@ -17,9 +17,9 @@ module Calculus.Type.TypeVarContext exposing
 
 import Calculus.Base as Base exposing (Type, TypeVarName)
 import Dict exposing (Dict)
+import Lib.StackedSet as StackedSet exposing (StackedSet)
+import Lib.State.StatefulWithErr as State exposing (StatefulWithErr)
 import Set exposing (Set)
-import StackedSet exposing (StackedSet)
-import StatefulWithErr as State exposing (StatefulWithErr)
 
 
 

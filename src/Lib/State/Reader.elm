@@ -1,4 +1,4 @@
-module Reader exposing
+module Lib.State.Reader exposing
     ( Reader
     , andMap
     , andThen

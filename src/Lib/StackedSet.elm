@@ -1,4 +1,4 @@
-module StackedSet exposing
+module Lib.StackedSet exposing
     ( StackedSet
     , empty
     , move

@@ -1,4 +1,4 @@
-module Example exposing (..)
+module Calculus.Example exposing (..)
 
 import Calculus.Base as Base exposing (Interface, ModuleLiteral)
 import Calculus.Type.Inference as TypeInference

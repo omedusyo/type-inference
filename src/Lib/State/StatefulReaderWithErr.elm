@@ -1,4 +1,4 @@
-module StatefulReaderWithErr exposing
+module Lib.State.StatefulReaderWithErr exposing
     ( StatefulReaderWithErr
     , andMap
     , andThen

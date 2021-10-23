@@ -1,10 +1,10 @@
-module Debug.StatefulWithErr exposing
+module Lib.State.Debug.StatefulWithErr exposing
     ( logError
     , logState
     , logState0
     )
 
-import StatefulWithErr exposing (StatefulWithErr, get, get0, mapError, update)
+import Lib.State.StatefulWithErr exposing (StatefulWithErr, get, get0, mapError, update)
 
 
 

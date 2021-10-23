@@ -1,4 +1,4 @@
-module StatefulWithErr exposing
+module Lib.State.StatefulWithErr exposing
     ( StatefulWithErr
     , andMap
     , andThen

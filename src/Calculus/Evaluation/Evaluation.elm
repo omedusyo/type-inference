@@ -35,7 +35,7 @@ import Calculus.Evaluation.Value as Value
         , Value
         )
 import Dict exposing (Dict)
-import StatefulReaderWithErr as State exposing (StatefulReaderWithErr)
+import Lib.State.StatefulReaderWithErr as State exposing (StatefulReaderWithErr)
 
 
 
