@@ -1,0 +1,53 @@
+
+often optional <...
+
+@ <pair x y <pair y z 
+
+@ <pair x y <pair y z 
+
+pair x   < pair y z 
+
+fn { x ->
+  x * x
+
+left 3
+left <3 -- also valid, but < is optional
+
+case-sum <left 3
+  {left <x .
+     
+problem...
+
+with
+  <x y z ...
+we can't really represent variable number of arguments... right?
+ @ <exp1 <exp2 <exp3 <@ <x1 <x2
+
+
+  @ <exp1 <exp2 <exp3
+will be interpreted as
+  (@ exp1 exp2) exp3  ????
+  
+
+
+\f xs ->
+  case xs' of
+    empty-list -> empty-list
+    cons x xs' -> cons (f x) (map f xs')
+
+
+fn { f xs ->
+  case xs'
+    { empty-list -> empty-list }
+    { cons x xs' ->
+        cons
+          <@ f xi
+          < map f xs'
+
+fn { f xs ->
+  case xs'
+    { empty-list -> empty-list }
+    { cons x xs' ->
+        cons
+          <@ f xi
+          < map f xs'

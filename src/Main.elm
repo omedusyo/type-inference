@@ -1,22 +1,22 @@
 module Main exposing (..)
 
 import Browser
+import Calculus.Base as L exposing (Term, Type)
+import Calculus.Evaluation.Evaluation as L exposing (ThunkContext)
+import Calculus.Evaluation.Value as Value exposing (Value)
+import Calculus.Parser as L
+import Calculus.Show as L
+import Calculus.Type.Inference as L
+import Calculus.Type.TypeVarContext as L
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Evaluation as L exposing (ThunkContext)
 import Html as H exposing (Html)
-import Inference as L
-import LambdaBasics as L exposing (Term, Type)
 import List.Extra as List
 import Return exposing (Return)
-import Show as L
 import StatefulWithErr as State
-import TermParser as L
-import TypeVarContext as L
-import Value as Value exposing (Value)
 
 
 blue =

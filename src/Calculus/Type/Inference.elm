@@ -1,11 +1,32 @@
-module Inference exposing (..)
+module Calculus.Type.Inference exposing
+    (  TermVarContext
+       -- , emptyContext
+       -- , emptyState
 
+    , infer
+    , infer0
+    , inferAndClose
+    , inferFromModuleLiteral
+    , inferInterface
+    )
+
+import Calculus.Base as Base
+    exposing
+        ( Interface
+        , InterfaceAssumption
+        , ModuleLetBinding
+        , ModuleLiteral
+        , ModuleTerm
+        , Term
+        , TermVarName
+        , Type
+        , TypeVarName
+        )
+import Calculus.Type.TypeVarContext as TypeVarContext exposing (TypeError, TypeVarContext)
 import Dict exposing (Dict)
-import LambdaBasics exposing (..)
 import Set exposing (Set)
 import StackedSet exposing (StackedSet)
 import StatefulWithErr as State exposing (StatefulWithErr)
-import TypeVarContext exposing (TypeError(..), TypeVarContext)
 
 
 
@@ -174,51 +195,51 @@ replaceTypeVarWithFreshVar var0 freshVar type0 =
     -- WARNING: We assume that `freshVar` is fresh for `var0, type0`
     -- TODO: fuck... I want more than freshness. I actually don't want any local bound variables in `type0` to have name `freshVar`
     case type0 of
-        VarType var ->
+        Base.VarType var ->
             if var == var0 then
-                State.return (VarType freshVar)
+                State.return (Base.VarType freshVar)
 
             else
-                State.return (VarType var)
+                State.return (Base.VarType var)
 
-        Product type1 type2 ->
-            State.map2 Product
+        Base.Product type1 type2 ->
+            State.map2 Base.Product
                 (replaceTypeVarWithFreshVar var0 freshVar type1)
                 (replaceTypeVarWithFreshVar var0 freshVar type2)
 
-        Sum type1 type2 ->
-            State.map2 Sum
+        Base.Sum type1 type2 ->
+            State.map2 Base.Sum
                 (replaceTypeVarWithFreshVar var0 freshVar type1)
                 (replaceTypeVarWithFreshVar var0 freshVar type2)
 
-        Arrow type1 type2 ->
-            State.map2 Arrow
+        Base.Arrow type1 type2 ->
+            State.map2 Base.Arrow
                 (replaceTypeVarWithFreshVar var0 freshVar type1)
                 (replaceTypeVarWithFreshVar var0 freshVar type2)
 
-        LambdaBool ->
-            State.return LambdaBool
+        Base.ConstBool ->
+            State.return Base.ConstBool
 
-        LambdaNat ->
-            State.return LambdaNat
+        Base.ConstNat ->
+            State.return Base.ConstNat
 
-        LambdaList type1 ->
+        Base.List type1 ->
             replaceTypeVarWithFreshVar var0 freshVar type1
-                |> State.map LambdaList
+                |> State.map Base.List
 
-        Frozen type1 ->
+        Base.Frozen type1 ->
             replaceTypeVarWithFreshVar var0 freshVar type1
-                |> State.map Frozen
+                |> State.map Base.Frozen
 
-        ForAll var type1 ->
+        Base.ForAll var type1 ->
             -- TODO: watch out for shadowing
             if var == var0 then
-                State.return (ForAll var type1)
+                State.return (Base.ForAll var type1)
 
             else
                 -- TODO: this is wrong... can still shadow
                 replaceTypeVarWithFreshVar var0 freshVar type1
-                    |> State.map (ForAll var)
+                    |> State.map (Base.ForAll var)
 
 
 instantiateForAll : Type -> InferenceContext Type
@@ -230,7 +251,7 @@ instantiateForAll type0 =
     --   ForAll "x" (Arrow (ForAll "y" (VarType "y")) (VarType "x"))
     -- It won't instantiate inner foralls.
     case type0 of
-        ForAll var type1 ->
+        Base.ForAll var type1 ->
             generateFreshVarName
                 |> State.andThen
                     (\freshVarName ->
@@ -252,7 +273,7 @@ instantiateForAll type0 =
 infer : Term -> InferenceContext Type
 infer term =
     case term of
-        VarUse varName ->
+        Base.VarUse varName ->
             getContext
                 (\context0 ->
                     case context0 |> lookupType varName of
@@ -272,16 +293,16 @@ infer term =
                                     )
                 )
 
-        Pair fst snd ->
+        Base.Pair fst snd ->
             -- typeFst := infer fst
             -- typeSnd := infer snd
             -- return (Product typeFst typeSnd)
             State.map2
-                (\typeFst typeSnd -> Product typeFst typeSnd)
+                (\typeFst typeSnd -> Base.Product typeFst typeSnd)
                 (infer fst)
                 (infer snd)
 
-        MatchProduct { arg, var0, var1, body } ->
+        Base.MatchProduct { arg, var0, var1, body } ->
             -- argType0 := infer arg
             -- varType0 := generateFreshVar
             -- varType1 := generateFreshVar
@@ -300,7 +321,7 @@ infer term =
             State.andThen3
                 (\argType varType0 varType1 ->
                     State.second
-                        (unify (Product varType0 varType1) argType)
+                        (unify (Base.Product varType0 varType1) argType)
                         (State.mid
                             (updateContext0
                                 (\context ->
@@ -323,7 +344,7 @@ infer term =
                 generateFreshVar
                 generateFreshVar
 
-        Abstraction var body ->
+        Base.Abstraction var body ->
             -- typeVar := generateFreshVar;
             -- updateContext (\context -> context |> pushVarToContext var typeVar);
             -- typeBody := infer body;
@@ -338,11 +359,11 @@ infer term =
                             (updateContext0 (\context -> context |> popVarFromContext var))
                             |> State.map
                                 (\typeBody ->
-                                    Arrow typeVar typeBody
+                                    Base.Arrow typeVar typeBody
                                 )
                     )
 
-        Application fn arg ->
+        Base.Application fn arg ->
             -- typeFn0 := infer fn ;
             -- typeArg := infer arg ;
             -- resultTypeVar := generateFreshVar;
@@ -354,35 +375,35 @@ infer term =
             --         throwTypeError [ ExpectedArrowType ]
             State.andThen3
                 (\typeFn0 typeArg resultType0 ->
-                    unify typeFn0 (Arrow typeArg resultType0)
+                    unify typeFn0 (Base.Arrow typeArg resultType0)
                         |> State.andThen
                             (\typeFn1 ->
                                 case typeFn1 of
-                                    Arrow _ resultType1 ->
+                                    Base.Arrow _ resultType1 ->
                                         State.return resultType1
 
                                     _ ->
-                                        throwTypeError [ ExpectedArrowType ]
+                                        throwTypeError [ TypeVarContext.ExpectedArrowType ]
                             )
                 )
                 (infer fn)
                 (infer arg)
                 generateFreshVar
 
-        Left leftTerm ->
+        Base.Left leftTerm ->
             -- typeLeftTerm := infer leftTerm;
             -- typeRightTerm := generateFreshVar;
             -- return (Sum typeLeftTerm typeRightTerm);
-            State.map2 Sum
+            State.map2 Base.Sum
                 (infer leftTerm)
                 generateFreshVar
 
-        Right rightTerm ->
-            State.map2 Sum
+        Base.Right rightTerm ->
+            State.map2 Base.Sum
                 generateFreshVar
                 (infer rightTerm)
 
-        Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+        Base.Case { arg, leftVar, leftBody, rightVar, rightBody } ->
             -- typeArg := infer arg;
             -- leftTypeVar := generateFreshVar;
             -- rightTypeVar := generateFreshVar;
@@ -402,11 +423,11 @@ infer term =
             --         throwTypeError [ ExpectedSumType ]
             State.andThen3
                 (\typeArg leftTypeVar rightTypeVar ->
-                    unify (Sum leftTypeVar rightTypeVar) typeArg
+                    unify (Base.Sum leftTypeVar rightTypeVar) typeArg
                         |> State.andThen
                             (\sumType ->
                                 case sumType of
-                                    Sum leftType rightType ->
+                                    Base.Sum leftType rightType ->
                                         State.andThen2
                                             (\typeLeftBody typeRightBody ->
                                                 unify typeLeftBody typeRightBody
@@ -423,20 +444,20 @@ infer term =
                                             )
 
                                     _ ->
-                                        throwTypeError [ ExpectedSumType ]
+                                        throwTypeError [ TypeVarContext.ExpectedSumType ]
                             )
                 )
                 (infer arg)
                 generateFreshVar
                 generateFreshVar
 
-        BoolTrue ->
-            State.return LambdaBool
+        Base.ConstTrue ->
+            State.return Base.ConstBool
 
-        BoolFalse ->
-            State.return LambdaBool
+        Base.ConstFalse ->
+            State.return Base.ConstBool
 
-        IfThenElse arg leftBody rightBody ->
+        Base.IfThenElse arg leftBody rightBody ->
             -- argType := infer arg;
             -- unify argType LambdaBool;
             -- typeLeftBody := infer leftBody;
@@ -446,7 +467,7 @@ infer term =
                 (infer arg
                     |> State.andThen
                         (\argType ->
-                            unify argType LambdaBool
+                            unify argType Base.ConstBool
                         )
                 )
                 (State.andThen2 unify
@@ -454,19 +475,19 @@ infer term =
                     (infer rightBody)
                 )
 
-        NatZero ->
-            State.return LambdaNat
+        Base.ConstZero ->
+            State.return Base.ConstNat
 
-        NatSucc term1 ->
+        Base.Succ term1 ->
             -- type1 infer term1;
             -- unify type1 LambdaNat;
             infer term1
                 |> State.andThen
                     (\type1 ->
-                        unify type1 LambdaNat
+                        unify type1 Base.ConstNat
                     )
 
-        NatLoop { base, loop, arg } ->
+        Base.NatLoop { base, loop, arg } ->
             -- argType := infer arg;
             -- unify argType LambdaNat
             --
@@ -492,7 +513,7 @@ infer term =
                     infer arg
                         |> State.andThen
                             (\argType ->
-                                unify argType LambdaNat
+                                unify argType Base.ConstNat
                             )
             in
             State.second
@@ -506,7 +527,7 @@ infer term =
                                         (updateContext0
                                             (\context ->
                                                 context
-                                                    |> pushVarToContext loop.indexVar LambdaNat
+                                                    |> pushVarToContext loop.indexVar Base.ConstNat
                                                     |> pushVarToContext loop.stateVar baseType
                                             )
                                         )
@@ -527,22 +548,22 @@ infer term =
                         )
                 )
 
-        EmptyList ->
+        Base.ConstEmpty ->
             generateFreshVar
-                |> State.map (\var -> LambdaList var)
+                |> State.map (\var -> Base.List var)
 
-        Cons headTerm tailTerm ->
+        Base.Cons headTerm tailTerm ->
             -- headType := infer headTerm;
             -- tailType := infer tailTerm;
             -- resultType := unify (LambdaList headType) tailType
             State.andThen2
                 (\headType tailType ->
-                    unify (LambdaList headType) tailType
+                    unify (Base.List headType) tailType
                 )
                 (infer headTerm)
                 (infer tailTerm)
 
-        ListLoop { initState, loop, arg } ->
+        Base.ListLoop { initState, loop, arg } ->
             -- stateType0 := infer initState;
             -- argType0 := infer arg;
             -- innerListVar := generateFreshVar;
@@ -577,11 +598,11 @@ infer term =
                     generateFreshVar
                         |> State.andThen
                             (\innerListVar ->
-                                unify (LambdaList innerListVar) argType0
+                                unify (Base.List innerListVar) argType0
                                     |> State.andThen
                                         (\argType1 ->
                                             case argType1 of
-                                                LambdaList innerType0 ->
+                                                Base.List innerType0 ->
                                                     State.andThen2
                                                         (\stateType1 innerType1 ->
                                                             State.mid
@@ -609,7 +630,7 @@ infer term =
                                                         (unify loopVar innerType0)
 
                                                 _ ->
-                                                    throwTypeError [ ExpectedListType ]
+                                                    throwTypeError [ TypeVarContext.ExpectedListType ]
                                         )
                             )
                 )
@@ -619,29 +640,29 @@ infer term =
                 generateFreshVar
 
         -- ===Freeze===
-        Delay body ->
+        Base.Delay body ->
             infer body
-                |> State.map Frozen
+                |> State.map Base.Frozen
 
-        Force body ->
+        Base.Force body ->
             State.andThen2
                 (\bodyType0 freshVar ->
-                    unify (Frozen freshVar) bodyType0
+                    unify (Base.Frozen freshVar) bodyType0
                         |> State.andThen
                             (\bodyType1 ->
                                 case bodyType1 of
-                                    Frozen innerType ->
+                                    Base.Frozen innerType ->
                                         State.return innerType
 
                                     _ ->
-                                        throwTypeError [ ExpectedFrozenType ]
+                                        throwTypeError [ TypeVarContext.ExpectedFrozenType ]
                             )
                 )
                 (infer body)
                 generateFreshVar
 
         -- ===Let===
-        Let var exp body ->
+        Base.Let var exp body ->
             inferAndClose exp
                 |> State.andThen
                     (\closedExpType ->
@@ -652,7 +673,7 @@ infer term =
                     )
 
         -- ===Module Access===
-        ModuleAccess module0 var ->
+        Base.ModuleAccess module0 var ->
             Debug.todo ""
 
 
@@ -671,7 +692,7 @@ inferAndClose term =
                                         expandedType0
 
                                     update typeVar t =
-                                        ForAll typeVar t
+                                        Base.ForAll typeVar t
 
                                     finalType =
                                         -- TODO: foldl or foldr?
@@ -700,14 +721,14 @@ infer0 term =
 inferInterface : ModuleTerm -> InferenceContext Interface
 inferInterface moduleTerm =
     case moduleTerm of
-        ModuleLiteralTerm module0 ->
+        Base.ModuleLiteralTerm module0 ->
             inferFromModuleLiteral module0
 
-        ModuleVarUse moduleName ->
+        Base.ModuleVarUse moduleName ->
             -- TODO: What to do here? do we want interface variables?
             Debug.todo ""
 
-        FunctorApplication functor modules ->
+        Base.FunctorApplication functor modules ->
             -- TODO: What to do here? do we want interface variables?
             Debug.todo ""
 
@@ -723,7 +744,7 @@ inferFromModuleLiteral module0 =
 
                 binding :: bindings1 ->
                     case binding of
-                        LetTerm var term0 ->
+                        Base.LetTerm var term0 ->
                             inferAndClose term0
                                 |> State.andThen
                                     (\type0 ->
@@ -737,7 +758,7 @@ inferFromModuleLiteral module0 =
                                             (inferBindings bindings1)
                                             |> State.map
                                                 (\assumptions1 ->
-                                                    AssumeTerm var type0 :: assumptions1
+                                                    Base.AssumeTerm var type0 :: assumptions1
                                                 )
                                     )
 

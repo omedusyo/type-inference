@@ -1,9 +1,41 @@
-module Evaluation exposing (..)
+module Calculus.Evaluation.Evaluation exposing
+    ( EvalError(..)
+    , ThunkContext
+    , eval
+    , eval0
+    , eval1
+    , evalFunctorApplication
+    , evalInModule
+    , evalModule
+    , evalModule0
+    , evalModule1
+    , evalModuleLiteral
+    , lookupModuleTermField
+    , openModule
+    )
 
+import Calculus.Base as Base
+    exposing
+        ( FunctorLiteral
+        , FunctorVarName
+        , ModuleLetBinding
+        , ModuleLiteral
+        , ModuleTerm
+        , ModuleVarName
+        , Term
+        , TermVarName
+        )
+import Calculus.Evaluation.Value as Value
+    exposing
+        ( Environment
+        , ModuleAssignment
+        , ModuleValue
+        , Thunk
+        , ThunkId
+        , Value
+        )
 import Dict exposing (Dict)
-import LambdaBasics exposing (..)
 import StatefulReaderWithErr as State exposing (StatefulReaderWithErr)
-import Value exposing (..)
 
 
 
@@ -84,7 +116,7 @@ initMutState =
 
 initReadOnlyState : ReadOnlyState
 initReadOnlyState =
-    emptyEnvironment
+    Value.emptyEnvironment
 
 
 
@@ -117,7 +149,7 @@ storeNewThunk env body =
                             | nextThunkId = id + 1
                             , thunks =
                                 thunkContext.thunks
-                                    |> Dict.insert id (DelayedThunk { env = env, body = body })
+                                    |> Dict.insert id (Value.DelayedThunk { env = env, body = body })
                         }
                   }
                 , id
@@ -137,7 +169,7 @@ forceThunk thunkId =
             case maybeThunk of
                 Just thunk ->
                     case thunk of
-                        DelayedThunk { env, body } ->
+                        Value.DelayedThunk { env, body } ->
                             State.withReadOnly (\_ _ -> env)
                                 (eval body)
                                 |> State.andThen
@@ -154,7 +186,7 @@ forceThunk thunkId =
                                                             { thunkContext1
                                                                 | thunks =
                                                                     thunkContext1.thunks
-                                                                        |> Dict.insert thunkId (ForcedThunk thunkVal)
+                                                                        |> Dict.insert thunkId (Value.ForcedThunk thunkVal)
                                                             }
                                                     }
                                                 )
@@ -162,7 +194,7 @@ forceThunk thunkId =
                                             (State.return thunkVal)
                                     )
 
-                        ForcedThunk val ->
+                        Value.ForcedThunk val ->
                             State.return val
 
                 Nothing ->
@@ -237,25 +269,25 @@ eval1 env term =
 eval : Term -> EvalStateful Value
 eval term =
     case term of
-        VarUse varName ->
+        Base.VarUse varName ->
             varLookup varName
 
-        Pair fst snd ->
-            State.map2 PairValue
+        Base.Pair fst snd ->
+            State.map2 Value.Pair
                 (eval fst)
                 (eval snd)
 
-        MatchProduct { arg, var0, var1, body } ->
+        Base.MatchProduct { arg, var0, var1, body } ->
             eval arg
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
-                            PairValue val0 val1 ->
+                            Value.Pair val0 val1 ->
                                 State.withReadOnly
                                     (\env _ ->
                                         env
-                                            |> extendTermEnvironment var0 val0
-                                            |> extendTermEnvironment var1 val1
+                                            |> Value.extendTermEnvironment var0 val0
+                                            |> Value.extendTermEnvironment var1 val1
                                     )
                                     (eval body)
 
@@ -263,25 +295,25 @@ eval term =
                                 throwEvalError [ ExpectedPair ]
                     )
 
-        Abstraction var body ->
+        Base.Abstraction var body ->
             State.get0
                 (\env _ ->
                     -- Note that this captures both term and module environments
-                    State.return (Closure { env = env, var = var, body = body })
+                    State.return (Value.Closure { env = env, var = var, body = body })
                 )
 
-        Application fn arg ->
+        Base.Application fn arg ->
             eval fn
                 |> State.andThen
                     (\valFn ->
                         case valFn of
-                            Closure ({ var, body } as closure) ->
+                            Value.Closure ({ var, body } as closure) ->
                                 eval arg
                                     |> State.andThen
                                         (\argEvaled ->
                                             State.withReadOnly
                                                 (\_ _ ->
-                                                    closure.env |> extendTermEnvironment var argEvaled
+                                                    closure.env |> Value.extendTermEnvironment var argEvaled
                                                 )
                                                 (eval body)
                                         )
@@ -290,89 +322,89 @@ eval term =
                                 throwEvalError [ ExpectedFunction ]
                     )
 
-        Left term1 ->
+        Base.Left term1 ->
             eval term1
-                |> State.map LeftValue
+                |> State.map Value.Left
 
-        Right term1 ->
+        Base.Right term1 ->
             eval term1
-                |> State.map RightValue
+                |> State.map Value.Right
 
-        Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+        Base.Case { arg, leftVar, leftBody, rightVar, rightBody } ->
             eval arg
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
-                            LeftValue val ->
-                                State.withReadOnly (\env _ -> env |> extendTermEnvironment leftVar val)
+                            Value.Left val ->
+                                State.withReadOnly (\env _ -> env |> Value.extendTermEnvironment leftVar val)
                                     (eval leftBody)
 
-                            RightValue val ->
-                                State.withReadOnly (\env _ -> env |> extendTermEnvironment rightVar val)
+                            Value.Right val ->
+                                State.withReadOnly (\env _ -> env |> Value.extendTermEnvironment rightVar val)
                                     (eval rightBody)
 
                             _ ->
                                 throwEvalError [ ExpectedLeftRight ]
                     )
 
-        BoolTrue ->
-            State.return TrueValue
+        Base.ConstTrue ->
+            State.return Value.ConstTrue
 
-        BoolFalse ->
-            State.return FalseValue
+        Base.ConstFalse ->
+            State.return Value.ConstFalse
 
-        IfThenElse arg leftBody rightBody ->
+        Base.IfThenElse arg leftBody rightBody ->
             eval arg
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
-                            TrueValue ->
+                            Value.ConstTrue ->
                                 eval leftBody
 
-                            FalseValue ->
+                            Value.ConstFalse ->
                                 eval rightBody
 
                             _ ->
                                 throwEvalError [ ExpectedBoolean ]
                     )
 
-        NatZero ->
-            State.return (NatValue NatZeroValue)
+        Base.ConstZero ->
+            State.return (Value.NatValue Value.ConstZero)
 
-        NatSucc term1 ->
+        Base.Succ term1 ->
             eval term1
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
-                            NatValue natVal ->
-                                State.return (NatValue (NatSuccValue natVal))
+                            Value.NatValue natVal ->
+                                State.return (Value.NatValue (Value.Succ natVal))
 
                             _ ->
                                 throwEvalError [ ExpectedNat ]
                     )
 
-        NatLoop { base, loop, arg } ->
+        Base.NatLoop { base, loop, arg } ->
             -- TODO: error on same var name? loop.indexVar, loop.stateVar
             eval arg
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
-                            NatValue natVal ->
+                            Value.NatValue natVal ->
                                 let
                                     evalNatLoop natVal0 =
                                         case natVal0 of
-                                            NatZeroValue ->
+                                            Value.ConstZero ->
                                                 eval base
 
-                                            NatSuccValue natVal1 ->
+                                            Value.Succ natVal1 ->
                                                 evalNatLoop natVal1
                                                     |> State.andThen
                                                         (\prevVal ->
                                                             State.withReadOnly
                                                                 (\env _ ->
                                                                     env
-                                                                        |> extendTermEnvironment loop.indexVar (NatValue natVal1)
-                                                                        |> extendTermEnvironment loop.stateVar prevVal
+                                                                        |> Value.extendTermEnvironment loop.indexVar (Value.NatValue natVal1)
+                                                                        |> Value.extendTermEnvironment loop.stateVar prevVal
                                                                 )
                                                                 (eval loop.body)
                                                         )
@@ -383,41 +415,41 @@ eval term =
                                 throwEvalError [ ExpectedNat ]
                     )
 
-        EmptyList ->
-            State.return (ListValue EmptyListValue)
+        Base.ConstEmpty ->
+            State.return (Value.ListValue Value.ConstEmpty)
 
-        Cons headTerm tailTerm ->
+        Base.Cons headTerm tailTerm ->
             eval headTerm
                 |> State.andThen
                     (\headValue ->
                         eval tailTerm
                             |> State.map
-                                (\tailValue -> ListValue (ConsValue headValue tailValue))
+                                (\tailValue -> Value.ListValue (Value.Cons headValue tailValue))
                     )
 
-        ListLoop { initState, loop, arg } ->
+        Base.ListLoop { initState, loop, arg } ->
             eval arg
                 |> State.andThen
                     (\argValue ->
                         case argValue of
-                            ListValue listValue ->
+                            Value.ListValue listValue ->
                                 let
                                     evalListLoop listValue0 =
                                         case listValue0 of
-                                            EmptyListValue ->
+                                            Value.ConstEmpty ->
                                                 eval initState
 
-                                            ConsValue headValue restValue ->
+                                            Value.Cons headValue restValue ->
                                                 case restValue of
-                                                    ListValue listValue1 ->
+                                                    Value.ListValue listValue1 ->
                                                         evalListLoop listValue1
                                                             |> State.andThen
                                                                 (\prevVal ->
                                                                     State.withReadOnly
                                                                         (\env _ ->
                                                                             env
-                                                                                |> extendTermEnvironment loop.listElementVar headValue
-                                                                                |> extendTermEnvironment loop.stateVar prevVal
+                                                                                |> Value.extendTermEnvironment loop.listElementVar headValue
+                                                                                |> Value.extendTermEnvironment loop.stateVar prevVal
                                                                         )
                                                                         (eval loop.body)
                                                                 )
@@ -431,35 +463,35 @@ eval term =
                                 throwEvalError [ ExpectedList ]
                     )
 
-        Delay body ->
+        Base.Delay body ->
             State.get0
                 (\env _ ->
                     storeNewThunk env body
                         |> State.andThen
-                            (\thunkId -> State.return (ThunkClosure thunkId))
+                            (\thunkId -> State.return (Value.ThunkClosure thunkId))
                 )
 
-        Force body ->
+        Base.Force body ->
             eval body
                 |> State.andThen
                     (\val ->
                         case val of
-                            ThunkClosure thunkId ->
+                            Value.ThunkClosure thunkId ->
                                 forceThunk thunkId
 
                             _ ->
                                 throwEvalError [ ExpectedThunkClosure ]
                     )
 
-        Let var arg body ->
+        Base.Let var arg body ->
             eval arg
                 |> State.andThen
                     (\argVal ->
-                        State.withReadOnly (\env _ -> env |> extendTermEnvironment var argVal)
+                        State.withReadOnly (\env _ -> env |> Value.extendTermEnvironment var argVal)
                             (eval body)
                     )
 
-        ModuleAccess module0 field ->
+        Base.ModuleAccess module0 field ->
             evalModule module0
                 |> State.andThen
                     (\moduleValue ->
@@ -478,21 +510,21 @@ lookupModuleTermField field moduleValue =
 
                 assignment :: assignments1 ->
                     case assignment of
-                        AssignValue field0 val ->
+                        Value.AssignValue field0 val ->
                             if field0 == field then
                                 State.return val
 
                             else
                                 lookup assignments1
 
-                        AssignType _ _ ->
+                        Value.AssignType _ _ ->
                             lookup assignments1
 
-                        AssignModuleValue _ _ ->
+                        Value.AssignModuleValue _ _ ->
                             -- TODO: Should I be doing something more here?
                             lookup assignments1
 
-                        AssignFunctorLiteral _ _ ->
+                        Value.AssignFunctorLiteral _ _ ->
                             -- TODO: Should I be doing something more here?
                             lookup assignments1
     in
@@ -514,22 +546,22 @@ evalModule1 env module0 =
 evalModule : ModuleTerm -> EvalStateful ModuleValue
 evalModule moduleTerm =
     case moduleTerm of
-        ModuleLiteralTerm module0 ->
+        Base.ModuleLiteralTerm module0 ->
             evalModuleLiteral module0
 
-        ModuleVarUse moduleName ->
+        Base.ModuleVarUse moduleName ->
             moduleLookup moduleName
 
-        FunctorApplication functorTerm modules ->
+        Base.FunctorApplication functorTerm modules ->
             case functorTerm of
-                FunctorVarUse functorName ->
+                Base.FunctorVarUse functorName ->
                     functorLookup functorName
                         |> State.andThen
                             (\functorLiteral ->
                                 evalFunctorApplication functorLiteral modules
                             )
 
-                FunctorLiteralTerm functorLiteral ->
+                Base.FunctorLiteralTerm functorLiteral ->
                     evalFunctorApplication functorLiteral modules
 
 
@@ -568,7 +600,7 @@ evalFunctorApplication functorLiteral modules =
             moduleTermBindings
                 |> State.andThen
                     (\bindings ->
-                        State.withReadOnly (\env _ -> env |> extendModuleEnvironmentWithBindings bindings)
+                        State.withReadOnly (\env _ -> env |> Value.extendModuleEnvironmentWithBindings bindings)
                             (evalModule functorLiteral.body)
                     )
 
@@ -587,44 +619,44 @@ evalModuleLiteral module0 =
 
                 binding :: bindings1 ->
                     case binding of
-                        LetTerm varName term ->
+                        Base.LetTerm varName term ->
                             eval term
                                 |> State.andThen
                                     (\val ->
                                         State.withReadOnly
-                                            (\env _ -> env |> extendTermEnvironment varName val)
+                                            (\env _ -> env |> Value.extendTermEnvironment varName val)
                                             (evalBindings bindings1)
                                             |> State.map
                                                 (\assignments1 ->
-                                                    AssignValue varName val :: assignments1
+                                                    Value.AssignValue varName val :: assignments1
                                                 )
                                     )
 
-                        LetType typeVar type0 ->
+                        Base.LetType typeVar type0 ->
                             -- TODO: what to do here? Can't do much yet. Need to make types part of the environment.
                             --       For now just skip it.
                             evalBindings bindings1
 
-                        LetModule moduleName moduleTerm ->
+                        Base.LetModule moduleName moduleTerm ->
                             evalModule moduleTerm
                                 |> State.andThen
                                     (\moduleValue ->
                                         State.withReadOnly
-                                            (\env _ -> env |> extendModuleEnvironment moduleName moduleValue)
+                                            (\env _ -> env |> Value.extendModuleEnvironment moduleName moduleValue)
                                             (evalBindings bindings1)
                                             |> State.map
                                                 (\assignments1 ->
-                                                    AssignModuleValue moduleName moduleValue :: assignments1
+                                                    Value.AssignModuleValue moduleName moduleValue :: assignments1
                                                 )
                                     )
 
-                        LetFunctor functorName functorLiteral ->
+                        Base.LetFunctor functorName functorLiteral ->
                             State.withReadOnly
-                                (\env _ -> env |> extendFunctorEnvironment functorName functorLiteral)
+                                (\env _ -> env |> Value.extendFunctorEnvironment functorName functorLiteral)
                                 (evalBindings bindings1)
                                 |> State.map
                                     (\assignments1 ->
-                                        AssignFunctorLiteral functorName functorLiteral :: assignments1
+                                        Value.AssignFunctorLiteral functorName functorLiteral :: assignments1
                                     )
     in
     evalBindings module0.bindings
@@ -655,16 +687,16 @@ openModule moduleValue0 =
 
                 assignment :: assignments1 ->
                     case assignment of
-                        AssignValue varName value ->
-                            f assignments1 (extendTermEnvironment varName value env)
+                        Value.AssignValue varName value ->
+                            f assignments1 (Value.extendTermEnvironment varName value env)
 
-                        AssignType typeVar type0 ->
+                        Value.AssignType typeVar type0 ->
                             f assignments1 env
 
-                        AssignModuleValue moduleName moduleValue1 ->
-                            f assignments1 (extendModuleEnvironment moduleName moduleValue1 env)
+                        Value.AssignModuleValue moduleName moduleValue1 ->
+                            f assignments1 (Value.extendModuleEnvironment moduleName moduleValue1 env)
 
-                        AssignFunctorLiteral functorName functorLiteral ->
-                            f assignments1 (extendFunctorEnvironment functorName functorLiteral env)
+                        Value.AssignFunctorLiteral functorName functorLiteral ->
+                            f assignments1 (Value.extendFunctorEnvironment functorName functorLiteral env)
     in
     f moduleValue0.assignments

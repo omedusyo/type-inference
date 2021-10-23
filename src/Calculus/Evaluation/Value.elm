@@ -1,4 +1,4 @@
-module Value exposing
+module Calculus.Evaluation.Value exposing
     ( Environment
     , ListValue(..)
     , ModuleAssignment(..)
@@ -21,21 +21,21 @@ module Value exposing
     , lookupTermEnvironment
     )
 
+import Calculus.Base as Base exposing (FunctorLiteral, FunctorVarName, ModuleTerm, ModuleVarName, Term, TermVarName, Type, TypeVarName)
 import Dict exposing (Dict)
-import LambdaBasics exposing (FunctorLiteral, FunctorVarName, ModuleTerm, ModuleVarName, Term, TermVarName, Type, TypeVarName)
 
 
 type Value
     = -- ==Cartesian Product==
-      PairValue Value Value
+      Pair Value Value
       -- ==Function Space==
     | Closure { env : Environment, var : TermVarName, body : Term }
       -- ==Coproduct==
-    | LeftValue Value
-    | RightValue Value
+    | Left Value
+    | Right Value
       -- Booleans
-    | TrueValue
-    | FalseValue
+    | ConstTrue
+    | ConstFalse
       --==Natural Number Object==
     | NatValue NatValue
     | --==Lists==
@@ -45,13 +45,13 @@ type Value
 
 
 type NatValue
-    = NatZeroValue
-    | NatSuccValue NatValue
+    = ConstZero
+    | Succ NatValue
 
 
 type ListValue
-    = EmptyListValue
-    | ConsValue Value Value
+    = ConstEmpty
+    | Cons Value Value
 
 
 type alias ThunkId =

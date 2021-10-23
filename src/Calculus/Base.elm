@@ -1,4 +1,21 @@
-module LambdaBasics exposing (..)
+module Calculus.Base exposing
+    ( FunctorLiteral
+    , FunctorTerm(..)
+    , FunctorType
+    , FunctorVarName
+    , Interface
+    , InterfaceAssumption(..)
+    , ModuleLetBinding(..)
+    , ModuleLiteral
+    , ModuleTerm(..)
+    , ModuleVarName
+    , Term(..)
+    , TermVarName
+    , Type(..)
+    , TypeVarName
+    , getTypeVars
+    , intToNatTerm
+    )
 
 import Set exposing (Set)
 
@@ -41,15 +58,15 @@ type Term
         , rightBody : Term
         }
       -- Booleans
-    | BoolTrue
-    | BoolFalse
+    | ConstTrue
+    | ConstFalse
       -- first is the TestExpression then LeftBranch then RightBranch
     | IfThenElse Term Term Term
       --==Natural Number Object==
       -- intro
       -- TODO: introduces NatConst Int for efficiency
-    | NatZero
-    | NatSucc Term
+    | ConstZero
+    | Succ Term
       -- elim
       -- f : Nat -> X
       -- f 0 = ....
@@ -65,7 +82,7 @@ type Term
         , arg : Term
         }
       -- ==Lists==
-    | EmptyList
+    | ConstEmpty
     | Cons Term Term
     | ListLoop
         { initState : Term
@@ -96,9 +113,9 @@ type Type
       -- add zero type
     | Sum Type Type
     | Arrow Type Type
-    | LambdaBool
-    | LambdaNat
-    | LambdaList Type
+    | ConstBool
+    | ConstNat
+    | List Type
     | Frozen Type
     | ForAll TypeVarName Type
 
@@ -118,13 +135,13 @@ getTypeVars type0 =
         Arrow type1 type2 ->
             Set.union (getTypeVars type1) (getTypeVars type2)
 
-        LambdaBool ->
+        ConstBool ->
             Set.empty
 
-        LambdaNat ->
+        ConstNat ->
             Set.empty
 
-        LambdaList type1 ->
+        List type1 ->
             getTypeVars type1
 
         Frozen type1 ->
@@ -216,7 +233,7 @@ type alias FunctorType =
 intToNatTerm : Int -> Term
 intToNatTerm n =
     if n == 0 then
-        NatZero
+        ConstZero
 
     else
-        NatSucc (intToNatTerm (n - 1))
+        Succ (intToNatTerm (n - 1))

@@ -1,13 +1,34 @@
-module Show exposing (..)
+module Calculus.Show exposing (..)
 
+import Calculus.Base as Base
+    exposing
+        ( FunctorTerm
+        , FunctorType
+        , Interface
+        , InterfaceAssumption
+        , ModuleLetBinding
+        , ModuleLiteral
+        , ModuleTerm
+        , Term
+        , Type
+        )
+import Calculus.Evaluation.Evaluation as Evaluation exposing (EvalError, ThunkContext)
+import Calculus.Evaluation.Value as Value
+    exposing
+        ( Environment
+        , ListValue
+        , ModuleAssignment
+        , ModuleEnvironment
+        , ModuleValue
+        , NatValue
+        , TermEnvironment
+        , Value
+        )
+import Calculus.Type.Inference as TypeInference exposing (TermVarContext)
+import Calculus.Type.TypeVarContext as TypeVarContext exposing (Equations, TypeError, TypeVarContext, TypeVarStack)
 import Dict
-import Evaluation exposing (..)
-import Inference exposing (..)
-import LambdaBasics exposing (..)
 import StackedSet
 import StatefulWithErr as State
-import TypeVarContext exposing (Equations, TypeError(..), TypeVarContext, TypeVarStack)
-import Value exposing (..)
 
 
 
@@ -17,15 +38,15 @@ import Value exposing (..)
 showTerm : Term -> String
 showTerm term =
     case term of
-        VarUse varname ->
+        Base.VarUse varname ->
             -- $foo
             String.concat [ "$", varname ]
 
-        Pair fst snd ->
+        Base.Pair fst snd ->
             -- (pair e1 e2)
             String.concat [ "(pair ", showTerm fst, " ", showTerm snd, ")" ]
 
-        MatchProduct { arg, var0, var1, body } ->
+        Base.MatchProduct { arg, var0, var1, body } ->
             String.concat
                 [ "(match-pair "
                 , showTerm arg
@@ -38,23 +59,23 @@ showTerm term =
                 , " })"
                 ]
 
-        Abstraction var body ->
+        Base.Abstraction var body ->
             -- (fn { x . body })
             String.concat [ "(fn { ", var, " . ", showTerm body, " })" ]
 
-        Application fn arg ->
+        Base.Application fn arg ->
             -- (@ e1 e2)
             String.concat [ "(@ ", showTerm fn, " ", showTerm arg, ")" ]
 
-        Left term1 ->
+        Base.Left term1 ->
             -- (left e)
             String.concat [ "(left ", showTerm term1, ")" ]
 
-        Right term1 ->
+        Base.Right term1 ->
             -- (right e)
             String.concat [ "(right ", showTerm term1, ")" ]
 
-        Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+        Base.Case { arg, leftVar, leftBody, rightVar, rightBody } ->
             -- (match-sum e { (left x) . e1 } { (right y) . e2 })
             String.concat
                 [ "(match-sum "
@@ -70,13 +91,13 @@ showTerm term =
                 , " })"
                 ]
 
-        BoolTrue ->
+        Base.ConstTrue ->
             "true"
 
-        BoolFalse ->
+        Base.ConstFalse ->
             "false"
 
-        IfThenElse arg leftBody rightBody ->
+        Base.IfThenElse arg leftBody rightBody ->
             -- (if { x } { y })
             String.concat
                 [ "(if "
@@ -88,14 +109,14 @@ showTerm term =
                 , " })"
                 ]
 
-        NatZero ->
+        Base.ConstZero ->
             "0"
 
-        NatSucc term1 ->
+        Base.Succ term1 ->
             -- (succ e)
             String.concat [ "(succ ", showTerm term1, ")" ]
 
-        NatLoop { base, loop, arg } ->
+        Base.NatLoop { base, loop, arg } ->
             -- (loop-nat nExp initStateExp { i state . body })
             String.concat
                 [ "(loop-nat "
@@ -111,10 +132,10 @@ showTerm term =
                 , " })"
                 ]
 
-        EmptyList ->
+        Base.ConstEmpty ->
             "empty-list"
 
-        Cons headTerm tailTerm ->
+        Base.Cons headTerm tailTerm ->
             -- (cons e1 e2)
             String.concat
                 [ "(cons "
@@ -124,7 +145,7 @@ showTerm term =
                 , ")"
                 ]
 
-        ListLoop { initState, loop, arg } ->
+        Base.ListLoop { initState, loop, arg } ->
             -- (loop-list xsExp initStateExp { x state . body } )
             String.concat
                 [ "(list-loop "
@@ -140,21 +161,21 @@ showTerm term =
                 , " })"
                 ]
 
-        Delay body ->
+        Base.Delay body ->
             String.concat
                 [ "(fn { "
                 , showTerm body
                 , " })"
                 ]
 
-        Force term1 ->
+        Base.Force term1 ->
             String.concat
                 [ "(@ "
                 , showTerm term1
                 , ")"
                 ]
 
-        Let var exp body ->
+        Base.Let var exp body ->
             String.concat
                 [ "(let "
                 , showTerm exp
@@ -165,7 +186,7 @@ showTerm term =
                 , " })"
                 ]
 
-        ModuleAccess module0 field ->
+        Base.ModuleAccess module0 field ->
             String.concat
                 [ "(-> "
                 , showModuleTerm module0
@@ -238,43 +259,43 @@ showEnvironment env =
 showEvaluationError : EvalError -> String
 showEvaluationError error =
     case error of
-        UndefinedVar termVarName ->
+        Evaluation.UndefinedVar termVarName ->
             String.concat [ "Use of undefined variable $", termVarName ]
 
-        UndefinedModule moduleVarName ->
+        Evaluation.UndefinedModule moduleVarName ->
             String.concat [ "Use of undefined module variable $", moduleVarName ]
 
-        UndefinedFunctor functorName ->
+        Evaluation.UndefinedFunctor functorName ->
             String.concat [ "Use of undefined functor variable $", functorName ]
 
-        ExpectedPair ->
+        Evaluation.ExpectedPair ->
             "Expected Pair"
 
-        ExpectedFunction ->
+        Evaluation.ExpectedFunction ->
             "Expected Function"
 
-        ExpectedLeftRight ->
+        Evaluation.ExpectedLeftRight ->
             "Expected Left/Right"
 
-        ExpectedBoolean ->
+        Evaluation.ExpectedBoolean ->
             "Expected Boolean"
 
-        ExpectedNat ->
+        Evaluation.ExpectedNat ->
             "Expected Number"
 
-        ExpectedList ->
+        Evaluation.ExpectedList ->
             "Expected List"
 
-        FailedToForceThunk thunkId ->
+        Evaluation.FailedToForceThunk thunkId ->
             String.concat [ "Failed to force thunk with id := ", String.fromInt thunkId ]
 
-        ExpectedThunkClosure ->
+        Evaluation.ExpectedThunkClosure ->
             "Expected Thunk Closure"
 
-        UnknownModuleField field ->
+        Evaluation.UnknownModuleField field ->
             String.concat [ "Unknown module-field access := ", field ]
 
-        FunctorApplicationNumberOfModuleParametersShouldBeEqualToNumberOfArguments ->
+        Evaluation.FunctorApplicationNumberOfModuleParametersShouldBeEqualToNumberOfArguments ->
             "Functor Application Error: Number of parameters is not equal to the number of arguments"
 
 
@@ -292,16 +313,16 @@ showEvaluationErrors errors =
 showValue : Value -> String
 showValue val =
     case val of
-        PairValue fst snd ->
+        Value.Pair fst snd ->
             String.concat [ "(pair ", showValue fst, " ", showValue snd, ")" ]
 
-        LeftValue val1 ->
+        Value.Left val1 ->
             String.concat [ "(left ", showValue val1, ")" ]
 
-        RightValue val1 ->
+        Value.Right val1 ->
             String.concat [ "(right ", showValue val1, ")" ]
 
-        Closure { env, var, body } ->
+        Value.Closure { env, var, body } ->
             String.concat
                 [ "(fn "
 
@@ -315,19 +336,19 @@ showValue val =
                 , " })"
                 ]
 
-        TrueValue ->
+        Value.ConstTrue ->
             "true"
 
-        FalseValue ->
+        Value.ConstFalse ->
             "false"
 
-        NatValue natVal ->
+        Value.NatValue natVal ->
             showNatValue natVal
 
-        ListValue listValue ->
+        Value.ListValue listValue ->
             showListValue listValue
 
-        ThunkClosure thunkId ->
+        Value.ThunkClosure thunkId ->
             String.concat
                 [ "<thunk-id := "
                 , String.fromInt thunkId
@@ -338,10 +359,10 @@ showValue val =
 natValToInt : NatValue -> Int
 natValToInt natVal =
     case natVal of
-        NatZeroValue ->
+        Value.ConstZero ->
             0
 
-        NatSuccValue val1 ->
+        Value.Succ val1 ->
             1 + natValToInt val1
 
 
@@ -359,10 +380,10 @@ showNatValue natVal =
 showListValue : ListValue -> String
 showListValue listValue =
     case listValue of
-        EmptyListValue ->
+        Value.ConstEmpty ->
             "empty-list"
 
-        ConsValue headValue tailValue ->
+        Value.Cons headValue tailValue ->
             String.concat
                 [ "(cons "
                 , showValue headValue
@@ -379,7 +400,7 @@ showThunks { thunks } =
         |> List.map
             (\( thunkId, thunk ) ->
                 case thunk of
-                    DelayedThunk { env, body } ->
+                    Value.DelayedThunk { env, body } ->
                         String.concat
                             [ "<thunk-id(frozen) := "
                             , String.fromInt thunkId
@@ -390,7 +411,7 @@ showThunks { thunks } =
                             , ">"
                             ]
 
-                    ForcedThunk val ->
+                    Value.ForcedThunk val ->
                         String.concat
                             [ "<thunk-id(forced) := "
                             , String.fromInt thunkId
@@ -409,34 +430,34 @@ showThunks { thunks } =
 showType : Type -> String
 showType type0 =
     case type0 of
-        VarType n ->
+        Base.VarType n ->
             String.concat [ "'", String.fromInt n ]
 
-        Product type1 type2 ->
+        Base.Product type1 type2 ->
             String.concat
                 [ "(", showType type1, " , ", showType type2, ")" ]
 
-        Sum type1 type2 ->
+        Base.Sum type1 type2 ->
             String.concat
                 [ "[", showType type1, " + ", showType type2, "]" ]
 
-        Arrow type1 type2 ->
+        Base.Arrow type1 type2 ->
             String.concat
                 [ "(", showType type1, " -> ", showType type2, ")" ]
 
-        LambdaBool ->
+        Base.ConstBool ->
             "Bool"
 
-        LambdaNat ->
+        Base.ConstNat ->
             "Nat"
 
-        LambdaList type1 ->
+        Base.List type1 ->
             String.concat [ "List(", showType type1, ")" ]
 
-        Frozen type1 ->
+        Base.Frozen type1 ->
             String.concat [ "Frozen(", showType type1, ")" ]
 
-        ForAll typeVar type1 ->
+        Base.ForAll typeVar type1 ->
             String.concat [ "Forall ", "'" ++ String.fromInt typeVar, " . ", showType type1 ]
 
 
@@ -467,40 +488,40 @@ showTermVarContext termVarContext =
 showTypeError : TypeError -> String
 showTypeError typeError =
     case typeError of
-        ExpectedProductType ->
+        TypeVarContext.ExpectedProductType ->
             "Expected Produc Type"
 
-        ExpectedArrowType ->
+        TypeVarContext.ExpectedArrowType ->
             "Expected Arrow Type"
 
-        ExpectedNatType ->
+        TypeVarContext.ExpectedNatType ->
             "Expected Nat Type"
 
-        ExpectedSumType ->
+        TypeVarContext.ExpectedSumType ->
             "Expected Sum Type"
 
-        ExpectedMatchingTypesInCaseBranches ->
+        TypeVarContext.ExpectedMatchingTypesInCaseBranches ->
             "Expected matching Types in Case-Expression Branches"
 
-        ExpectedBoolType ->
+        TypeVarContext.ExpectedBoolType ->
             "Expected Bool Type"
 
-        ExpectedMatchingTypesInIfThenElseBranches ->
+        TypeVarContext.ExpectedMatchingTypesInIfThenElseBranches ->
             "Expected matching Types in If-Then-Else-Expression Branches"
 
-        ExpectedBaseUnifiesWithLoopBodyType ->
+        TypeVarContext.ExpectedBaseUnifiesWithLoopBodyType ->
             "Expected base unifies with loop-body Type"
 
-        ExpectedListType ->
+        TypeVarContext.ExpectedListType ->
             "Expected List Type"
 
-        ExpectedFrozenType ->
+        TypeVarContext.ExpectedFrozenType ->
             "Expected Frozen Type"
 
-        InfiniteType typeVarName ->
+        TypeVarContext.InfiniteType typeVarName ->
             "Infinite Type detected: the type var " ++ "'" ++ String.fromInt typeVarName
 
-        CantPopEmptyTypeVarContext ->
+        TypeVarContext.CantPopEmptyTypeVarContext ->
             "Cant Pop Empty Type-Var-Context"
 
 
@@ -548,7 +569,7 @@ showTypeVarContext { nextTypeVar, typeVarStack, equations } =
 
 showInfer0 : Term -> Result (List TypeError) String
 showInfer0 term =
-    infer0 term
+    TypeInference.infer0 term
         |> Result.map
             (\( _, _, type1 ) ->
                 showType type1
@@ -564,7 +585,7 @@ showFinalInfer term =
     let
         resultString : Result (List TypeError) String
         resultString =
-            infer0 term
+            TypeInference.infer0 term
                 |> Result.andThen
                     (\( termVarContext, typeVarContext, type1 ) ->
                         State.run (TypeVarContext.expandType type1) typeVarContext
@@ -591,13 +612,13 @@ showFinalInfer term =
 showModuleTerm : ModuleTerm -> String
 showModuleTerm moduleTerm =
     case moduleTerm of
-        ModuleLiteralTerm module0 ->
+        Base.ModuleLiteralTerm module0 ->
             showModuleLiteral module0
 
-        ModuleVarUse moduleName ->
+        Base.ModuleVarUse moduleName ->
             String.concat [ "$", moduleName ]
 
-        FunctorApplication functorTerm modules ->
+        Base.FunctorApplication functorTerm modules ->
             String.concat
                 [ "(@ "
                 , showFunctorTerm functorTerm
@@ -612,10 +633,10 @@ showModuleTerm moduleTerm =
 showFunctorTerm : FunctorTerm -> String
 showFunctorTerm functorTerm =
     case functorTerm of
-        FunctorVarUse functorName ->
+        Base.FunctorVarUse functorName ->
             String.concat [ "$", functorName ]
 
-        FunctorLiteralTerm ({ parameters, body } as functorLiteral) ->
+        Base.FunctorLiteralTerm ({ parameters, body } as functorLiteral) ->
             String.concat
                 [ "(functor { "
                 , parameters
@@ -650,7 +671,7 @@ showInterface ({ assumptions } as interface) =
 showInterfaceAssumption : InterfaceAssumption -> String
 showInterfaceAssumption assumption =
     case assumption of
-        AssumeTerm termVarName type0 ->
+        Base.AssumeTerm termVarName type0 ->
             String.concat
                 [ "(assume-term "
                 , termVarName
@@ -659,14 +680,14 @@ showInterfaceAssumption assumption =
                 , ")"
                 ]
 
-        AssumeType typeVarName ->
+        Base.AssumeType typeVarName ->
             String.concat
                 [ "(assume-type "
                 , String.fromInt typeVarName
                 , ")"
                 ]
 
-        AssumeModule moduleVarName interface ->
+        Base.AssumeModule moduleVarName interface ->
             String.concat
                 [ "(assume-module "
                 , moduleVarName
@@ -675,7 +696,7 @@ showInterfaceAssumption assumption =
                 , ")"
                 ]
 
-        AssumeFunctor functorName functorType ->
+        Base.AssumeFunctor functorName functorType ->
             String.concat
                 [ "(assume-functor "
                 , functorName
@@ -704,7 +725,7 @@ showModuleLiteral module0 =
         showModuleLetBinding : ModuleLetBinding -> String
         showModuleLetBinding binding =
             case binding of
-                LetTerm var term ->
+                Base.LetTerm var term ->
                     String.concat
                         [ "("
                         , var
@@ -713,7 +734,7 @@ showModuleLiteral module0 =
                         , ")"
                         ]
 
-                LetModule var module1 ->
+                Base.LetModule var module1 ->
                     String.concat
                         [ "("
                         , var
@@ -740,7 +761,7 @@ showModuleValue moduleValue =
         showModuleValueAssignment : ModuleAssignment -> String
         showModuleValueAssignment binding =
             case binding of
-                AssignValue var value ->
+                Value.AssignValue var value ->
                     String.concat
                         [ "("
                         , var
@@ -749,7 +770,7 @@ showModuleValue moduleValue =
                         , ")"
                         ]
 
-                AssignModuleValue var moduleValue1 ->
+                Value.AssignModuleValue var moduleValue1 ->
                     String.concat
                         [ "("
                         , var

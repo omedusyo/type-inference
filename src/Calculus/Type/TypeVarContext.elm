@@ -1,4 +1,4 @@
-module TypeVarContext exposing
+module Calculus.Type.TypeVarContext exposing
     ( Equations
     , TypeError(..)
     , TypeVarContext
@@ -15,8 +15,8 @@ module TypeVarContext exposing
     , unification
     )
 
+import Calculus.Base as Base exposing (Type, TypeVarName)
 import Dict exposing (Dict)
-import LambdaBasics exposing (Type(..), TypeVarName)
 import Set exposing (Set)
 import StackedSet exposing (StackedSet)
 import StatefulWithErr as State exposing (StatefulWithErr)
@@ -144,7 +144,7 @@ popTypeVarStackFrameAndExpand type0 =
 
 newTypeVar : TypeVarName -> ( TypeVarName, Type )
 newTypeVar n =
-    ( n + 1, VarType n )
+    ( n + 1, Base.VarType n )
 
 
 generateFreshVar : UnificationStateful Type
@@ -207,7 +207,7 @@ extendEquations typeVarName type0 =
                 | equations = Dict.insert typeVarName type0 equations
                 , typeVarStack =
                     typeVarStack
-                        |> moveTypeVarStackFrame typeVarName (LambdaBasics.getTypeVars type0)
+                        |> moveTypeVarStackFrame typeVarName (Base.getTypeVars type0)
             }
         )
 
@@ -219,7 +219,7 @@ extendEquations typeVarName type0 =
 expandType_MAY_INFINITE_CYCLE : Type -> UnificationStateful Type
 expandType_MAY_INFINITE_CYCLE type0 =
     case type0 of
-        VarType n ->
+        Base.VarType n ->
             State.get0
                 (\{ equations } ->
                     case lookupEquations n equations of
@@ -227,39 +227,39 @@ expandType_MAY_INFINITE_CYCLE type0 =
                             expandType_MAY_INFINITE_CYCLE type1
 
                         Nothing ->
-                            State.return (VarType n)
+                            State.return (Base.VarType n)
                 )
 
-        Product type1 type2 ->
-            State.map2 Product
+        Base.Product type1 type2 ->
+            State.map2 Base.Product
                 (expandType_MAY_INFINITE_CYCLE type1)
                 (expandType_MAY_INFINITE_CYCLE type2)
 
-        Sum type1 type2 ->
-            State.map2 Sum
+        Base.Sum type1 type2 ->
+            State.map2 Base.Sum
                 (expandType_MAY_INFINITE_CYCLE type1)
                 (expandType_MAY_INFINITE_CYCLE type2)
 
-        Arrow type1 type2 ->
-            State.map2 Arrow
+        Base.Arrow type1 type2 ->
+            State.map2 Base.Arrow
                 (expandType_MAY_INFINITE_CYCLE type1)
                 (expandType_MAY_INFINITE_CYCLE type2)
 
-        LambdaBool ->
-            State.return LambdaBool
+        Base.ConstBool ->
+            State.return Base.ConstBool
 
-        LambdaNat ->
-            State.return LambdaNat
+        Base.ConstNat ->
+            State.return Base.ConstNat
 
-        LambdaList type1 ->
+        Base.List type1 ->
             expandType_MAY_INFINITE_CYCLE type1
-                |> State.map LambdaList
+                |> State.map Base.List
 
-        Frozen type1 ->
+        Base.Frozen type1 ->
             expandType_MAY_INFINITE_CYCLE type1
-                |> State.map Frozen
+                |> State.map Base.Frozen
 
-        ForAll typeVar type1 ->
+        Base.ForAll typeVar type1 ->
             -- TODO
             Debug.todo ""
 
@@ -301,7 +301,7 @@ expandTypeAtTypeVarName typeVarName =
 expandTypeWithCycleDetection : Type -> Set TypeVarName -> UnificationStateful Type
 expandTypeWithCycleDetection type0 seenVars =
     case type0 of
-        VarType n ->
+        Base.VarType n ->
             if Set.member n seenVars then
                 throwTypeError [ InfiniteType n ]
 
@@ -313,39 +313,39 @@ expandTypeWithCycleDetection type0 seenVars =
                                 expandTypeWithCycleDetection type1 (Set.insert n seenVars)
 
                             Nothing ->
-                                State.return (VarType n)
+                                State.return (Base.VarType n)
                     )
 
-        Product type1 type2 ->
-            State.map2 Product
+        Base.Product type1 type2 ->
+            State.map2 Base.Product
                 (expandTypeWithCycleDetection type1 seenVars)
                 (expandTypeWithCycleDetection type2 seenVars)
 
-        Sum type1 type2 ->
-            State.map2 Sum
+        Base.Sum type1 type2 ->
+            State.map2 Base.Sum
                 (expandTypeWithCycleDetection type1 seenVars)
                 (expandTypeWithCycleDetection type2 seenVars)
 
-        Arrow type1 type2 ->
-            State.map2 Arrow
+        Base.Arrow type1 type2 ->
+            State.map2 Base.Arrow
                 (expandTypeWithCycleDetection type1 seenVars)
                 (expandTypeWithCycleDetection type2 seenVars)
 
-        LambdaBool ->
-            State.return LambdaBool
+        Base.ConstBool ->
+            State.return Base.ConstBool
 
-        LambdaNat ->
-            State.return LambdaNat
+        Base.ConstNat ->
+            State.return Base.ConstNat
 
-        LambdaList type1 ->
+        Base.List type1 ->
             expandTypeWithCycleDetection type1 seenVars
-                |> State.map LambdaList
+                |> State.map Base.List
 
-        Frozen type1 ->
+        Base.Frozen type1 ->
             expandTypeWithCycleDetection type1 seenVars
-                |> State.map Frozen
+                |> State.map Base.Frozen
 
-        ForAll typeVar type1 ->
+        Base.ForAll typeVar type1 ->
             -- TODO
             Debug.todo ""
 
@@ -358,7 +358,7 @@ unification : Type -> Type -> UnificationStateful Type
 unification type0 type1 =
     case ( type0, type1 ) of
         -- ===TYPE VARS===
-        ( VarType id0, VarType id1 ) ->
+        ( Base.VarType id0, Base.VarType id1 ) ->
             State.map2
                 Tuple.pair
                 (expandTypeAtTypeVarName id0)
@@ -381,20 +381,20 @@ unification type0 type1 =
 
                             ( Nothing, Nothing ) ->
                                 if id0 == id1 then
-                                    State.return (VarType id0)
+                                    State.return (Base.VarType id0)
 
                                 else if id0 < id1 then
                                     State.second
-                                        (extendEquations id0 (VarType id1))
-                                        (State.return (VarType id1))
+                                        (extendEquations id0 (Base.VarType id1))
+                                        (State.return (Base.VarType id1))
 
                                 else
                                     State.second
-                                        (extendEquations id1 (VarType id0))
-                                        (State.return (VarType id1))
+                                        (extendEquations id1 (Base.VarType id0))
+                                        (State.return (Base.VarType id1))
                     )
 
-        ( VarType id0, _ ) ->
+        ( Base.VarType id0, _ ) ->
             expandTypeAtTypeVarName id0
                 |> State.andThen
                     (\maybeExpandedType0 ->
@@ -408,7 +408,7 @@ unification type0 type1 =
                                     (State.return type1)
                     )
 
-        ( _, VarType id1 ) ->
+        ( _, Base.VarType id1 ) ->
             expandTypeAtTypeVarName id1
                 |> State.andThen
                     (\maybeExpandedType1 ->
@@ -423,63 +423,63 @@ unification type0 type1 =
                     )
 
         -- ===PRODUCT===
-        ( Product type00 type01, Product type10 type11 ) ->
-            State.map2 Product
+        ( Base.Product type00 type01, Base.Product type10 type11 ) ->
+            State.map2 Base.Product
                 (unification type00 type10)
                 (unification type01 type11)
 
-        ( Product _ _, _ ) ->
+        ( Base.Product _ _, _ ) ->
             throwTypeError [ ExpectedProductType ]
 
         -- ===ARROW===
-        ( Arrow type00 type01, Arrow type10 type11 ) ->
-            State.map2 Arrow
+        ( Base.Arrow type00 type01, Base.Arrow type10 type11 ) ->
+            State.map2 Base.Arrow
                 (unification type00 type10)
                 (unification type01 type11)
 
-        ( Arrow _ _, _ ) ->
+        ( Base.Arrow _ _, _ ) ->
             throwTypeError [ ExpectedArrowType ]
 
         -- ===SUM===
-        ( Sum type00 type01, Sum type10 type11 ) ->
-            State.map2 Sum
+        ( Base.Sum type00 type01, Base.Sum type10 type11 ) ->
+            State.map2 Base.Sum
                 (unification type00 type10)
                 (unification type01 type11)
 
-        ( Sum _ _, _ ) ->
+        ( Base.Sum _ _, _ ) ->
             throwTypeError [ ExpectedSumType ]
 
         -- ===BOOL===
-        ( LambdaBool, LambdaBool ) ->
-            State.return LambdaBool
+        ( Base.ConstBool, Base.ConstBool ) ->
+            State.return Base.ConstBool
 
-        ( LambdaBool, _ ) ->
+        ( Base.ConstBool, _ ) ->
             throwTypeError [ ExpectedBoolType ]
 
         -- ===NAT===
-        ( LambdaNat, LambdaNat ) ->
-            State.return LambdaNat
+        ( Base.ConstNat, Base.ConstNat ) ->
+            State.return Base.ConstNat
 
-        ( LambdaNat, _ ) ->
+        ( Base.ConstNat, _ ) ->
             throwTypeError [ ExpectedNatType ]
 
         -- ===List===
-        ( LambdaList type00, LambdaList type11 ) ->
+        ( Base.List type00, Base.List type11 ) ->
             unification type00 type11
-                |> State.map LambdaList
+                |> State.map Base.List
 
-        ( LambdaList _, _ ) ->
+        ( Base.List _, _ ) ->
             throwTypeError [ ExpectedListType ]
 
         -- ===Frozen===
-        ( Frozen type00, Frozen type11 ) ->
+        ( Base.Frozen type00, Base.Frozen type11 ) ->
             unification type00 type11
-                |> State.map Frozen
+                |> State.map Base.Frozen
 
-        ( Frozen _, _ ) ->
+        ( Base.Frozen _, _ ) ->
             throwTypeError [ ExpectedFrozenType ]
 
         -- Forall
-        ( ForAll _ _, _ ) ->
+        ( Base.ForAll _ _, _ ) ->
             -- TODO?
             Debug.todo ""
