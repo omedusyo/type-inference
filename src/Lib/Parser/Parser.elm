@@ -1,4 +1,4 @@
-module Lib.Parser exposing
+module Lib.Parser.Parser exposing
     ( Parser
     , andMap
     , andThen
@@ -24,14 +24,11 @@ module Lib.Parser exposing
     )
 
 import Either exposing (Either)
+import Lib.Parser.State exposing (State)
 
 
 type alias Parser e a =
     State -> Result e ( State, a )
-
-
-type alias State =
-    String
 
 
 
