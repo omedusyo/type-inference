@@ -3,6 +3,8 @@ module Lib.Parser.Parser exposing
     , andMap
     , andThen
     , andThen2
+    , anyChar
+    , anyCharSatisfying
     , fail
     , first
     , get0
@@ -19,12 +21,14 @@ module Lib.Parser.Parser exposing
     , return
     , run
     , second
+    , sequence
+    , string
     , throw
     , try
     )
 
 import Either exposing (Either)
-import Lib.Parser.State exposing (State)
+import Lib.Parser.State as State exposing (State)
 
 
 type alias Parser e a =
@@ -35,17 +39,17 @@ type alias Parser e a =
 -- ===base===
 
 
-run : Parser e a -> String -> Result e ( String, a )
+run : Parser e a -> State -> Result e ( State, a )
 run parser =
     parser
 
 
-make : (String -> Result e ( String, a )) -> Parser e a
+make : (State -> Result e ( State, a )) -> Parser e a
 make f =
     f
 
 
-get0 : (String -> Parser e a) -> Parser e a
+get0 : (State -> Parser e a) -> Parser e a
 get0 f =
     make <|
         \s -> run (f s) s
@@ -200,6 +204,9 @@ throw error parser =
 
 
 -- ===choice structure===
+-- TODO: I don't like the use of `combineError` here
+--       it would be nice if the return type would be something like `Parser (e1 | e2 | (e1, e2))`
+--       so that the client doesn't need to deal with the error handling immediately
 
 
 try : Parser e a -> Parser e b -> (e -> e -> e) -> Parser e (Either a b)
@@ -240,8 +247,43 @@ sequence parsers0 =
 -- ===specifics===
 
 
-consumeChar : (Char -> Parser e a) -> Parser (Maybe e) a
-consumeChar f =
+anyChar : (Char -> Parser e a) -> Parser (Either State.EmptyInputError e) a
+anyChar f =
     make <|
-        \s ->
-            Debug.todo ""
+        \s0 ->
+            case State.consumeAnyChar s0 of
+                Ok ( c, s1 ) ->
+                    run (f c) s1
+                        |> Result.mapError (\error -> Either.Right error)
+
+                Err stateError ->
+                    Err (Either.Left stateError)
+
+
+
+-- TODO: Should I have the type `0 | 1 | 2 | ... | 9`?
+
+
+anyDigit =
+    Debug.todo ""
+
+
+anyCharSatisfying : (Char -> Bool) -> (Char -> Parser e a) -> Parser (Either State.CharFailedTestError e) a
+anyCharSatisfying test f =
+    make <|
+        \s0 ->
+            case State.consumeAnyCharSatisfying test s0 of
+                Ok ( c, s1 ) ->
+                    run (f c) s1
+                        |> Result.mapError (\error -> Either.Right error)
+
+                Err stateError ->
+                    Err (Either.Left stateError)
+
+
+string : String -> Parser State.ExpectedStringError ()
+string strToBeMatched =
+    make <|
+        \s0 ->
+            State.consumeString strToBeMatched s0
+                |> Result.map (\s1 -> ( s1, () ))
