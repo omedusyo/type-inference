@@ -27,7 +27,11 @@ import Either exposing (Either)
 
 
 type alias Parser e a =
-    String -> Result e ( String, a )
+    State -> Result e ( State, a )
+
+
+type alias State =
+    String
 
 
 
@@ -233,3 +237,14 @@ sequence parsers0 =
             parser
                 |> andThen
                     (\a -> map (\xs -> a :: xs) (sequence parsers1))
+
+
+
+-- ===specifics===
+
+
+consumeChar : (Char -> Parser e a) -> Parser (Maybe e) a
+consumeChar f =
+    make <|
+        \s ->
+            Debug.todo ""
