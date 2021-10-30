@@ -1,6 +1,7 @@
 module Lib.Parser.Parser exposing
     ( Parser
     , allSatisfying
+    , allUntil
     , andMap
     , andThen
     , andThen2
@@ -247,7 +248,7 @@ sequence parsers0 =
 -- ===specifics===
 
 
-anyChar : (Char -> Parser e a) -> Parser (Either State.EmptyInputError e) a
+anyChar : (Char -> Parser e a) -> Parser (Either (State.Error State.EmptyInput) e) a
 anyChar f =
     make <|
         \s0 ->
@@ -272,14 +273,14 @@ anyDigit =
 -- TODO: Should I use `any`? Maybe I should use `anyOne`? What about while consumers? `allSatisfying` `asMuchAsPossible`... nice modalities
 
 
-anyCharSatisfying : (Char -> Bool) -> Parser State.CharFailedTestError Char
+anyCharSatisfying : (Char -> Bool) -> Parser (State.Error State.CharFailedTest) Char
 anyCharSatisfying test =
     make <|
         \s0 ->
             State.consumeAnyCharSatisfying test s0
 
 
-string : String -> Parser State.ExpectedStringError ()
+string : String -> Parser (State.Error State.ExpectedString) ()
 string strToBeMatched =
     make <|
         \s0 ->

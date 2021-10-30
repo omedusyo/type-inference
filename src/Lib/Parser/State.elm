@@ -1,7 +1,8 @@
 module Lib.Parser.State exposing
-    ( CharFailedTestError(..)
-    , EmptyInputError(..)
-    , ExpectedStringError(..)
+    ( CharFailedTest(..)
+    , EmptyInput(..)
+    , Error
+    , ExpectedString(..)
     , Position
     , State
     , consumeAnyChar
@@ -9,7 +10,6 @@ module Lib.Parser.State exposing
     , consumeString
     , consumeWhile
     , return
-    , stateToPosition
     )
 
 
@@ -23,27 +23,31 @@ type alias Position =
     { col : Int, line : Int }
 
 
-stateToPosition : State -> Position
-stateToPosition =
-    .position
-
-
 
 -- ===Errors===
 
 
-type EmptyInputError
-    = EmptyInput { position : Position }
+type alias Error e =
+    { position : Position, msg : e }
 
 
-type CharFailedTestError
+throw : e -> State -> Error e
+throw error s =
+    { position = s.position, msg = error }
+
+
+type EmptyInput
+    = EmptyInput
+
+
+type CharFailedTest
     = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      CharFailedTest { position : Position, failedAtChar : Maybe Char }
+      CharFailedTest { failedAtChar : Maybe Char }
 
 
-type ExpectedStringError
+type ExpectedString
     = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      ExpectedString { position : Position, expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
+      ExpectedString { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
 
 
 
@@ -95,7 +99,7 @@ moveByCharacter c =
 -- ===consumers===
 
 
-consumeAnyChar : State -> Result EmptyInputError ( State, Char )
+consumeAnyChar : State -> Result (Error EmptyInput) ( State, Char )
 consumeAnyChar s =
     case String.uncons s.input of
         Just ( c, inputRemaining ) ->
@@ -107,10 +111,10 @@ consumeAnyChar s =
                 )
 
         Nothing ->
-            Err (EmptyInput { position = s.position })
+            Err (s |> throw EmptyInput)
 
 
-consumeAnyCharSatisfying : (Char -> Bool) -> State -> Result CharFailedTestError ( State, Char )
+consumeAnyCharSatisfying : (Char -> Bool) -> State -> Result (Error CharFailedTest) ( State, Char )
 consumeAnyCharSatisfying test s =
     case String.uncons s.input of
         Just ( c, inputRemaining ) ->
@@ -123,16 +127,16 @@ consumeAnyCharSatisfying test s =
                     )
 
             else
-                Err (CharFailedTest { position = s.position, failedAtChar = Just c })
+                Err (s |> throw (CharFailedTest { failedAtChar = Just c }))
 
         Nothing ->
-            Err (CharFailedTest { position = s.position, failedAtChar = Nothing })
+            Err (s |> throw (CharFailedTest { failedAtChar = Nothing }))
 
 
-consumeString : String -> State -> Result ExpectedStringError State
+consumeString : String -> State -> Result (Error ExpectedString) State
 consumeString strToBeMatched init_s =
     let
-        loop : String -> State -> String -> Result ExpectedStringError State
+        loop : String -> State -> String -> Result (Error ExpectedString) State
         loop strToBeMatched0 s reversed_strConsumedSoFar =
             case ( String.uncons strToBeMatched0, String.uncons s.input ) of
                 ( Just ( cToBeMatched, strToBeMatched1 ), Just ( c, inputRemaining ) ) ->
@@ -143,10 +147,10 @@ consumeString strToBeMatched init_s =
                             (String.cons c reversed_strConsumedSoFar)
 
                     else
-                        Err (ExpectedString { position = s.position, expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c })
+                        Err (s |> throw (ExpectedString { expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c }))
 
                 ( Just _, Nothing ) ->
-                    Err (ExpectedString { position = s.position, expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing })
+                    Err (s |> throw (ExpectedString { expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing }))
 
                 ( Nothing, _ ) ->
                     Ok s
