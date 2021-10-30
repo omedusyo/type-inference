@@ -306,6 +306,9 @@ match3 ( pattern0, body0 ) ( pattern1, body1 ) ( pattern2, body2 ) combineErrors
 
 
 -- This is an analogue of the case-expression for parsing
+-- Its type is really
+--  forall n : Nat.
+--    List n ( Parser e a, a -> Parser f b) ->(List n e -> Parser f b) -> Parser f b
 
 
 match : List ( Parser e a, a -> Parser f b ) -> (List e -> Parser f b) -> Parser f b
