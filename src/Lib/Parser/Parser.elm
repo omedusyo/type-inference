@@ -258,11 +258,6 @@ try parser =
             (\_ -> return ())
 
 
-oneOf : List (Parser r e a) -> Parser r e a
-oneOf parsers =
-    Debug.todo ""
-
-
 
 -- match2
 --   (string "pair", \() -> pair)
