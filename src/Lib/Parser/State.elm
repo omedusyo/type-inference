@@ -11,6 +11,8 @@ module Lib.Parser.State exposing
     , consumeString
     , consumeWhileTrue
     , end
+    , getInput
+    , getPosition
     , return
     )
 
@@ -23,6 +25,16 @@ type alias State =
 
 type alias Position =
     { col : Int, line : Int }
+
+
+getInput : State -> String
+getInput state =
+    state.input
+
+
+getPosition : State -> Position
+getPosition state =
+    state.position
 
 
 

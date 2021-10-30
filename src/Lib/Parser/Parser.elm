@@ -9,7 +9,7 @@ module Lib.Parser.Parser exposing
     , anyCharSatisfying
     , fail
     , first
-    , get0
+    , getInput
     , join
     , make
     , map
@@ -18,6 +18,7 @@ module Lib.Parser.Parser exposing
     , map4
     , map5
     , mid
+    , or
     , pair
     , pairRightToLeft
     , return
@@ -26,11 +27,10 @@ module Lib.Parser.Parser exposing
     , sequence
     , string
     , throw
-    , try
     )
 
 import Either exposing (Either)
-import Lib.Parser.State as State exposing (Error, ExpectedEndOfInput, ExpectedString, ExpectingNonEmptyInput, State)
+import Lib.Parser.State as State exposing (Error, ExpectedEndOfInput, ExpectedString, ExpectingNonEmptyInput, Position, State)
 
 
 type alias Parser e a =
@@ -51,10 +51,16 @@ make f =
     f
 
 
-get0 : (State -> Parser e a) -> Parser e a
-get0 f =
+getInput : (String -> Parser e a) -> Parser e a
+getInput f =
     make <|
-        \s -> run (f s) s
+        \s -> run (f (State.getInput s)) s
+
+
+getPosition : (State.Position -> Parser e a) -> Parser e a
+getPosition f =
+    make <|
+        \s -> run (f (State.getPosition s)) s
 
 
 
@@ -206,31 +212,118 @@ throw error parser =
 
 
 -- ===choice structure===
--- TODO: I don't like the use of `combineError` here
---       it would be nice if the return type would be something like `Parser (e1 | e2 | (e1, e2))`
---       so that the client doesn't need to deal with the error handling immediately
 
 
-try : Parser e a -> Parser e b -> (e -> e -> e) -> Parser e (Either a b)
-try parser0 parser1 combineErrors =
+{-| This backtracks on failure.
+p
+|> ifSuccessIfError
+(\\a -> ...)
+(\\error -> ...)
+-}
+ifSuccessIfError : (a -> Parser f b) -> (e -> Parser f b) -> Parser e a -> Parser f b
+ifSuccessIfError handleSuccess handleError parser =
     make <|
-        \s ->
-            case run parser0 s of
-                Ok ( s_a, a ) ->
-                    Ok ( s_a, Either.Left a )
+        \s0 ->
+            case run parser s0 of
+                Ok ( s1, a ) ->
+                    run (handleSuccess a) s1
 
-                Err error_a ->
-                    case run parser1 s of
-                        Ok ( s_b, b ) ->
-                            Ok ( s_b, Either.Right b )
+                Err error ->
+                    -- notice the backtrack to s0
+                    run (handleError error) s0
 
-                        Err error_b ->
-                            Err (combineErrors error_a error_b)
+
+ifErrorIfSuccess : (e -> Parser f b) -> (a -> Parser f b) -> Parser e a -> Parser f b
+ifErrorIfSuccess handleError handleSuccess =
+    ifSuccessIfError handleSuccess handleError
+
+
+or : Parser e a -> Parser e b -> Parser ( e, e ) (Either a b)
+or parser_a parser_b =
+    parser_a
+        |> ifSuccessIfError
+            (\a -> return (Either.Left a))
+            (\error_a ->
+                parser_b
+                    |> ifSuccessIfError
+                        (\b -> return (Either.Right b))
+                        (\error_b -> fail ( error_a, error_b ))
+            )
+
+
+try : Parser e a -> Parser f ()
+try parser =
+    parser
+        |> ifSuccessIfError
+            (\_ -> return ())
+            (\_ -> return ())
 
 
 oneOf : List (Parser e a) -> Parser e a
 oneOf parsers =
     Debug.todo ""
+
+
+
+-- match2
+--   (string "pair", \() -> pair)
+--   (string "cons", \() -> cons)
+--   (\pairError consError -> ...)
+
+
+match2 : ( Parser e0 a0, a0 -> Parser f b ) -> ( Parser e1 a1, a1 -> Parser f b ) -> (e0 -> e1 -> Parser f b) -> Parser f b
+match2 ( pattern0, body0 ) ( pattern1, body1 ) combineErrors =
+    pattern0
+        |> ifSuccessIfError
+            body0
+            (\error0 ->
+                pattern1
+                    |> ifSuccessIfError
+                        body1
+                        (\error1 -> combineErrors error0 error1)
+            )
+
+
+match3 : ( Parser e0 a0, a0 -> Parser f b ) -> ( Parser e1 a1, a1 -> Parser f b ) -> ( Parser e2 a2, a2 -> Parser f b ) -> (e0 -> e1 -> e2 -> Parser f b) -> Parser f b
+match3 ( pattern0, body0 ) ( pattern1, body1 ) ( pattern2, body2 ) combineErrors =
+    pattern0
+        |> ifSuccessIfError
+            body0
+            (\error0 ->
+                pattern1
+                    |> ifSuccessIfError
+                        body1
+                        (\error1 ->
+                            pattern2
+                                |> ifSuccessIfError
+                                    body2
+                                    (\error2 ->
+                                        combineErrors error0 error1 error2
+                                    )
+                        )
+            )
+
+
+
+-- This is an analogue of the case-expression for parsing
+
+
+match : List ( Parser e a, a -> Parser f b ) -> (List e -> Parser f b) -> Parser f b
+match initBranches combineErrors =
+    let
+        loop : List ( Parser e a, a -> Parser f b ) -> List e -> Parser f b
+        loop branches0 reversed_errors =
+            case branches0 of
+                [] ->
+                    combineErrors (List.reverse reversed_errors)
+
+                ( pattern, body ) :: branches1 ->
+                    pattern
+                        |> ifSuccessIfError
+                            body
+                            (\error -> loop branches1 (error :: reversed_errors))
+    in
+    loop initBranches []
 
 
 
