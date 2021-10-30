@@ -2,12 +2,14 @@ module Lib.Parser.State exposing
     ( CharFailedTestError(..)
     , EmptyInputError(..)
     , ExpectedStringError(..)
+    , Position
     , State
     , consumeAnyChar
     , consumeAnyCharSatisfying
     , consumeString
     , consumeWhile
     , return
+    , stateToPosition
     )
 
 
@@ -21,22 +23,27 @@ type alias Position =
     { col : Int, line : Int }
 
 
+stateToPosition : State -> Position
+stateToPosition =
+    .position
+
+
 
 -- ===Errors===
 
 
 type EmptyInputError
-    = EmptyInput
+    = EmptyInput { position : Position }
 
 
 type CharFailedTestError
     = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      CharFailedTest { failedAtChar : Maybe Char }
+      CharFailedTest { position : Position, failedAtChar : Maybe Char }
 
 
 type ExpectedStringError
     = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      ExpectedString { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
+      ExpectedString { position : Position, expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
 
 
 
@@ -47,7 +54,7 @@ type ExpectedStringError
 return : String -> State
 return input =
     { input = input
-    , position = { col = 0, line = 0 }
+    , position = { col = 1, line = 1 }
     }
 
 
@@ -71,6 +78,10 @@ moveBy n ({ position } as s) =
     { s | position = { col = position.col + n, line = position.line } }
 
 
+
+-- TODO `(s |> setInput inputRemaining |> moveByCharacter c)` is a recurring pattern
+
+
 moveByCharacter : Char -> State -> State
 moveByCharacter c =
     if c == '\n' then
@@ -84,38 +95,38 @@ moveByCharacter c =
 -- ===consumers===
 
 
-consumeAnyChar : State -> Result EmptyInputError ( Char, State )
+consumeAnyChar : State -> Result EmptyInputError ( State, Char )
 consumeAnyChar s =
     case String.uncons s.input of
         Just ( c, inputRemaining ) ->
             Ok
-                ( c
-                , s
+                ( s
                     |> setInput inputRemaining
                     |> moveByCharacter c
+                , c
                 )
 
         Nothing ->
-            Err EmptyInput
+            Err (EmptyInput { position = s.position })
 
 
-consumeAnyCharSatisfying : (Char -> Bool) -> State -> Result CharFailedTestError ( Char, State )
+consumeAnyCharSatisfying : (Char -> Bool) -> State -> Result CharFailedTestError ( State, Char )
 consumeAnyCharSatisfying test s =
     case String.uncons s.input of
         Just ( c, inputRemaining ) ->
             if test c then
                 Ok
-                    ( c
-                    , s
+                    ( s
                         |> setInput inputRemaining
                         |> moveByCharacter c
+                    , c
                     )
 
             else
-                Err (CharFailedTest { failedAtChar = Just c })
+                Err (CharFailedTest { position = s.position, failedAtChar = Just c })
 
         Nothing ->
-            Err (CharFailedTest { failedAtChar = Nothing })
+            Err (CharFailedTest { position = s.position, failedAtChar = Nothing })
 
 
 consumeString : String -> State -> Result ExpectedStringError State
@@ -132,10 +143,10 @@ consumeString strToBeMatched init_s =
                             (String.cons c reversed_strConsumedSoFar)
 
                     else
-                        Err (ExpectedString { expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c })
+                        Err (ExpectedString { position = s.position, expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c })
 
                 ( Just _, Nothing ) ->
-                    Err (ExpectedString { expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing })
+                    Err (ExpectedString { position = s.position, expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing })
 
                 ( Nothing, _ ) ->
                     Ok s
@@ -143,5 +154,27 @@ consumeString strToBeMatched init_s =
     loop strToBeMatched init_s ""
 
 
-consumeWhile =
-    Debug.todo ""
+consumeWhile : (Char -> Bool) -> State -> ( State, String )
+consumeWhile test init_s =
+    let
+        loop : ( State, String ) -> ( State, String )
+        loop ( s, reversed_strConsumedSoFar ) =
+            case String.uncons s.input of
+                Just ( c, inputRemaining ) ->
+                    if test c then
+                        loop
+                            ( s |> setInput inputRemaining |> moveByCharacter c
+                            , String.cons c reversed_strConsumedSoFar
+                            )
+
+                    else
+                        ( s, String.reverse reversed_strConsumedSoFar )
+
+                Nothing ->
+                    ( s, String.reverse reversed_strConsumedSoFar )
+    in
+    loop ( init_s, "" )
+
+
+
+-- TODO: comsumeWhile but you have to satisfy atleast one character

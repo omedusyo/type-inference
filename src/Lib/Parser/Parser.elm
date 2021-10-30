@@ -1,5 +1,6 @@
 module Lib.Parser.Parser exposing
     ( Parser
+    , allSatisfying
     , andMap
     , andThen
     , andThen2
@@ -232,7 +233,6 @@ try parser0 parser1 combineErrors =
 
 sequence : List (Parser e a) -> Parser e (List a)
 sequence parsers0 =
-    -- TODO: You should implement this in tail recursive way
     case parsers0 of
         [] ->
             return []
@@ -252,7 +252,7 @@ anyChar f =
     make <|
         \s0 ->
             case State.consumeAnyChar s0 of
-                Ok ( c, s1 ) ->
+                Ok ( s1, c ) ->
                     run (f c) s1
                         |> Result.mapError (\error -> Either.Right error)
 
@@ -268,17 +268,15 @@ anyDigit =
     Debug.todo ""
 
 
-anyCharSatisfying : (Char -> Bool) -> (Char -> Parser e a) -> Parser (Either State.CharFailedTestError e) a
-anyCharSatisfying test f =
+
+-- TODO: Should I use `any`? Maybe I should use `anyOne`? What about while consumers? `allSatisfying` `asMuchAsPossible`... nice modalities
+
+
+anyCharSatisfying : (Char -> Bool) -> Parser State.CharFailedTestError Char
+anyCharSatisfying test =
     make <|
         \s0 ->
-            case State.consumeAnyCharSatisfying test s0 of
-                Ok ( c, s1 ) ->
-                    run (f c) s1
-                        |> Result.mapError (\error -> Either.Right error)
-
-                Err stateError ->
-                    Err (Either.Left stateError)
+            State.consumeAnyCharSatisfying test s0
 
 
 string : String -> Parser State.ExpectedStringError ()
@@ -287,3 +285,17 @@ string strToBeMatched =
         \s0 ->
             State.consumeString strToBeMatched s0
                 |> Result.map (\s1 -> ( s1, () ))
+
+
+allSatisfying : (Char -> Bool) -> Parser e String
+allSatisfying test =
+    make <|
+        \s ->
+            Ok (State.consumeWhile test s)
+
+
+allUntil : Parser e a -> Parser e (List a)
+allUntil parser =
+    make <|
+        \s0 ->
+            Debug.todo ""
