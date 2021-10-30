@@ -30,7 +30,7 @@ module Lib.Parser.Parser exposing
     )
 
 import Either exposing (Either)
-import Lib.Parser.State as State exposing (State)
+import Lib.Parser.State as State exposing (Error, ExpectedEndOfInput, ExpectedString, ExpectingNonEmptyInput, State)
 
 
 type alias Parser e a =
@@ -248,7 +248,14 @@ sequence parsers0 =
 -- ===specifics===
 
 
-anyChar : (Char -> Parser e a) -> Parser (Either (State.Error State.EmptyInput) e) a
+end : Parser (Error ExpectedEndOfInput) ()
+end =
+    make <|
+        \s ->
+            State.end s |> Result.map (\() -> ( s, () ))
+
+
+anyChar : (Char -> Parser e a) -> Parser (Either (Error ExpectingNonEmptyInput) e) a
 anyChar f =
     make <|
         \s0 ->

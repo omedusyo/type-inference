@@ -1,14 +1,16 @@
 module Lib.Parser.State exposing
     ( CharFailedTest(..)
-    , EmptyInput(..)
     , Error
+    , ExpectedEndOfInput(..)
     , ExpectedString(..)
+    , ExpectingNonEmptyInput(..)
     , Position
     , State
     , consumeAnyChar
     , consumeAnyCharSatisfying
     , consumeString
     , consumeWhileTrue
+    , end
     , return
     )
 
@@ -36,8 +38,8 @@ throw error s =
     { position = s.position, msg = error }
 
 
-type EmptyInput
-    = EmptyInput
+type ExpectingNonEmptyInput
+    = ExpectingNonEmptyInput
 
 
 type CharFailedTest
@@ -48,6 +50,10 @@ type CharFailedTest
 type ExpectedString
     = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
       ExpectedString { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
+
+
+type ExpectedEndOfInput
+    = ExpectedEndOfInput
 
 
 
@@ -99,7 +105,7 @@ moveByCharacter c =
 -- ===consumers===
 
 
-consumeAnyChar : State -> Result (Error EmptyInput) ( State, Char )
+consumeAnyChar : State -> Result (Error ExpectingNonEmptyInput) ( State, Char )
 consumeAnyChar s =
     case String.uncons s.input of
         Just ( c, inputRemaining ) ->
@@ -111,7 +117,7 @@ consumeAnyChar s =
                 )
 
         Nothing ->
-            Err (s |> throw EmptyInput)
+            Err (s |> throw ExpectingNonEmptyInput)
 
 
 consumeAnyCharSatisfying : (Char -> Bool) -> State -> Result (Error CharFailedTest) ( State, Char )
@@ -182,3 +188,13 @@ consumeWhileTrue test init_s =
 
 
 -- TODO: comsumeWhile but you have to satisfy atleast one character
+
+
+end : State -> Result (Error ExpectedEndOfInput) ()
+end s =
+    if String.isEmpty s.input then
+        Ok ()
+
+    else
+        -- Err (State.Error State.ExpectedEndOfInput)
+        Err (Debug.todo "")
