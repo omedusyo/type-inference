@@ -91,13 +91,13 @@ updatePosition f s =
 
 
 newLine : State -> State
-newLine ({ position } as s) =
-    { s | position = { col = 0, line = position.line + 1 } }
+newLine =
+    updatePosition (\position -> { col = 0, line = position.line + 1 })
 
 
 moveBy : Int -> State -> State
-moveBy n ({ position } as s) =
-    { s | position = { col = position.col + n, line = position.line } }
+moveBy n =
+    updatePosition (\position -> { col = position.col + n, line = position.line })
 
 
 
