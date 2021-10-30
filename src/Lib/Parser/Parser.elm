@@ -228,6 +228,11 @@ try parser0 parser1 combineErrors =
                             Err (combineErrors error_a error_b)
 
 
+oneOf : List (Parser e a) -> Parser e a
+oneOf parsers =
+    Debug.todo ""
+
+
 
 -- ===looping===
 
@@ -253,6 +258,11 @@ end =
     make <|
         \s ->
             State.end s |> Result.map (\() -> ( s, () ))
+
+
+lazy : (() -> Parser e a) -> Parser e a
+lazy parser =
+    parser ()
 
 
 anyChar : (Char -> Parser e a) -> Parser (Either (Error ExpectingNonEmptyInput) e) a
