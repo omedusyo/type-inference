@@ -8,7 +8,7 @@ module Lib.Parser.State exposing
     , consumeAnyChar
     , consumeAnyCharSatisfying
     , consumeString
-    , consumeWhile
+    , consumeWhileTrue
     , return
     )
 
@@ -158,8 +158,8 @@ consumeString strToBeMatched init_s =
     loop strToBeMatched init_s ""
 
 
-consumeWhile : (Char -> Bool) -> State -> ( State, String )
-consumeWhile test init_s =
+consumeWhileTrue : (Char -> Bool) -> State -> ( State, String )
+consumeWhileTrue test init_s =
     let
         loop : ( State, String ) -> ( State, String )
         loop ( s, reversed_strConsumedSoFar ) =

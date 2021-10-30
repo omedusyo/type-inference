@@ -1,7 +1,7 @@
 module Lib.Parser.Parser exposing
     ( Parser
-    , allSatisfying
-    , allUntil
+    , allWhileSucceeds
+    , allWhileTrue
     , andMap
     , andThen
     , andThen2
@@ -265,7 +265,7 @@ anyChar f =
 -- TODO: Should I have the type `0 | 1 | 2 | ... | 9`?
 
 
-anyDigit =
+digit =
     Debug.todo ""
 
 
@@ -288,15 +288,25 @@ string strToBeMatched =
                 |> Result.map (\s1 -> ( s1, () ))
 
 
-allSatisfying : (Char -> Bool) -> Parser e String
-allSatisfying test =
+allWhileTrue : (Char -> Bool) -> Parser e String
+allWhileTrue test =
     make <|
         \s ->
-            Ok (State.consumeWhile test s)
+            Ok (State.consumeWhileTrue test s)
 
 
-allUntil : Parser e a -> Parser e (List a)
-allUntil parser =
+allWhileSucceeds : Parser e a -> Parser e (List a)
+allWhileSucceeds parser =
     make <|
-        \s0 ->
-            Debug.todo ""
+        \init_s ->
+            let
+                loop : ( State, List a ) -> Result e ( State, List a )
+                loop ( s0, reversed_xs ) =
+                    case run parser s0 of
+                        Ok ( s1, x ) ->
+                            loop ( s1, x :: reversed_xs )
+
+                        Err error ->
+                            Ok ( s0, List.reverse reversed_xs )
+            in
+            loop ( init_s, [] )
