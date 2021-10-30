@@ -33,34 +33,34 @@ import Either exposing (Either)
 import Lib.Parser.State as State exposing (Error, ExpectedEndOfInput, ExpectedString, ExpectingNonEmptyInput, Position, State)
 
 
-type alias Parser e a =
-    State -> Result e ( State, a )
+type alias Parser r e a =
+    r -> State -> Result e ( State, a )
 
 
 
 -- ===base===
 
 
-run : Parser e a -> State -> Result e ( State, a )
+run : Parser r e a -> r -> State -> Result e ( State, a )
 run parser =
     parser
 
 
-make : (State -> Result e ( State, a )) -> Parser e a
+make : (r -> State -> Result e ( State, a )) -> Parser r e a
 make f =
     f
 
 
-getInput : (String -> Parser e a) -> Parser e a
+getInput : (String -> Parser r e a) -> Parser r e a
 getInput f =
     make <|
-        \s -> run (f (State.getInput s)) s
+        \r s -> run (f (State.getInput s)) r s
 
 
-getPosition : (State.Position -> Parser e a) -> Parser e a
+getPosition : (State.Position -> Parser r e a) -> Parser r e a
 getPosition f =
     make <|
-        \s -> run (f (State.getPosition s)) s
+        \r s -> run (f (State.getPosition s)) r s
 
 
 
@@ -68,20 +68,20 @@ getPosition f =
 -- unit
 
 
-return : a -> Parser e a
+return : a -> Parser r e a
 return a =
-    make <| \s -> Ok ( s, a )
+    make <| \r s -> Ok ( s, a )
 
 
 
 -- functor
 
 
-map : (a -> b) -> Parser e a -> Parser e b
+map : (a -> b) -> Parser r e a -> Parser r e b
 map f parser =
     make <|
-        \s0 ->
-            run parser s0
+        \r s0 ->
+            run parser r s0
                 |> Result.map (\( s1, a ) -> ( s1, f a ))
 
 
@@ -89,59 +89,59 @@ map f parser =
 -- applicative
 
 
-pair : Parser e a -> Parser e b -> Parser e ( a, b )
+pair : Parser r e a -> Parser r e b -> Parser r e ( a, b )
 pair parser0 parser1 =
     make <|
-        \s0 ->
-            run parser0 s0
+        \r s0 ->
+            run parser0 r s0
                 |> Result.andThen
                     (\( s1, a ) ->
-                        run parser1 s1
+                        run parser1 r s1
                             |> Result.map (\( s2, b ) -> ( s2, ( a, b ) ))
                     )
 
 
-pairRightToLeft : Parser e a -> Parser e b -> Parser e ( a, b )
+pairRightToLeft : Parser r e a -> Parser r e b -> Parser r e ( a, b )
 pairRightToLeft parser0 parser1 =
     pair parser1 parser0 |> map (\( b, a ) -> ( a, b ))
 
 
-first : Parser e a -> Parser e b -> Parser e a
+first : Parser r e a -> Parser r e b -> Parser r e a
 first parser0 parser1 =
     pair parser0 parser1
         |> map (\( a, _ ) -> a)
 
 
-second : Parser e a -> Parser e b -> Parser e b
+second : Parser r e a -> Parser r e b -> Parser r e b
 second parser0 parser1 =
     pair parser0 parser1
         |> map (\( _, b ) -> b)
 
 
-mid : Parser e a -> Parser e b -> Parser e c -> Parser e b
+mid : Parser r e a -> Parser r e b -> Parser r e c -> Parser r e b
 mid parser0 parser1 parser2 =
     second parser0 (first parser1 parser2)
 
 
-map2 : (a0 -> a1 -> b) -> Parser e a0 -> Parser e a1 -> Parser e b
+map2 : (a0 -> a1 -> b) -> Parser r e a0 -> Parser r e a1 -> Parser r e b
 map2 f parser0 parser1 =
     pair parser0 parser1
         |> map (\( a0, a1 ) -> f a0 a1)
 
 
-map3 : (a0 -> a1 -> a2 -> b) -> Parser e a0 -> Parser e a1 -> Parser e a2 -> Parser e b
+map3 : (a0 -> a1 -> a2 -> b) -> Parser r e a0 -> Parser r e a1 -> Parser r e a2 -> Parser r e b
 map3 f parser0 parser1 parser2 =
     pair parser0 (pair parser1 parser2)
         |> map (\( a0, ( a1, a2 ) ) -> f a0 a1 a2)
 
 
-map4 : (a0 -> a1 -> a2 -> a3 -> b) -> Parser e a0 -> Parser e a1 -> Parser e a2 -> Parser e a3 -> Parser e b
+map4 : (a0 -> a1 -> a2 -> a3 -> b) -> Parser r e a0 -> Parser r e a1 -> Parser r e a2 -> Parser r e a3 -> Parser r e b
 map4 f parser0 parser1 parser2 parser3 =
     pair parser0 (pair parser1 (pair parser2 parser3))
         |> map (\( a0, ( a1, ( a2, a3 ) ) ) -> f a0 a1 a2 a3)
 
 
-map5 : (a0 -> a1 -> a2 -> a3 -> a4 -> b) -> Parser e a0 -> Parser e a1 -> Parser e a2 -> Parser e a3 -> Parser e a4 -> Parser e b
+map5 : (a0 -> a1 -> a2 -> a3 -> a4 -> b) -> Parser r e a0 -> Parser r e a1 -> Parser r e a2 -> Parser r e a3 -> Parser r e a4 -> Parser r e b
 map5 f parser0 parser1 parser2 parser3 parser4 =
     pair parser0 (pair parser1 (pair parser2 (pair parser3 parser4)))
         |> map (\( a0, ( a1, ( a2, ( a3, a4 ) ) ) ) -> f a0 a1 a2 a3 a4)
@@ -151,7 +151,7 @@ map5 f parser0 parser1 parser2 parser3 parser4 =
 -- TODO: what order should this be in?
 
 
-andMap : Parser e (a -> b) -> Parser e a -> Parser e b
+andMap : Parser r e (a -> b) -> Parser r e a -> Parser r e b
 andMap parser_fn parser_a =
     pair parser_fn parser_a
         |> map (\( f, a ) -> f a)
@@ -161,18 +161,18 @@ andMap parser_fn parser_a =
 -- monad
 
 
-andThen : (a -> Parser e b) -> Parser e a -> Parser e b
+andThen : (a -> Parser r e b) -> Parser r e a -> Parser r e b
 andThen f parser =
     make <|
-        \s0 ->
-            run parser s0
+        \r s0 ->
+            run parser r s0
                 |> Result.andThen
                     (\( s1, a ) ->
-                        run (f a) s1
+                        run (f a) r s1
                     )
 
 
-join : Parser e (Parser e a) -> Parser e a
+join : Parser r e (Parser r e a) -> Parser r e a
 join parser_parser =
     parser_parser |> andThen identity
 
@@ -181,7 +181,7 @@ join parser_parser =
 -- TODO: andThen3,4,5
 
 
-andThen2 : (a0 -> a1 -> Parser e b) -> Parser e a0 -> Parser e a1 -> Parser e b
+andThen2 : (a0 -> a1 -> Parser r e b) -> Parser r e a0 -> Parser r e a1 -> Parser r e b
 andThen2 f parser0 parser1 =
     pair parser0 parser1
         |> andThen (\( a, b ) -> f a b)
@@ -191,23 +191,22 @@ andThen2 f parser0 parser1 =
 -- ===error===
 
 
-fail : e -> Parser e a
+fail : e -> Parser r e a
 fail error =
-    make <| \_ -> Err error
+    make <| \_ _ -> Err error
 
 
-mapError : (e1 -> e2) -> Parser e1 a -> Parser e2 a
+mapError : (e1 -> e2) -> Parser r e1 a -> Parser r e2 a
 mapError f parser0 =
     make <|
-        \s ->
-            run parser0 s
+        \r s ->
+            run parser0 r s
                 |> Result.mapError f
 
 
-throw : e -> Parser e a -> Parser e b
+throw : e -> Parser r e a -> Parser r e b
 throw error parser =
-    parser
-        |> andThen (\_ -> fail error)
+    second parser (fail error)
 
 
 
@@ -220,25 +219,25 @@ p
 (\\a -> ...)
 (\\error -> ...)
 -}
-ifSuccessIfError : (a -> Parser f b) -> (e -> Parser f b) -> Parser e a -> Parser f b
+ifSuccessIfError : (a -> Parser r f b) -> (e -> Parser r f b) -> Parser r e a -> Parser r f b
 ifSuccessIfError handleSuccess handleError parser =
     make <|
-        \s0 ->
-            case run parser s0 of
+        \r s0 ->
+            case run parser r s0 of
                 Ok ( s1, a ) ->
-                    run (handleSuccess a) s1
+                    run (handleSuccess a) r s1
 
                 Err error ->
                     -- notice the backtrack to s0
-                    run (handleError error) s0
+                    run (handleError error) r s0
 
 
-ifErrorIfSuccess : (e -> Parser f b) -> (a -> Parser f b) -> Parser e a -> Parser f b
+ifErrorIfSuccess : (e -> Parser r f b) -> (a -> Parser r f b) -> Parser r e a -> Parser r f b
 ifErrorIfSuccess handleError handleSuccess =
     ifSuccessIfError handleSuccess handleError
 
 
-or : Parser e a -> Parser e b -> Parser ( e, e ) (Either a b)
+or : Parser r e a -> Parser r e b -> Parser r ( e, e ) (Either a b)
 or parser_a parser_b =
     parser_a
         |> ifSuccessIfError
@@ -251,7 +250,7 @@ or parser_a parser_b =
             )
 
 
-try : Parser e a -> Parser f ()
+try : Parser r e a -> Parser r f ()
 try parser =
     parser
         |> ifSuccessIfError
@@ -259,7 +258,7 @@ try parser =
             (\_ -> return ())
 
 
-oneOf : List (Parser e a) -> Parser e a
+oneOf : List (Parser r e a) -> Parser r e a
 oneOf parsers =
     Debug.todo ""
 
@@ -271,7 +270,7 @@ oneOf parsers =
 --   (\pairError consError -> ...)
 
 
-match2 : ( Parser e0 a0, a0 -> Parser f b ) -> ( Parser e1 a1, a1 -> Parser f b ) -> (e0 -> e1 -> Parser f b) -> Parser f b
+match2 : ( Parser r e0 a0, a0 -> Parser r f b ) -> ( Parser r e1 a1, a1 -> Parser r f b ) -> (e0 -> e1 -> Parser r f b) -> Parser r f b
 match2 ( pattern0, body0 ) ( pattern1, body1 ) combineErrors =
     pattern0
         |> ifSuccessIfError
@@ -284,7 +283,7 @@ match2 ( pattern0, body0 ) ( pattern1, body1 ) combineErrors =
             )
 
 
-match3 : ( Parser e0 a0, a0 -> Parser f b ) -> ( Parser e1 a1, a1 -> Parser f b ) -> ( Parser e2 a2, a2 -> Parser f b ) -> (e0 -> e1 -> e2 -> Parser f b) -> Parser f b
+match3 : ( Parser r e0 a0, a0 -> Parser r f b ) -> ( Parser r e1 a1, a1 -> Parser r f b ) -> ( Parser r e2 a2, a2 -> Parser r f b ) -> (e0 -> e1 -> e2 -> Parser r f b) -> Parser r f b
 match3 ( pattern0, body0 ) ( pattern1, body1 ) ( pattern2, body2 ) combineErrors =
     pattern0
         |> ifSuccessIfError
@@ -311,10 +310,10 @@ match3 ( pattern0, body0 ) ( pattern1, body1 ) ( pattern2, body2 ) combineErrors
 --    List n ( Parser e a, a -> Parser f b) ->(List n e -> Parser f b) -> Parser f b
 
 
-match : List ( Parser e a, a -> Parser f b ) -> (List e -> Parser f b) -> Parser f b
+match : List ( Parser r e a, a -> Parser r f b ) -> (List e -> Parser r f b) -> Parser r f b
 match initBranches combineErrors =
     let
-        loop : List ( Parser e a, a -> Parser f b ) -> List e -> Parser f b
+        loop : List ( Parser r e a, a -> Parser r f b ) -> List e -> Parser r f b
         loop branches0 reversed_errors =
             case branches0 of
                 [] ->
@@ -333,7 +332,7 @@ match initBranches combineErrors =
 -- ===looping===
 
 
-sequence : List (Parser e a) -> Parser e (List a)
+sequence : List (Parser r e a) -> Parser r e (List a)
 sequence parsers0 =
     case parsers0 of
         [] ->
@@ -349,25 +348,25 @@ sequence parsers0 =
 -- ===specifics===
 
 
-end : Parser (Error ExpectedEndOfInput) ()
+end : Parser r (Error ExpectedEndOfInput) ()
 end =
     make <|
-        \s ->
+        \_ s ->
             State.end s |> Result.map (\() -> ( s, () ))
 
 
-lazy : (() -> Parser e a) -> Parser e a
+lazy : (() -> Parser r e a) -> Parser r e a
 lazy parser =
     parser ()
 
 
-anyChar : (Char -> Parser e a) -> Parser (Either (Error ExpectingNonEmptyInput) e) a
+anyChar : (Char -> Parser r e a) -> Parser r (Either (Error ExpectingNonEmptyInput) e) a
 anyChar f =
     make <|
-        \s0 ->
+        \r s0 ->
             case State.consumeAnyChar s0 of
                 Ok ( s1, c ) ->
-                    run (f c) s1
+                    run (f c) r s1
                         |> Result.mapError (\error -> Either.Right error)
 
                 Err stateError ->
@@ -386,36 +385,36 @@ digit =
 -- TODO: Should I use `any`? Maybe I should use `anyOne`? What about while consumers? `allSatisfying` `asMuchAsPossible`... nice modalities
 
 
-anyCharSatisfying : (Char -> Bool) -> Parser (State.Error State.CharFailedTest) Char
+anyCharSatisfying : (Char -> Bool) -> Parser r (State.Error State.CharFailedTest) Char
 anyCharSatisfying test =
     make <|
-        \s0 ->
+        \_ s0 ->
             State.consumeAnyCharSatisfying test s0
 
 
-string : String -> Parser (State.Error State.ExpectedString) ()
+string : String -> Parser r (State.Error State.ExpectedString) ()
 string strToBeMatched =
     make <|
-        \s0 ->
+        \_ s0 ->
             State.consumeString strToBeMatched s0
                 |> Result.map (\s1 -> ( s1, () ))
 
 
-allWhileTrue : (Char -> Bool) -> Parser e String
+allWhileTrue : (Char -> Bool) -> Parser r e String
 allWhileTrue test =
     make <|
-        \s ->
+        \_ s ->
             Ok (State.consumeWhileTrue test s)
 
 
-allWhileSucceeds : Parser e a -> Parser e (List a)
+allWhileSucceeds : Parser r e a -> Parser r e (List a)
 allWhileSucceeds parser =
     make <|
-        \init_s ->
+        \r init_s ->
             let
                 loop : ( State, List a ) -> Result e ( State, List a )
                 loop ( s0, reversed_xs ) =
-                    case run parser s0 of
+                    case run parser r s0 of
                         Ok ( s1, x ) ->
                             loop ( s1, x :: reversed_xs )
 
