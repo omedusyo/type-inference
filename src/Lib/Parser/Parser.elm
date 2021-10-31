@@ -7,9 +7,11 @@ module Lib.Parser.Parser exposing
     , andThen2
     , anyChar
     , anyCharSatisfying
+    , discard
     , fail
     , first
     , getInput
+    , ifSuccessIfError
     , join
     , make
     , map
@@ -17,6 +19,7 @@ module Lib.Parser.Parser exposing
     , map3
     , map4
     , map5
+    , mapError
     , mid
     , or
     , pair
@@ -196,7 +199,7 @@ fail error =
     make <| \_ _ -> Err error
 
 
-mapError : (e1 -> e2) -> Parser r e1 a -> Parser r e2 a
+mapError : (e -> f) -> Parser r e a -> Parser r f a
 mapError f parser0 =
     make <|
         \r s ->
@@ -337,6 +340,11 @@ end =
 lazy : (() -> Parser r e a) -> Parser r e a
 lazy parser =
     parser ()
+
+
+discard : Parser r e a -> Parser r e ()
+discard parser =
+    parser |> map (\_ -> ())
 
 
 anyChar : (Char -> Parser r e a) -> Parser r (Either (Error ExpectingNonEmptyInput) e) a

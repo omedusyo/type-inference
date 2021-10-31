@@ -16,6 +16,7 @@ import Calculus.Base as Base
         , Type
         , TypeVarName
         )
+import Calculus.NewParser as TODONEWPARSER
 import Lib.NatParser as NatParser
 import Lib.Parser.Parser as TODOPARSER
 import Parser exposing ((|.), (|=), DeadEnd, Parser)

@@ -13,7 +13,9 @@ module Lib.Parser.State exposing
     , end
     , getInput
     , getPosition
+    , mapMsg
     , return
+    , setMsg
     )
 
 
@@ -48,6 +50,16 @@ type alias Error e =
 throw : e -> State -> Error e
 throw error s =
     { position = s.position, msg = error }
+
+
+mapMsg : (e -> f) -> Error e -> Error f
+mapMsg f error =
+    { position = error.position, msg = f error.msg }
+
+
+setMsg : f -> Error e -> Error f
+setMsg msg error =
+    { position = error.position, msg = msg }
 
 
 type ExpectingNonEmptyInput
