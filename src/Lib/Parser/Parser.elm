@@ -12,6 +12,7 @@ module Lib.Parser.Parser exposing
     , fail
     , first
     , getInput
+    , getPosition
     , ifError
     , ifSuccessIfError
     , join

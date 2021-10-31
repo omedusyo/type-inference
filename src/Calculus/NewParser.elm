@@ -2,6 +2,7 @@ module Calculus.NewParser exposing
     ( keyword
     , keywordGap
     , spaces
+    , varIntro
     , whitespaceChars
     )
 
@@ -37,6 +38,11 @@ type ExpectedKeywordGapCharacter
 type ExpectedKeyword
     = ExpectedKeyword { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
     | ExpectedGapAfterKeyword { failedAtChar : Char }
+
+
+type ExpectedIdentifierIntroduction
+    = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
+    | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
 
 
 whitespaceChars : Set Char
@@ -125,3 +131,55 @@ keyword keyword0 =
         (keywordGap
             |> Parser.mapError (PState.mapMsg handleGapError)
         )
+
+
+
+-- ===VAR===
+
+
+varIntro : Parser ExpectedIdentifierIntroduction TermVarName
+varIntro =
+    -- TODO: You can make the error messages better
+    let
+        excludedChars : Set Char
+        excludedChars =
+            Set.union
+                (Set.fromList [ '$', '.', '(', ')', '{', '}', '\'', '"' ])
+                whitespaceChars
+
+        isExcludedChar : Char -> Bool
+        isExcludedChar c =
+            Set.member c excludedChars
+
+        isPrintableChar : Char -> Bool
+        isPrintableChar c =
+            let
+                charCode =
+                    Char.toCode c
+            in
+            32 <= charCode && charCode <= 126
+
+        isInnerVarChar : Char -> Bool
+        isInnerVarChar c =
+            not (isExcludedChar c) && isPrintableChar c
+
+        handleCharError : PState.CharFailedTest -> ExpectedIdentifierIntroduction
+        handleCharError msg =
+            case msg of
+                PState.CharFailedTest { failedAtChar } ->
+                    ExpectedIdentifierCharacters { failedAtChar = failedAtChar }
+    in
+    Parser.anyCharSatisfying isInnerVarChar
+        |> Parser.mapError (PState.mapMsg handleCharError)
+        |> Parser.andThen
+            (\c ->
+                if Char.isDigit c then
+                    Parser.getPosition
+                        (\position ->
+                            Parser.fail { position = position, msg = ExpectedIdentifierToStartWithNonDigit { failedAtChar = c } }
+                        )
+
+                else
+                    Parser.allWhileTrue isInnerVarChar
+                        |> Parser.map (\str -> String.cons c str)
+            )
