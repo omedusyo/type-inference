@@ -324,22 +324,6 @@ match initBranches combineErrors =
 
 
 
--- ===looping===
-
-
-sequence : List (Parser r e a) -> Parser r e (List a)
-sequence parsers0 =
-    case parsers0 of
-        [] ->
-            return []
-
-        parser :: parsers1 ->
-            parser
-                |> andThen
-                    (\a -> map (\xs -> a :: xs) (sequence parsers1))
-
-
-
 -- ===specifics===
 
 
@@ -395,6 +379,22 @@ string strToBeMatched =
                 |> Result.map (\s1 -> ( s1, () ))
 
 
+
+-- ===looping===
+
+
+sequence : List (Parser r e a) -> Parser r e (List a)
+sequence parsers0 =
+    case parsers0 of
+        [] ->
+            return []
+
+        parser :: parsers1 ->
+            parser
+                |> andThen
+                    (\a -> map (\xs -> a :: xs) (sequence parsers1))
+
+
 allWhileTrue : (Char -> Bool) -> Parser r e String
 allWhileTrue test =
     make <|
@@ -417,3 +417,21 @@ allWhileSucceeds parser =
                             Ok ( s0, List.reverse reversed_xs )
             in
             loop ( init_s, [] )
+
+
+
+-- ===read-only state===
+
+
+push : r -> Parser r e a -> Parser r e a
+push r parser =
+    make <|
+        \_ s ->
+            run parser r s
+
+
+read : (r -> Parser r e a) -> Parser r e a
+read f =
+    make <|
+        \r s ->
+            run (f r) r s
