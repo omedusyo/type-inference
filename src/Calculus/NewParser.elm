@@ -3,6 +3,7 @@ module Calculus.NewParser exposing
     , keyword
     , keywordGap
     , spaces
+    , symbol
     , true
     , varIntro
     , whitespaceChars
@@ -53,6 +54,10 @@ type ExpectedConstant
     = ExpectedConstant
 
 
+type ExpectedSymbol
+    = ExpectedSymbol { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
+
+
 whitespaceChars : Set Char
 whitespaceChars =
     -- \u{000D} === \r
@@ -90,6 +95,23 @@ spaces : Parser e ()
 spaces =
     Parser.allWhileTrue isWhitespaceChar
         |> Parser.discard
+
+
+symbol : String -> Parser ExpectedSymbol ()
+symbol symbol0 =
+    let
+        handleString : PState.ExpectedString -> ExpectedSymbol
+        handleString msg =
+            case msg of
+                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                    ExpectedSymbol { expected = expected, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+    in
+    Parser.unit
+        |> Parser.o
+            (Parser.string symbol0
+                |> Parser.mapError handleString
+            )
+        |> Parser.o spaces
 
 
 
@@ -195,6 +217,11 @@ varIntro =
                         |> Parser.map (\str -> String.cons c str)
             )
         |> Parser.o spaces
+
+
+binding : Parser e a -> Parser e b -> Parser e ( a, b )
+binding varsParser bodyParser =
+    Debug.todo ""
 
 
 
