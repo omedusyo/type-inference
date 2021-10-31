@@ -7,10 +7,12 @@ module Lib.Parser.Parser exposing
     , andThen2
     , anyChar
     , anyCharSatisfying
+    , check
     , discard
     , fail
     , first
     , getInput
+    , ifError
     , ifSuccessIfError
     , join
     , make
@@ -240,6 +242,14 @@ ifErrorIfSuccess handleError handleSuccess =
     ifSuccessIfError handleSuccess handleError
 
 
+ifError : (e -> Parser r f a) -> Parser r e a -> Parser r f a
+ifError handleError parser =
+    parser
+        |> ifSuccessIfError
+            return
+            handleError
+
+
 or : Parser r e a -> Parser r e b -> Parser r ( e, e ) (Either a b)
 or parser_a parser_b =
     parser_a
@@ -253,12 +263,21 @@ or parser_a parser_b =
             )
 
 
-try : Parser r e a -> Parser r f ()
-try parser =
-    parser
-        |> ifSuccessIfError
-            (\_ -> return ())
-            (\_ -> return ())
+
+-- This does lookahead with a parser
+
+
+check : Parser r e a -> Parser r e ()
+check parser =
+    make <|
+        \r s0 ->
+            case run parser r s0 of
+                Ok ( _, _ ) ->
+                    -- This backtracks
+                    Ok ( s0, () )
+
+                Err error ->
+                    Err error
 
 
 

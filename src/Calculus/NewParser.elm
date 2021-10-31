@@ -1,5 +1,6 @@
 module Calculus.NewParser exposing
     ( keyword
+    , keywordGap
     , spaces
     , whitespaceChars
     )
@@ -79,9 +80,8 @@ spaces =
 
 keywordGap : Parser ExpectedKeywordGapCharacter ()
 keywordGap =
-    Parser.anyCharSatisfying isGapChar
-        |> Parser.ifSuccessIfError
-            (\_ -> Parser.return ())
+    Parser.check (Parser.anyCharSatisfying isGapChar)
+        |> Parser.ifError
             (\error ->
                 case error.msg of
                     PState.CharFailedTest { failedAtChar } ->
@@ -105,24 +105,23 @@ keywordGap =
 
 keyword : String -> Parser ExpectedKeyword ()
 keyword keyword0 =
+    let
+        handleStringError : PState.ExpectedString -> ExpectedKeyword
+        handleStringError msg =
+            case msg of
+                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                    ExpectedKeyword { expected = expected, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+
+        handleGapError : ExpectedKeywordGapCharacter -> ExpectedKeyword
+        handleGapError msg =
+            case msg of
+                ExpectedKeywordGapCharacter { failedAtChar } ->
+                    ExpectedGapAfterKeyword { failedAtChar = failedAtChar }
+    in
     Parser.second
         (Parser.string keyword0
-            |> Parser.mapError
-                (PState.mapMsg
-                    (\msg ->
-                        case msg of
-                            PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                                ExpectedKeyword { expected = expected, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-                    )
-                )
+            |> Parser.mapError (PState.mapMsg handleStringError)
         )
         (keywordGap
-            |> Parser.mapError
-                (PState.mapMsg
-                    (\msg ->
-                        case msg of
-                            ExpectedKeywordGapCharacter { failedAtChar } ->
-                                ExpectedGapAfterKeyword { failedAtChar = failedAtChar }
-                    )
-                )
+            |> Parser.mapError (PState.mapMsg handleGapError)
         )
