@@ -31,6 +31,8 @@ module Lib.Parser.Parser exposing
     , or
     , pair
     , pairRightToLeft
+    , push
+    , read
     , return
     , run
     , second
@@ -489,11 +491,11 @@ allWhileSucceeds parser =
 -- ===read-only state===
 
 
-push : r -> Parser r e a -> Parser r e a
-push r parser =
+push : (r1 -> r2) -> Parser r2 e a -> Parser r1 e a
+push f parser =
     make <|
-        \_ s ->
-            run parser r s
+        \r s ->
+            run parser (f r) s
 
 
 read : (r -> Parser r e a) -> Parser r e a

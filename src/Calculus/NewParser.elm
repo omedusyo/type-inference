@@ -1,5 +1,7 @@
 module Calculus.NewParser exposing
-    ( false
+    ( binding
+    , false
+    , initReadOnlyState
     , keyword
     , keywordGap
     , spaces
@@ -26,6 +28,7 @@ import Calculus.Base as Base
         , TypeVarName
         )
 import Dict exposing (Dict)
+import Either exposing (Either)
 import Lib.Parser.Error as PError
 import Lib.Parser.Parser as Parser
 import Lib.Parser.State as PState
@@ -50,12 +53,29 @@ type ExpectedIdentifierIntroduction
     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
 
 
+
+-- TODO
+
+
 type ExpectedConstant
     = ExpectedConstant
 
 
-type ExpectedSymbol
-    = ExpectedSymbol { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
+type ExpectedBindingTerm e f
+    = ExpectedOpenBraces { failedAtChar : Maybe Char }
+    | ExpectedDot { failedAtChar : Maybe Char }
+    | ExpectedClosingBraces { failedAtChar : Maybe Char }
+    | VariablesParserError e
+    | BodyParserError f
+
+
+type ExpectedParens
+    = ExpectedOpenParens { failedAtChar : Maybe Char }
+    | ExpectedClosingParens { failedAtChar : Maybe Char }
+
+
+type ExpectedTerm
+    = ExpectedOperator
 
 
 whitespaceChars : Set Char
@@ -83,8 +103,17 @@ isGapChar c =
     Set.member c gapChars
 
 
+
+-- ===Types===
+
+
 type alias ReadOnlyState =
-    {}
+    { areParanthesesMandatory : Bool }
+
+
+initReadOnlyState : ReadOnlyState
+initReadOnlyState =
+    { areParanthesesMandatory = False }
 
 
 type alias Parser e a =
@@ -97,20 +126,10 @@ spaces =
         |> Parser.discard
 
 
-symbol : String -> Parser ExpectedSymbol ()
+symbol : String -> Parser PState.ExpectedString ()
 symbol symbol0 =
-    let
-        handleString : PState.ExpectedString -> ExpectedSymbol
-        handleString msg =
-            case msg of
-                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                    ExpectedSymbol { expected = expected, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-    in
     Parser.unit
-        |> Parser.o
-            (Parser.string symbol0
-                |> Parser.mapError handleString
-            )
+        |> Parser.o (Parser.string symbol0)
         |> Parser.o spaces
 
 
@@ -169,6 +188,45 @@ keyword keyword0 =
         |> Parser.o spaces
 
 
+parens : Parser e a -> Parser (Either ExpectedParens e) a
+parens parser =
+    let
+        handleOpenParens : PState.ExpectedString -> Either ExpectedParens e
+        handleOpenParens msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    Either.Left (ExpectedOpenParens { failedAtChar = failedAtChar })
+
+        handleClosingParens : PState.ExpectedString -> Either ExpectedParens e
+        handleClosingParens msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    Either.Left (ExpectedClosingParens { failedAtChar = failedAtChar })
+    in
+    Parser.read
+        (\{ areParanthesesMandatory } ->
+            if areParanthesesMandatory then
+                Parser.identity
+                    |> Parser.o (symbol "(" |> Parser.mapError handleOpenParens)
+                    |> Parser.ooo (parser |> Parser.mapError Either.Right)
+                    |> Parser.o (symbol ")" |> Parser.mapError handleClosingParens)
+
+            else
+                -- TODO: maybe do a lookahead and make parentheses truly optional here?
+                parser |> Parser.mapError Either.Right
+        )
+
+
+pushMandatoryParens : Parser e a -> Parser e a
+pushMandatoryParens parser =
+    Parser.push (\r -> { r | areParanthesesMandatory = True }) parser
+
+
+pushOptionalParens : Parser e a -> Parser e a
+pushOptionalParens parser =
+    Parser.push (\r -> { r | areParanthesesMandatory = False }) parser
+
+
 
 -- ===VAR===
 
@@ -219,9 +277,45 @@ varIntro =
         |> Parser.o spaces
 
 
-binding : Parser e a -> Parser e b -> Parser e ( a, b )
+binding : Parser e a -> Parser f b -> Parser (ExpectedBindingTerm e f) ( a, b )
 binding varsParser bodyParser =
-    Debug.todo ""
+    let
+        handleOpenBraces : PState.ExpectedString -> ExpectedBindingTerm e f
+        handleOpenBraces msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedOpenBraces { failedAtChar = failedAtChar }
+
+        handleDot : PState.ExpectedString -> ExpectedBindingTerm e f
+        handleDot msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedDot { failedAtChar = failedAtChar }
+
+        handleClosingBraces : PState.ExpectedString -> ExpectedBindingTerm e f
+        handleClosingBraces msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedClosingBraces { failedAtChar = failedAtChar }
+    in
+    Parser.return (\vars body -> ( vars, body ))
+        |> Parser.o (symbol "{" |> Parser.mapError handleOpenBraces)
+        |> Parser.ooo (varsParser |> Parser.mapError VariablesParserError)
+        |> Parser.o (symbol "." |> Parser.mapError handleDot)
+        -- TODO: here I need to somehow indicate that the parens are optional
+        |> Parser.ooo (pushOptionalParens bodyParser |> Parser.mapError BodyParserError)
+        |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
+
+
+pair : Parser e Term
+pair =
+    parens
+        (Parser.return Base.Pair
+            |> Parser.o (keyword "pair" |> Parser.mapError (Debug.todo ""))
+            |> Parser.ooo (true |> Parser.mapError (Debug.todo ""))
+            |> Parser.ooo (true |> Parser.mapError (Debug.todo ""))
+        )
+        |> Parser.mapError (Debug.todo "")
 
 
 
