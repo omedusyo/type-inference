@@ -1,10 +1,8 @@
 module Lib.Parser.State exposing
     ( CharFailedTest(..)
-    , Error
     , ExpectedEndOfInput(..)
     , ExpectedString(..)
     , ExpectingNonEmptyInput(..)
-    , Position
     , State
     , consumeAnyChar
     , consumeAnyCharSatisfying
@@ -13,20 +11,17 @@ module Lib.Parser.State exposing
     , end
     , getInput
     , getPosition
-    , mapMsg
     , return
-    , setMsg
     )
+
+import Lib.Parser.Error exposing (Error)
+import Lib.Parser.Position exposing (Position)
 
 
 type alias State =
     { input : String
     , position : Position
     }
-
-
-type alias Position =
-    { col : Int, line : Int }
 
 
 getInput : State -> String
@@ -39,27 +34,9 @@ getPosition state =
     state.position
 
 
-
--- ===Errors===
-
-
-type alias Error e =
-    { position : Position, msg : e }
-
-
 throw : e -> State -> Error e
-throw error s =
-    { position = s.position, msg = error }
-
-
-mapMsg : (e -> f) -> Error e -> Error f
-mapMsg f error =
-    { position = error.position, msg = f error.msg }
-
-
-setMsg : f -> Error e -> Error f
-setMsg msg error =
-    { position = error.position, msg = msg }
+throw msg s =
+    { position = s.position, msg = msg }
 
 
 type ExpectingNonEmptyInput

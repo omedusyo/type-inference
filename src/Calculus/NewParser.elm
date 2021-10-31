@@ -1,7 +1,9 @@
 module Calculus.NewParser exposing
-    ( keyword
+    ( false
+    , keyword
     , keywordGap
     , spaces
+    , true
     , varIntro
     , whitespaceChars
     )
@@ -22,8 +24,10 @@ import Calculus.Base as Base
         , Type
         , TypeVarName
         )
+import Dict exposing (Dict)
+import Lib.Parser.Error as PError
 import Lib.Parser.Parser as Parser
-import Lib.Parser.State as PState exposing (Error)
+import Lib.Parser.State as PState
 import Set exposing (Set)
 
 
@@ -43,6 +47,10 @@ type ExpectedKeyword
 type ExpectedIdentifierIntroduction
     = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
+
+
+type ExpectedConstant
+    = ExpectedConstant
 
 
 whitespaceChars : Set Char
@@ -75,7 +83,7 @@ type alias ReadOnlyState =
 
 
 type alias Parser e a =
-    Parser.Parser ReadOnlyState (Error e) a
+    Parser.Parser ReadOnlyState e a
 
 
 spaces : Parser e ()
@@ -84,20 +92,23 @@ spaces =
         |> Parser.discard
 
 
+
+-- Doesn't consume anything, but may fail
+
+
 keywordGap : Parser ExpectedKeywordGapCharacter ()
 keywordGap =
     Parser.check (Parser.anyCharSatisfying isGapChar)
         |> Parser.ifError
             (\error ->
-                case error.msg of
+                case error of
                     PState.CharFailedTest { failedAtChar } ->
                         case failedAtChar of
                             Just c ->
-                                Parser.fail
-                                    (error |> PState.setMsg (ExpectedKeywordGapCharacter { failedAtChar = c }))
+                                Parser.fail (ExpectedKeywordGapCharacter { failedAtChar = c })
 
                             Nothing ->
-                                Parser.return ()
+                                Parser.unit
             )
 
 
@@ -124,13 +135,16 @@ keyword keyword0 =
                 ExpectedKeywordGapCharacter { failedAtChar } ->
                     ExpectedGapAfterKeyword { failedAtChar = failedAtChar }
     in
-    Parser.second
-        (Parser.string keyword0
-            |> Parser.mapError (PState.mapMsg handleStringError)
-        )
-        (keywordGap
-            |> Parser.mapError (PState.mapMsg handleGapError)
-        )
+    Parser.unit
+        |> Parser.o
+            (Parser.string keyword0
+                |> Parser.mapError handleStringError
+            )
+        |> Parser.o
+            (keywordGap
+                |> Parser.mapError handleGapError
+            )
+        |> Parser.o spaces
 
 
 
@@ -170,16 +184,58 @@ varIntro =
                     ExpectedIdentifierCharacters { failedAtChar = failedAtChar }
     in
     Parser.anyCharSatisfying isInnerVarChar
-        |> Parser.mapError (PState.mapMsg handleCharError)
+        |> Parser.mapError handleCharError
         |> Parser.andThen
             (\c ->
                 if Char.isDigit c then
-                    Parser.getPosition
-                        (\position ->
-                            Parser.fail { position = position, msg = ExpectedIdentifierToStartWithNonDigit { failedAtChar = c } }
-                        )
+                    Parser.fail (ExpectedIdentifierToStartWithNonDigit { failedAtChar = c })
 
                 else
                     Parser.allWhileTrue isInnerVarChar
                         |> Parser.map (\str -> String.cons c str)
             )
+        |> Parser.o spaces
+
+
+
+-- TODO
+
+
+constKeywords : List String
+constKeywords =
+    [ "true", "false", "0n0", "empty-list" ]
+
+
+constantsMap : Dict String Term
+constantsMap =
+    Dict.fromList
+        [ ( "true", Base.ConstTrue )
+        , ( "false", Base.ConstFalse )
+        , ( "0n0", Base.ConstZero )
+        , ( "empty-list", Base.ConstEmpty )
+        ]
+
+
+
+-- ===Bool===
+
+
+true : Parser ExpectedKeyword Term
+true =
+    Parser.second
+        (keyword "true")
+        (Parser.return Base.ConstTrue)
+
+
+false : Parser ExpectedKeyword Term
+false =
+    Parser.second
+        (keyword "false")
+        (Parser.return Base.ConstFalse)
+
+
+emptyList : Parser ExpectedKeyword Term
+emptyList =
+    Parser.second
+        (keyword "false")
+        (Parser.return Base.ConstFalse)
