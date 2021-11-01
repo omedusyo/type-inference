@@ -27,11 +27,13 @@ module Lib.Parser.Parser exposing
     , map4
     , map5
     , mapError
+    , match
+    , match2
+    , match3
     , mid
     , o
     , oneOf
     , ooo
-    , or
     , pair
     , pairRightToLeft
     , push
@@ -291,19 +293,6 @@ ifError handleError parser =
             handleError
 
 
-or : Parser r e a -> Parser r f a -> Parser r ( e, f ) a
-or parser_a parser_b =
-    parser_a
-        |> ifSuccessIfError
-            return
-            (\error_a ->
-                parser_b
-                    |> ifSuccessIfError
-                        return
-                        (\error_b -> fail ( error_a, error_b ))
-            )
-
-
 
 -- This does lookahead with a parser
 
@@ -435,18 +424,6 @@ anyChar f =
                     Err (error |> Error.mapMsg Either.Left)
 
 
-
--- TODO: Should I have the type `0 | 1 | 2 | ... | 9`?
-
-
-digit =
-    Debug.todo ""
-
-
-
--- TODO: Should I use `any`? Maybe I should use `anyOne`? What about while consumers? `allSatisfying` `asMuchAsPossible`... nice modalities
-
-
 anyCharSatisfying : (Char -> Bool) -> Parser r State.CharFailedTest Char
 anyCharSatisfying test =
     make <|
@@ -528,10 +505,10 @@ repeat : Parser r e a -> Parser r e (List a)
 repeat parser =
     loop []
         (\reversed_xs ->
-            or
-                (parser |> map (\x -> Loop (x :: reversed_xs)))
-                (return (Done (List.reverse reversed_xs)))
-                |> mapError (\( error, _ ) -> error)
+            (parser |> map (\x -> Loop (x :: reversed_xs)))
+                |> ifSuccessIfError
+                    return
+                    (\error -> return (Done (List.reverse reversed_xs)))
         )
 
 

@@ -4,8 +4,12 @@ module Calculus.NewParser exposing
     , initReadOnlyState
     , keyword
     , keywordGap
+    , left
+    , parenthesizedTerm
     , spaces
     , symbol
+    , term
+    , termKeyword
     , true
     , varIntro
     , whitespaceChars
@@ -71,15 +75,10 @@ type ExpectedParens
 
 
 type ExpectedTerm
-    = ExpectedOperator ExpectedOperator
-    | ExpectedOneOfConstants (List ExpectedKeyword)
-    | ExpectedParens ExpectedParens
-
-
-type
-    ExpectedOperator
-    -- TODO
     = ExpectedOperatorName ExpectedKeyword
+    | ExpectedKnownOperatorName
+    | ExpectedConstantOrOperatorApplication
+    | ExpectedParens ExpectedParens
 
 
 whitespaceChars : Set Char
@@ -99,7 +98,7 @@ isWhitespaceChar c =
 
 gapChars : Set Char
 gapChars =
-    Set.union whitespaceChars (Set.fromList [ '(', '{', '.', '$', '\'', '"' ])
+    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"' ])
 
 
 isGapChar : Char -> Bool
@@ -192,32 +191,48 @@ keyword keyword0 =
         |> Parser.o spaces
 
 
-parens : Parser e a -> Parser (Either ExpectedParens e) a
-parens parser =
+termKeyword : String -> Parser ExpectedTerm ()
+termKeyword keyword0 =
+    keyword keyword0 |> Parser.mapError ExpectedOperatorName
+
+
+parenthesizedTerm : Parser ExpectedTerm a -> Parser ExpectedTerm a
+parenthesizedTerm parser =
     let
-        handleOpenParens : PState.ExpectedString -> Either ExpectedParens e
+        handleOpenParens : PState.ExpectedString -> ExpectedTerm
         handleOpenParens msg =
             case msg of
                 PState.ExpectedString { failedAtChar } ->
-                    Either.Left (ExpectedOpenParens { failedAtChar = failedAtChar })
+                    ExpectedParens (ExpectedOpenParens { failedAtChar = failedAtChar })
 
-        handleClosingParens : PState.ExpectedString -> Either ExpectedParens e
+        handleClosingParens : PState.ExpectedString -> ExpectedTerm
         handleClosingParens msg =
             case msg of
                 PState.ExpectedString { failedAtChar } ->
-                    Either.Left (ExpectedClosingParens { failedAtChar = failedAtChar })
+                    ExpectedParens (ExpectedClosingParens { failedAtChar = failedAtChar })
+
+        optionalParens_p =
+            Parser.allWhileTrue (\c -> c == '(')
+                |> Parser.andThen
+                    (\parentheses ->
+                        let
+                            p =
+                                Parser.string (String.repeat (String.length parentheses) ")")
+                        in
+                        parser
+                            |> Parser.o (p |> Parser.mapError handleClosingParens)
+                    )
     in
     Parser.read
         (\{ areParanthesesMandatory } ->
             if areParanthesesMandatory then
                 Parser.identity
                     |> Parser.o (symbol "(" |> Parser.mapError handleOpenParens)
-                    |> Parser.ooo (parser |> Parser.mapError Either.Right)
+                    |> Parser.ooo optionalParens_p
                     |> Parser.o (symbol ")" |> Parser.mapError handleClosingParens)
 
             else
-                -- TODO: maybe do a lookahead and make parentheses truly optional here?
-                parser |> Parser.mapError Either.Right
+                optionalParens_p
         )
 
 
@@ -311,97 +326,93 @@ binding varsParser bodyParser =
         |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
 
 
-pair : Parser e Term
-pair =
-    parens
-        (Parser.return Base.Pair
-            |> Parser.o (keyword "pair" |> Parser.mapError (Debug.todo ""))
-            |> Parser.ooo (true |> Parser.mapError (Debug.todo ""))
-            |> Parser.ooo (true |> Parser.mapError (Debug.todo ""))
-        )
-        |> Parser.mapError (Debug.todo "")
-
-
-
--- TODO
-
-
-constKeywords : List String
-constKeywords =
-    [ "true", "false", "0n0", "empty-list" ]
-
-
-constantsMap : Dict String Term
-constantsMap =
-    Dict.fromList
-        [ ( "true", Base.ConstTrue )
-        , ( "false", Base.ConstFalse )
-        , ( "0n0", Base.ConstZero )
-        , ( "empty-list", Base.ConstEmpty )
-        ]
+const : Term -> Parser ExpectedTerm Term
+const term0 =
+    Parser.return term0
 
 
 term : Parser ExpectedTerm Term
 term =
-    Debug.todo ""
+    let
+        handleMatchError error =
+            case error of
+                Either.Left msg ->
+                    ExpectedKnownOperatorName
 
-
-constantTerm : Parser ExpectedTerm Term
-constantTerm =
-    Parser.oneOf
-        [ true
-        , false
-        , emptyList
-        ]
-        |> Parser.mapError (\errors -> ExpectedOneOfConstants errors)
-
-
-operatorApplication0 : String -> Term -> Parser ExpectedKeyword Term
-operatorApplication0 keyword0 constTerm =
-    Parser.second
-        (keyword keyword0)
-        (Parser.return constTerm)
-
-
-handleKeywordToExpectedTerm : ExpectedKeyword -> ExpectedTerm
-handleKeywordToExpectedTerm msg =
-    ExpectedOperator (ExpectedOperatorName msg)
-
-
-handleParensToExpectedTerm : Either ExpectedParens ExpectedTerm -> ExpectedTerm
-handleParensToExpectedTerm msg =
-    case msg of
-        Either.Left parensMsg ->
-            ExpectedParens parensMsg
-
-        Either.Right err ->
-            err
-
-
-operatorApplication1 : String -> (Term -> Term) -> Parser ExpectedTerm Term
-operatorApplication1 keyword0 f =
-    parens
-        (Parser.return f
-            |> Parser.o (keyword keyword0 |> Parser.mapError handleKeywordToExpectedTerm)
-            |> Parser.ooo (Parser.lazy (\() -> term))
+                Either.Right termError ->
+                    termError
+    in
+    -- TODO: error message on the input "(left (true" sucks, because the constants parser fails to find the closing paren, so we backtrack and try to do the operator parser. But the backtracking shouldn't be happening!
+    -- TODO: This may consume parentheses, but when parsing of constant fails, it backtracks together with all the parantheses and then they are consumed again. This is a bit inefficient, but probably not a big deal.
+    -- TODO: better error msg when on wrong number of arguments
+    pushOptionalParens
+        (parenthesizedTerm
+            (Parser.match
+                [ ( termKeyword "true", \_ -> true )
+                , ( termKeyword "false", \_ -> false )
+                , ( termKeyword "empty", \_ -> empty )
+                ]
+                |> Parser.mapError handleMatchError
+            )
         )
-        |> Parser.mapError handleParensToExpectedTerm
+        |> Parser.ifSuccessIfError
+            Parser.return
+            (\matchConstantError ->
+                parenthesizedTerm
+                    (Parser.match
+                        [ ( termKeyword "pair", \_ -> pair )
+                        , ( termKeyword "left", \_ -> left )
+                        ]
+                        |> Parser.mapError handleMatchError
+                    )
+            )
 
 
 
 -- ===Bool===
 
 
-true : Parser ExpectedKeyword Term
+true : Parser ExpectedTerm Term
 true =
-    operatorApplication0 "true" Base.ConstTrue
+    const Base.ConstTrue
 
 
-false : Parser ExpectedKeyword Term
+false : Parser ExpectedTerm Term
 false =
-    operatorApplication0 "false" Base.ConstFalse
+    const Base.ConstFalse
 
 
-emptyList : Parser ExpectedKeyword Term
-emptyList =
-    operatorApplication0 "empty" Base.ConstEmpty
+
+-- ===Cartesian Product===
+-- (pair e e')
+
+
+mandatoryParensTerm : Parser ExpectedTerm Term
+mandatoryParensTerm =
+    Parser.lazy (\() -> pushMandatoryParens term)
+
+
+pair : Parser ExpectedTerm Term
+pair =
+    Parser.return Base.Pair
+        |> Parser.ooo mandatoryParensTerm
+        |> Parser.ooo mandatoryParensTerm
+
+
+
+-- ==Coproduct==
+
+
+left : Parser ExpectedTerm Term
+left =
+    Parser.return Base.Left
+        |> Parser.ooo mandatoryParensTerm
+
+
+
+-- ===List===
+
+
+empty : Parser ExpectedTerm Term
+empty =
+    const Base.ConstEmpty
