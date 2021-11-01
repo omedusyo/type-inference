@@ -1,5 +1,6 @@
 module Lib.Parser.Parser exposing
-    ( Parser
+    ( Loop(..)
+    , Parser
     , allWhileSucceeds
     , allWhileTrue
     , andMap
@@ -17,6 +18,8 @@ module Lib.Parser.Parser exposing
     , ifError
     , ifSuccessIfError
     , join
+    , lazy
+    , loop
     , make
     , map
     , map2
@@ -33,6 +36,8 @@ module Lib.Parser.Parser exposing
     , pairRightToLeft
     , push
     , read
+    , repeat
+    , repeatAtleastOnce
     , return
     , run
     , second
@@ -286,15 +291,15 @@ ifError handleError parser =
             handleError
 
 
-or : Parser r e a -> Parser r e b -> Parser r ( e, e ) (Either a b)
+or : Parser r e a -> Parser r f a -> Parser r ( e, f ) a
 or parser_a parser_b =
     parser_a
         |> ifSuccessIfError
-            (\a -> return (Either.Left a))
+            return
             (\error_a ->
                 parser_b
                     |> ifSuccessIfError
-                        (\b -> return (Either.Right b))
+                        return
                         (\error_b -> fail ( error_a, error_b ))
             )
 
@@ -366,8 +371,8 @@ match3 ( pattern0, body0 ) ( pattern1, body1 ) ( pattern2, body2 ) combineErrors
 match : List ( Parser r e a, a -> Parser r f b ) -> (List e -> Parser r f b) -> Parser r f b
 match initBranches combineErrors =
     let
-        loop : List ( Parser r e a, a -> Parser r f b ) -> List e -> Parser r f b
-        loop branches0 reversed_errors =
+        loop0 : List ( Parser r e a, a -> Parser r f b ) -> List e -> Parser r f b
+        loop0 branches0 reversed_errors =
             case branches0 of
                 [] ->
                     combineErrors (List.reverse reversed_errors)
@@ -376,9 +381,9 @@ match initBranches combineErrors =
                     pattern
                         |> ifSuccessIfError
                             body
-                            (\error -> loop branches1 (error :: reversed_errors))
+                            (\error -> loop0 branches1 (error :: reversed_errors))
     in
-    loop initBranches []
+    loop0 initBranches []
 
 
 oneOf : List (Parser r e a) -> (List e -> Parser r e a) -> Parser r e a
@@ -475,16 +480,54 @@ allWhileSucceeds parser =
     make <|
         \r init_s ->
             let
-                loop : ( State, List a ) -> Result (Error f) ( State, List a )
-                loop ( s0, reversed_xs ) =
+                loop0 : ( State, List a ) -> Result (Error f) ( State, List a )
+                loop0 ( s0, reversed_xs ) =
                     case run parser r s0 of
                         Ok ( s1, x ) ->
-                            loop ( s1, x :: reversed_xs )
+                            loop0 ( s1, x :: reversed_xs )
 
                         Err _ ->
                             Ok ( s0, List.reverse reversed_xs )
             in
-            loop ( init_s, [] )
+            loop0 ( init_s, [] )
+
+
+type Loop a
+    = Done a
+    | Loop a
+
+
+loop : a -> (a -> Parser r e (Loop a)) -> Parser r e a
+loop x0 f =
+    make <|
+        \r s0 ->
+            case run (f x0) r s0 of
+                Ok ( s1, loopValue ) ->
+                    case loopValue of
+                        Done x1 ->
+                            Ok ( s1, x1 )
+
+                        Loop x1 ->
+                            run (loop x1 f) r s1
+
+                Err error ->
+                    Err error
+
+
+repeat : Parser r e a -> Parser r e (List a)
+repeat parser =
+    loop []
+        (\reversed_xs ->
+            or
+                (parser |> map (\x -> Loop (x :: reversed_xs)))
+                (return (Done (List.reverse reversed_xs)))
+                |> mapError (\( error, _ ) -> error)
+        )
+
+
+repeatAtleastOnce : Parser r e a -> Parser r e ( a, List a )
+repeatAtleastOnce parser =
+    parser |> andThen (\x -> repeat parser |> map (\xs -> ( x, xs )))
 
 
 

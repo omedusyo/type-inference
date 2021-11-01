@@ -53,14 +53,6 @@ type ExpectedIdentifierIntroduction
     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
 
 
-
--- TODO
-
-
-type ExpectedConstant
-    = ExpectedConstant
-
-
 type ExpectedBindingTerm e f
     = ExpectedOpenBraces { failedAtChar : Maybe Char }
     | ExpectedDot { failedAtChar : Maybe Char }
@@ -74,8 +66,20 @@ type ExpectedParens
     | ExpectedClosingParens { failedAtChar : Maybe Char }
 
 
+
+-- TODO
+
+
 type ExpectedTerm
-    = ExpectedOperator
+    = ExpectedOperator ExpectedOperator
+    | ExpectedConstant ExpectedKeyword
+    | ExpectedParens ExpectedParens
+
+
+type
+    ExpectedOperator
+    -- TODO
+    = ExpectedOperatorName ExpectedKeyword
 
 
 whitespaceChars : Set Char
@@ -337,26 +341,57 @@ constantsMap =
         ]
 
 
+term : Parser ExpectedTerm Term
+term =
+    Debug.todo ""
+
+
+operatorApplication0 : String -> Term -> Parser ExpectedTerm Term
+operatorApplication0 keyword0 constantTerm =
+    Parser.second
+        (keyword keyword0 |> Parser.mapError ExpectedConstant)
+        (Parser.return constantTerm)
+
+
+handleKeywordToExpectedTerm : ExpectedKeyword -> ExpectedTerm
+handleKeywordToExpectedTerm msg =
+    ExpectedOperator (ExpectedOperatorName msg)
+
+
+handleParensToExpectedTerm : Either ExpectedParens ExpectedTerm -> ExpectedTerm
+handleParensToExpectedTerm msg =
+    case msg of
+        Either.Left parensMsg ->
+            ExpectedParens parensMsg
+
+        Either.Right err ->
+            err
+
+
+operatorApplication1 : String -> (Term -> Term) -> Parser ExpectedTerm Term
+operatorApplication1 keyword0 f =
+    parens
+        (Parser.return f
+            |> Parser.o (keyword keyword0 |> Parser.mapError handleKeywordToExpectedTerm)
+            |> Parser.ooo (Parser.lazy (\() -> term))
+        )
+        |> Parser.mapError handleParensToExpectedTerm
+
+
 
 -- ===Bool===
 
 
-true : Parser ExpectedKeyword Term
+true : Parser ExpectedTerm Term
 true =
-    Parser.second
-        (keyword "true")
-        (Parser.return Base.ConstTrue)
+    operatorApplication0 "true" Base.ConstTrue
 
 
-false : Parser ExpectedKeyword Term
+false : Parser ExpectedTerm Term
 false =
-    Parser.second
-        (keyword "false")
-        (Parser.return Base.ConstFalse)
+    operatorApplication0 "false" Base.ConstFalse
 
 
-emptyList : Parser ExpectedKeyword Term
+emptyList : Parser ExpectedTerm Term
 emptyList =
-    Parser.second
-        (keyword "false")
-        (Parser.return Base.ConstFalse)
+    operatorApplication0 "empty" Base.ConstEmpty
