@@ -72,7 +72,7 @@ type ExpectedParens
 
 type ExpectedTerm
     = ExpectedOperator ExpectedOperator
-    | ExpectedConstant ExpectedKeyword
+    | ExpectedOneOfConstants (List ExpectedKeyword)
     | ExpectedParens ExpectedParens
 
 
@@ -346,11 +346,21 @@ term =
     Debug.todo ""
 
 
-operatorApplication0 : String -> Term -> Parser ExpectedTerm Term
-operatorApplication0 keyword0 constantTerm =
+constantTerm : Parser ExpectedTerm Term
+constantTerm =
+    Parser.oneOf
+        [ true
+        , false
+        , emptyList
+        ]
+        |> Parser.mapError (\errors -> ExpectedOneOfConstants errors)
+
+
+operatorApplication0 : String -> Term -> Parser ExpectedKeyword Term
+operatorApplication0 keyword0 constTerm =
     Parser.second
-        (keyword keyword0 |> Parser.mapError ExpectedConstant)
-        (Parser.return constantTerm)
+        (keyword keyword0)
+        (Parser.return constTerm)
 
 
 handleKeywordToExpectedTerm : ExpectedKeyword -> ExpectedTerm
@@ -382,16 +392,16 @@ operatorApplication1 keyword0 f =
 -- ===Bool===
 
 
-true : Parser ExpectedTerm Term
+true : Parser ExpectedKeyword Term
 true =
     operatorApplication0 "true" Base.ConstTrue
 
 
-false : Parser ExpectedTerm Term
+false : Parser ExpectedKeyword Term
 false =
     operatorApplication0 "false" Base.ConstFalse
 
 
-emptyList : Parser ExpectedTerm Term
+emptyList : Parser ExpectedKeyword Term
 emptyList =
     operatorApplication0 "empty" Base.ConstEmpty

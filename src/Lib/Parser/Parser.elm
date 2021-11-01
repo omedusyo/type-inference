@@ -365,30 +365,40 @@ match3 ( pattern0, body0 ) ( pattern1, body1 ) ( pattern2, body2 ) combineErrors
 -- This is an analogue of the case-expression for parsing
 -- Its type is really
 --  forall n : Nat.
---    List n ( Parser e a, a -> Parser f b) ->(List n e -> Parser f b) -> Parser f b
+--    List n ( Parser e a, a -> Parser f b) -> Parser (Either (List n e) f) b
 
 
-match : List ( Parser r e a, a -> Parser r f b ) -> (List e -> Parser r f b) -> Parser r f b
-match initBranches combineErrors =
+match : List ( Parser r e a, a -> Parser r f b ) -> Parser r (Either (List e) f) b
+match initBranches =
     let
-        loop0 : List ( Parser r e a, a -> Parser r f b ) -> List e -> Parser r f b
+        loop0 : List ( Parser r e a, a -> Parser r f b ) -> List e -> Parser r (Either (List e) f) b
         loop0 branches0 reversed_errors =
             case branches0 of
                 [] ->
-                    combineErrors (List.reverse reversed_errors)
+                    fail (Either.Left (List.reverse reversed_errors))
 
                 ( pattern, body ) :: branches1 ->
                     pattern
                         |> ifSuccessIfError
-                            body
-                            (\error -> loop0 branches1 (error :: reversed_errors))
+                            (\a -> body a |> mapError Either.Right)
+                            (\error_a -> loop0 branches1 (error_a :: reversed_errors))
     in
     loop0 initBranches []
 
 
-oneOf : List (Parser r e a) -> (List e -> Parser r e a) -> Parser r e a
-oneOf parsers combineErrors =
-    match (parsers |> List.map (\parser -> ( parser, \a -> return a ))) combineErrors
+oneOf : List (Parser r e a) -> Parser r (List e) a
+oneOf parsers =
+    match (parsers |> List.map (\parser -> ( parser, \a -> return a )))
+        |> mapError
+            (\error ->
+                case error of
+                    Either.Left errors ->
+                        errors
+
+                    Either.Right e ->
+                        -- This is never executed, to `e` has polymorphic type that matches everything
+                        e
+            )
 
 
 
