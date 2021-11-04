@@ -51,7 +51,7 @@ module Lib.Parser.Parser exposing
 
 import Either exposing (Either)
 import Lib.Parser.Error as Error exposing (Error)
-import Lib.Parser.ListForest
+import Lib.Parser.Forest as Forest exposing (Forest)
 import Lib.Parser.Position as Position exposing (Position)
 import Lib.Parser.State as State exposing (ExpectedEndOfInput, ExpectedString, ExpectingNonEmptyInput, State)
 

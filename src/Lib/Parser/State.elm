@@ -15,6 +15,7 @@ module Lib.Parser.State exposing
     )
 
 import Lib.Parser.Error exposing (Error)
+import Lib.Parser.Forest as Forest exposing (Forest)
 import Lib.Parser.Position exposing (Position)
 
 
@@ -163,6 +164,20 @@ consumeString strToBeMatched init_s =
                     Ok s
     in
     loop strToBeMatched init_s ""
+
+
+consumeForest : Forest Char b -> State -> Result (Error ExpectedString) ( b, State )
+consumeForest forestToBeMatched init_s =
+    let
+        loop forest0 s reversed_strConsumedSoFar =
+            case String.uncons s.input of
+                Just ( c, inputRemaining ) ->
+                    Debug.todo ""
+
+                Nothing ->
+                    Debug.todo ""
+    in
+    loop forestToBeMatched init_s ""
 
 
 consumeWhileTrue : (Char -> Bool) -> State -> ( State, String )
