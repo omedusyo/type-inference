@@ -45,6 +45,7 @@ module Lib.Parser.Parser exposing
     , second
     , sequence
     , string
+    , stringInForest
     , throw
     , unit
     )
@@ -438,6 +439,13 @@ string strToBeMatched =
         \_ s0 ->
             State.consumeString strToBeMatched s0
                 |> Result.map (\s1 -> ( s1, () ))
+
+
+stringInForest : Forest Char v -> Parser r State.ExpectingStringInForest v
+stringInForest forest =
+    make <|
+        \_ s0 ->
+            State.consumeForest forest s0
 
 
 
