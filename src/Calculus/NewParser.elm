@@ -1,19 +1,16 @@
 module Calculus.NewParser exposing
-    ( binding
-    , false
-    , initReadOnlyState
-    , keyword
-    , keywordGap
-    , left
+    ( atleastOneOpenParens
+    , binding
+    , closingParens
     , mandatoryParens
     , operatorKeyword
     , optionalParens
     , spaces
     , symbol
     , term
-    , true
     , varIntro
     , whitespaceChars
+    , zeroOrMoreOpenParens
     )
 
 import Calculus.Base as Base
@@ -48,11 +45,6 @@ type ExpectedKeywordGapCharacter
     = ExpectedKeywordGapCharacter { failedAtChar : Char }
 
 
-type ExpectedKeyword
-    = ExpectedKeyword { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterKeyword { failedAtChar : Char }
-
-
 type ExpectedOperatorKeyword
     = ExpectedOperatorKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
     | ExpectedGapAfterOperatorKeyword { operatorKeyword : OperatorKeyword, failedAtChar : Char }
@@ -74,10 +66,6 @@ type ExpectedBindingTerm e f
 type ExpectedParens
     = ExpectedOpenParens { failedAtChar : Maybe Char }
     | ExpectedClosingParens { failedAtChar : Maybe Char }
-
-
-
--- TODO
 
 
 type ExpectedTerm
@@ -115,17 +103,12 @@ isGapChar c =
 -- ===Types===
 
 
-type alias ReadOnlyState =
-    { areParanthesesMandatory : Bool }
-
-
-initReadOnlyState : ReadOnlyState
-initReadOnlyState =
-    { areParanthesesMandatory = False }
-
-
 type alias Parser e a =
-    Parser.Parser ReadOnlyState e a
+    Parser.Parser {} e a
+
+
+
+-- ===Basics===
 
 
 spaces : Parser e ()
@@ -162,111 +145,111 @@ keywordGap =
 
 
 
--- This consumes the string `keyword0`, then looks ahead one character to see if there's a keyword gap
--- TODO: this is kinda inefficient if you have a lot of keywords.
--- TODO: It would be better to have function `keywords : List (String, Keyword) -> Parser e Keyword`
--- that would be given a map of strings to keywords, and then created a finite state machine (this could actually be built ahead of time)
--- to efficiently decide which keyword is being parsed
+-- ===Parentheses===
 
 
-keyword : String -> Parser ExpectedKeyword ()
-keyword keyword0 =
+zeroOrMoreOpenParens : Parser e Int
+zeroOrMoreOpenParens =
+    Parser.loopChars 0
+        (\c numOfOpenParens ->
+            if isWhitespaceChar c then
+                Parser.NextChar numOfOpenParens
+
+            else if c == '(' then
+                Parser.NextChar (numOfOpenParens + 1)
+
+            else
+                Parser.DoneAndRevertChar numOfOpenParens
+        )
+        Ok
+
+
+atleastOneOpenParens : Parser ExpectedParens Int
+atleastOneOpenParens =
     let
-        handleStringError : PState.ExpectedString -> ExpectedKeyword
-        handleStringError msg =
+        handleFirstOpenParen : PState.ExpectedString -> ExpectedParens
+        handleFirstOpenParen msg =
             case msg of
                 PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                    ExpectedKeyword { expected = expected, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-
-        handleGapError : ExpectedKeywordGapCharacter -> ExpectedKeyword
-        handleGapError msg =
-            case msg of
-                ExpectedKeywordGapCharacter { failedAtChar } ->
-                    ExpectedGapAfterKeyword { failedAtChar = failedAtChar }
+                    ExpectedOpenParens { failedAtChar = failedAtChar }
     in
-    Parser.unit
-        |> Parser.o
-            (Parser.string keyword0
-                |> Parser.mapError handleStringError
-            )
-        |> Parser.o
-            (keywordGap
-                |> Parser.mapError handleGapError
-            )
+    Parser.identity
+        |> Parser.o (Parser.string "(" |> Parser.mapError handleFirstOpenParen)
         |> Parser.o spaces
+        |> Parser.ooo zeroOrMoreOpenParens
+        |> Parser.map (\numOfOpenParens -> numOfOpenParens + 1)
 
 
+closingParens : Int -> Parser ExpectedParens ()
+closingParens numOfExpectedClosingParens =
+    let
+        handleFirstClosingParen : PState.ExpectedString -> ExpectedParens
+        handleFirstClosingParen msg =
+            case msg of
+                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                    ExpectedClosingParens { failedAtChar = failedAtChar }
+    in
+    if numOfExpectedClosingParens == 0 then
+        spaces
 
--- TODO: Do I need this?
+    else
+        -- We are starting with a single ")" because we want to fail on strings that start with whitespace e.g. "  )))"
+        (Parser.string ")" |> Parser.mapError handleFirstClosingParen)
+            |> Parser.o
+                (Parser.loopChars 1
+                    (\c numOfClosingParens ->
+                        if numOfClosingParens >= numOfExpectedClosingParens then
+                            Parser.DoneAndRevertChar numOfExpectedClosingParens
+
+                        else if isWhitespaceChar c then
+                            Parser.NextChar numOfClosingParens
+
+                        else if c == ')' then
+                            Parser.NextChar (numOfClosingParens + 1)
+
+                        else
+                            -- Note that here `numOfClosingParens < numOfExpectedClosingParens)
+                            Parser.Fail (ExpectedClosingParens { failedAtChar = Just c })
+                    )
+                    (\numOfClosingParens ->
+                        if numOfClosingParens >= numOfExpectedClosingParens then
+                            Ok numOfClosingParens
+
+                        else
+                            Err (ExpectedClosingParens { failedAtChar = Nothing })
+                    )
+                )
+            |> Parser.o spaces
 
 
-pushMandatoryParens : Parser e a -> Parser e a
-pushMandatoryParens parser =
-    Parser.push (\r -> { r | areParanthesesMandatory = True }) parser
-
-
-pushOptionalParens : Parser e a -> Parser e a
-pushOptionalParens parser =
-    Parser.push (\r -> { r | areParanthesesMandatory = False }) parser
-
-
-
--- TODO: can I simplify `optionalParens`/`mandatoryParens`?
-
-
-optionalParens : Parser e a -> Parser (Either ExpectedParens e) a
+optionalParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
 optionalParens parser =
-    let
-        handleClosingParens : PState.ExpectedString -> Either ExpectedParens e
-        handleClosingParens msg =
-            case msg of
-                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                    Either.Left (ExpectedClosingParens { failedAtChar = failedAtChar })
-    in
-    Parser.allWhileTrue (\c -> c == '(')
+    zeroOrMoreOpenParens
         |> Parser.andThen
-            (\parensStr ->
-                (parser |> Parser.mapError Either.Right)
-                    |> Parser.o
-                        (Parser.string (String.repeat (String.length parensStr) ")") |> Parser.mapError handleClosingParens)
+            (\numOfOpenParens ->
+                parser
+                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError ExpectedParens)
             )
-        |> Parser.o spaces
 
 
-mandatoryParens : Parser e a -> Parser (Either ExpectedParens e) a
+mandatoryParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
 mandatoryParens parser =
-    let
-        handleEmptyInput : PState.CharFailedTest -> Either ExpectedParens e
-        handleEmptyInput msg =
-            -- I don't even need to check the `msg`, since I know this is going to be executed iff the input is empty
-            Either.Left (ExpectedOpenParens { failedAtChar = Nothing })
-
-        handleOpeningParens : Char -> Either ExpectedParens e
-        handleOpeningParens char =
-            Either.Left (ExpectedOpenParens { failedAtChar = Just char })
-
-        handleClosingParens : PState.ExpectedString -> Either ExpectedParens e
-        handleClosingParens msg =
-            case msg of
-                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                    Either.Left (ExpectedClosingParens { failedAtChar = failedAtChar })
-    in
-    (Parser.anyCharSatisfying (\_ -> True) |> Parser.mapError handleEmptyInput)
+    (atleastOneOpenParens |> Parser.mapError ExpectedParens)
         |> Parser.andThen
-            (\firstChar ->
-                if firstChar == '(' then
-                    Parser.allWhileTrue (\c -> c == '(')
-                        |> Parser.andThen
-                            (\parensStr ->
-                                (parser |> Parser.mapError Either.Right)
-                                    |> Parser.o
-                                        (Parser.string (String.repeat (String.length parensStr + 1) ")") |> Parser.mapError handleClosingParens)
-                            )
-
-                else
-                    Parser.fail (handleOpeningParens firstChar)
+            (\numOfOpenParens ->
+                parser
+                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError ExpectedParens)
             )
-        |> Parser.o spaces
+
+
+
+-- ===Sequences===
+-- TODO
+
+
+emptySequence : Parser e ()
+emptySequence =
+    spaces
 
 
 
@@ -321,6 +304,7 @@ varIntro =
 
 binding : Parser e a -> Parser f b -> Parser (ExpectedBindingTerm e f) ( a, b )
 binding varsParser bodyParser =
+    -- TODO: redo from scratch
     let
         handleOpenBraces : PState.ExpectedString -> ExpectedBindingTerm e f
         handleOpenBraces msg =
@@ -345,13 +329,8 @@ binding varsParser bodyParser =
         |> Parser.ooo (varsParser |> Parser.mapError VariablesParserError)
         |> Parser.o (symbol "." |> Parser.mapError handleDot)
         -- TODO: here I need to somehow indicate that the parens are optional
-        |> Parser.ooo (pushOptionalParens bodyParser |> Parser.mapError BodyParserError)
+        |> Parser.ooo (bodyParser |> Parser.mapError BodyParserError)
         |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
-
-
-const : Term -> Parser ExpectedTerm Term
-const term0 =
-    Parser.return term0
 
 
 type OperatorKeyword
@@ -442,18 +421,8 @@ term =
     let
         constant : Term -> Parser ExpectedTerm Term
         constant c =
-            optionalParens spaces
+            optionalParens emptySequence
                 |> Parser.map (\() -> c)
-                |> Parser.mapError
-                    (\msg ->
-                        case msg of
-                            Either.Left parenError ->
-                                ExpectedParens parenError
-
-                            Either.Right e ->
-                                -- Absurd case.
-                                e
-                    )
     in
     -- TODO: better error msg when on wrong number of arguments
     operatorKeyword
@@ -515,53 +484,3 @@ term =
                     IterList ->
                         Debug.todo ""
             )
-
-
-
--- ===Bool===
-
-
-true : Parser ExpectedTerm Term
-true =
-    const Base.ConstTrue
-
-
-false : Parser ExpectedTerm Term
-false =
-    const Base.ConstFalse
-
-
-
--- ===Cartesian Product===
--- (pair e e')
-
-
-mandatoryParensTerm : Parser ExpectedTerm Term
-mandatoryParensTerm =
-    Parser.lazy (\() -> pushMandatoryParens term)
-
-
-pair : Parser ExpectedTerm Term
-pair =
-    Parser.return Base.Pair
-        |> Parser.ooo mandatoryParensTerm
-        |> Parser.ooo mandatoryParensTerm
-
-
-
--- ==Coproduct==
-
-
-left : Parser ExpectedTerm Term
-left =
-    Parser.return Base.Left
-        |> Parser.ooo mandatoryParensTerm
-
-
-
--- ===List===
-
-
-empty : Parser ExpectedTerm Term
-empty =
-    const Base.ConstEmpty

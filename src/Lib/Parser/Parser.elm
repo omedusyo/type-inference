@@ -1,5 +1,6 @@
 module Lib.Parser.Parser exposing
     ( Loop(..)
+    , LoopChar(..)
     , Parser
     , allWhileSucceeds
     , allWhileTrue
@@ -11,6 +12,7 @@ module Lib.Parser.Parser exposing
     , check
     , discard
     , fail
+    , failIfEmpty
     , first
     , getInput
     , getPosition
@@ -20,6 +22,7 @@ module Lib.Parser.Parser exposing
     , join
     , lazy
     , loop
+    , loopChars
     , make
     , map
     , map2
@@ -244,6 +247,17 @@ andThen2 f parser0 parser1 =
 fail : e -> Parser r e a
 fail error =
     make <| \_ s -> Err (Error.make (State.getPosition s) error)
+
+
+failIfEmpty : Parser r State.ExpectedNonEmptyInput ()
+failIfEmpty =
+    make <|
+        \r s ->
+            if String.isEmpty (State.getInput s) then
+                Err (Error.make (State.getPosition s) State.ExpectedNonEmptyInput)
+
+            else
+                Ok ( s, () )
 
 
 mapError : (e -> f) -> Parser r e a -> Parser r f a
@@ -476,21 +490,64 @@ allWhileSucceeds parser =
     make <|
         \r init_s ->
             let
-                loop0 : ( State, List a ) -> Result (Error f) ( State, List a )
-                loop0 ( s0, reversed_xs ) =
+                loop0 : State -> List a -> Result (Error f) ( State, List a )
+                loop0 s0 reversed_xs =
                     case run parser r s0 of
                         Ok ( s1, x ) ->
-                            loop0 ( s1, x :: reversed_xs )
+                            loop0 s1 (x :: reversed_xs)
 
                         Err _ ->
                             Ok ( s0, List.reverse reversed_xs )
             in
-            loop0 ( init_s, [] )
+            loop0 init_s []
 
 
 type Loop a
     = Done a
     | Loop a
+
+
+type LoopChar e a
+    = DoneAndConsumeChar a
+    | NextChar a
+    | DoneAndRevertChar a
+    | Fail e -- Fails the whole parser
+
+
+
+-- With this you can make state machines whose state is `a` and actions are characters
+
+
+loopChars : a -> (Char -> a -> LoopChar e a) -> (a -> Result e a) -> Parser r e a
+loopChars init_x onChar onEmptyInput =
+    make <|
+        \r init_s ->
+            let
+                loop0 s0 x0 =
+                    case State.consumeAnyChar s0 of
+                        Ok ( s1, c ) ->
+                            case onChar c x0 of
+                                DoneAndConsumeChar x1 ->
+                                    Ok ( s1, x1 )
+
+                                DoneAndRevertChar x1 ->
+                                    Ok ( s0, x1 )
+
+                                NextChar x1 ->
+                                    loop0 s1 x1
+
+                                Fail error ->
+                                    Err (Error.make (State.getPosition s1) error)
+
+                        Err emptyInputError ->
+                            case onEmptyInput x0 of
+                                Ok x1 ->
+                                    Ok ( s0, x1 )
+
+                                Err error ->
+                                    Err (Error.make (State.getPosition s0) error)
+            in
+            loop0 init_s init_x
 
 
 loop : a -> (a -> Parser r e (Loop a)) -> Parser r e a
