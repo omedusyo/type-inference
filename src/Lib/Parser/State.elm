@@ -1,9 +1,9 @@
 module Lib.Parser.State exposing
     ( CharFailedTest(..)
     , ExpectedEndOfInput(..)
+    , ExpectedNonEmptyInput(..)
     , ExpectedString(..)
-    , ExpectingNonEmptyInput(..)
-    , ExpectingStringInForest(..)
+    , ExpectedStringIn(..)
     , State
     , consumeAnyChar
     , consumeAnyCharSatisfying
@@ -42,8 +42,8 @@ throw msg s =
     { position = s.position, msg = msg }
 
 
-type ExpectingNonEmptyInput
-    = ExpectingNonEmptyInput
+type ExpectedNonEmptyInput
+    = ExpectedNonEmptyInput
 
 
 type CharFailedTest
@@ -56,9 +56,9 @@ type ExpectedString
       ExpectedString { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
 
 
-type ExpectingStringInForest
+type ExpectedStringIn
     = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      ExpectingStringInForest { consumedSuccessfully : String, failedAtChar : Maybe Char }
+      ExpectedStringIn { consumedSuccessfully : String, failedAtChar : Maybe Char }
 
 
 type ExpectedEndOfInput
@@ -114,7 +114,7 @@ moveByCharacter c =
 -- ===consumers===
 
 
-consumeAnyChar : State -> Result (Error ExpectingNonEmptyInput) ( State, Char )
+consumeAnyChar : State -> Result (Error ExpectedNonEmptyInput) ( State, Char )
 consumeAnyChar s =
     case String.uncons s.input of
         Just ( c, inputRemaining ) ->
@@ -126,7 +126,7 @@ consumeAnyChar s =
                 )
 
         Nothing ->
-            Err (s |> throw ExpectingNonEmptyInput)
+            Err (s |> throw ExpectedNonEmptyInput)
 
 
 consumeAnyCharSatisfying : (Char -> Bool) -> State -> Result (Error CharFailedTest) ( State, Char )
@@ -173,10 +173,10 @@ consumeString strToBeMatched init_s =
     loop strToBeMatched init_s ""
 
 
-consumeForest : Forest Char v -> State -> Result (Error ExpectingStringInForest) ( State, v )
+consumeForest : Forest Char v -> State -> Result (Error ExpectedStringIn) ( State, v )
 consumeForest forestToBeMatched init_s =
     let
-        loop1 : Forest Char v -> State -> String -> Result (Error ExpectingStringInForest) ( State, v )
+        loop1 : Forest Char v -> State -> String -> Result (Error ExpectedStringIn) ( State, v )
         loop1 forest0 s reversed_strConsumedSoFar =
             case String.uncons s.input of
                 Just ( c, inputRemaining ) ->
@@ -200,12 +200,12 @@ consumeForest forestToBeMatched init_s =
                             loop2 forest1 new_s new_s v
 
                         Forest.Empty ->
-                            Err (s |> throw (ExpectingStringInForest { consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c }))
+                            Err (s |> throw (ExpectedStringIn { consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c }))
 
                 Nothing ->
-                    Err (s |> throw (ExpectingStringInForest { consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing }))
+                    Err (s |> throw (ExpectedStringIn { consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing }))
 
-        loop2 : Forest Char v -> State -> State -> v -> Result (Error ExpectingStringInForest) ( State, v )
+        loop2 : Forest Char v -> State -> State -> v -> Result (Error ExpectedStringIn) ( State, v )
         loop2 forest0 s lastSuccessful_s lastValue =
             case String.uncons s.input of
                 Just ( c, inputRemaining ) ->

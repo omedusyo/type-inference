@@ -45,7 +45,7 @@ module Lib.Parser.Parser exposing
     , second
     , sequence
     , string
-    , stringInForest
+    , stringIn
     , throw
     , unit
     )
@@ -54,7 +54,7 @@ import Either exposing (Either)
 import Lib.Parser.Error as Error exposing (Error)
 import Lib.Parser.Forest as Forest exposing (Forest)
 import Lib.Parser.Position as Position exposing (Position)
-import Lib.Parser.State as State exposing (ExpectedEndOfInput, ExpectedString, ExpectingNonEmptyInput, State)
+import Lib.Parser.State as State exposing (State)
 
 
 type alias Parser r e a =
@@ -396,7 +396,7 @@ oneOf parsers =
 -- ===specifics===
 
 
-end : Parser r ExpectedEndOfInput ()
+end : Parser r State.ExpectedEndOfInput ()
 end =
     make <|
         \_ s ->
@@ -413,7 +413,7 @@ discard parser =
     parser |> map (\_ -> ())
 
 
-anyChar : (Char -> Parser r e a) -> Parser r (Either ExpectingNonEmptyInput e) a
+anyChar : (Char -> Parser r e a) -> Parser r (Either State.ExpectedNonEmptyInput e) a
 anyChar f =
     make <|
         \r s0 ->
@@ -441,11 +441,11 @@ string strToBeMatched =
                 |> Result.map (\s1 -> ( s1, () ))
 
 
-stringInForest : Forest Char v -> Parser r State.ExpectingStringInForest v
-stringInForest forest =
+stringIn : List ( String, v ) -> Parser r State.ExpectedStringIn v
+stringIn forest =
     make <|
         \_ s0 ->
-            State.consumeForest forest s0
+            State.consumeForest (Forest.fromStringList forest) s0
 
 
 

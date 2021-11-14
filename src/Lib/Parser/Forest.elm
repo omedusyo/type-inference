@@ -4,6 +4,8 @@ module Lib.Parser.Forest exposing
     , chain
     , derive
     , empty
+    , fromList
+    , fromStringList
     , insert
     , show
     )
@@ -26,12 +28,25 @@ empty =
     Root Dict.empty
 
 
+fromList : List ( List comparable, v ) -> Forest comparable v
+fromList xs =
+    List.foldl
+        (\( ks, v ) forest ->
+            case ks of
+                [] ->
+                    -- Note that this filters out empty lists
+                    forest
 
--- TODO: do I need this?
+                k :: ks1 ->
+                    forest |> insert k ks1 v
+        )
+        empty
+        xs
 
 
-type alias NonemptyList k =
-    ( k, List k )
+fromStringList : List ( String, v ) -> Forest Char v
+fromStringList xs =
+    fromList (xs |> List.map (\( str, v ) -> ( String.toList str, v )))
 
 
 chain : comparable -> List comparable -> v -> Forest comparable v

@@ -5,11 +5,12 @@ module Calculus.NewParser exposing
     , keyword
     , keywordGap
     , left
-    , parenthesizedTerm
+    , mandatoryParens
+    , operatorKeyword
+    , optionalParens
     , spaces
     , symbol
     , term
-    , termKeyword
     , true
     , varIntro
     , whitespaceChars
@@ -52,6 +53,11 @@ type ExpectedKeyword
     | ExpectedGapAfterKeyword { failedAtChar : Char }
 
 
+type ExpectedOperatorKeyword
+    = ExpectedOperatorKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterOperatorKeyword { operatorKeyword : OperatorKeyword, failedAtChar : Char }
+
+
 type ExpectedIdentifierIntroduction
     = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
@@ -75,9 +81,7 @@ type ExpectedParens
 
 
 type ExpectedTerm
-    = ExpectedOperatorName ExpectedKeyword
-    | ExpectedKnownOperatorName
-    | ExpectedConstantOrOperatorApplication
+    = ExpectedOperator ExpectedOperatorKeyword
     | ExpectedParens ExpectedParens
 
 
@@ -98,6 +102,7 @@ isWhitespaceChar c =
 
 gapChars : Set Char
 gapChars =
+    -- TODO: maybe I should consider characters like `@` or `\\`? Or will I allow
     Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"' ])
 
 
@@ -191,49 +196,8 @@ keyword keyword0 =
         |> Parser.o spaces
 
 
-termKeyword : String -> Parser ExpectedTerm ()
-termKeyword keyword0 =
-    keyword keyword0 |> Parser.mapError ExpectedOperatorName
 
-
-parenthesizedTerm : Parser ExpectedTerm a -> Parser ExpectedTerm a
-parenthesizedTerm parser =
-    let
-        handleOpenParens : PState.ExpectedString -> ExpectedTerm
-        handleOpenParens msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedParens (ExpectedOpenParens { failedAtChar = failedAtChar })
-
-        handleClosingParens : PState.ExpectedString -> ExpectedTerm
-        handleClosingParens msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedParens (ExpectedClosingParens { failedAtChar = failedAtChar })
-
-        optionalParens_p =
-            Parser.allWhileTrue (\c -> c == '(')
-                |> Parser.andThen
-                    (\parentheses ->
-                        let
-                            p =
-                                Parser.string (String.repeat (String.length parentheses) ")")
-                        in
-                        parser
-                            |> Parser.o (p |> Parser.mapError handleClosingParens)
-                    )
-    in
-    Parser.read
-        (\{ areParanthesesMandatory } ->
-            if areParanthesesMandatory then
-                Parser.identity
-                    |> Parser.o (symbol "(" |> Parser.mapError handleOpenParens)
-                    |> Parser.ooo optionalParens_p
-                    |> Parser.o (symbol ")" |> Parser.mapError handleClosingParens)
-
-            else
-                optionalParens_p
-        )
+-- TODO: Do I need this?
 
 
 pushMandatoryParens : Parser e a -> Parser e a
@@ -244,6 +208,65 @@ pushMandatoryParens parser =
 pushOptionalParens : Parser e a -> Parser e a
 pushOptionalParens parser =
     Parser.push (\r -> { r | areParanthesesMandatory = False }) parser
+
+
+
+-- TODO: can I simplify `optionalParens`/`mandatoryParens`?
+
+
+optionalParens : Parser e a -> Parser (Either ExpectedParens e) a
+optionalParens parser =
+    let
+        handleClosingParens : PState.ExpectedString -> Either ExpectedParens e
+        handleClosingParens msg =
+            case msg of
+                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                    Either.Left (ExpectedClosingParens { failedAtChar = failedAtChar })
+    in
+    Parser.allWhileTrue (\c -> c == '(')
+        |> Parser.andThen
+            (\parensStr ->
+                (parser |> Parser.mapError Either.Right)
+                    |> Parser.o
+                        (Parser.string (String.repeat (String.length parensStr) ")") |> Parser.mapError handleClosingParens)
+            )
+        |> Parser.o spaces
+
+
+mandatoryParens : Parser e a -> Parser (Either ExpectedParens e) a
+mandatoryParens parser =
+    let
+        handleEmptyInput : PState.CharFailedTest -> Either ExpectedParens e
+        handleEmptyInput msg =
+            -- I don't even need to check the `msg`, since I know this is going to be executed iff the input is empty
+            Either.Left (ExpectedOpenParens { failedAtChar = Nothing })
+
+        handleOpeningParens : Char -> Either ExpectedParens e
+        handleOpeningParens char =
+            Either.Left (ExpectedOpenParens { failedAtChar = Just char })
+
+        handleClosingParens : PState.ExpectedString -> Either ExpectedParens e
+        handleClosingParens msg =
+            case msg of
+                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                    Either.Left (ExpectedClosingParens { failedAtChar = failedAtChar })
+    in
+    (Parser.anyCharSatisfying (\_ -> True) |> Parser.mapError handleEmptyInput)
+        |> Parser.andThen
+            (\firstChar ->
+                if firstChar == '(' then
+                    Parser.allWhileTrue (\c -> c == '(')
+                        |> Parser.andThen
+                            (\parensStr ->
+                                (parser |> Parser.mapError Either.Right)
+                                    |> Parser.o
+                                        (Parser.string (String.repeat (String.length parensStr + 1) ")") |> Parser.mapError handleClosingParens)
+                            )
+
+                else
+                    Parser.fail (handleOpeningParens firstChar)
+            )
+        |> Parser.o spaces
 
 
 
@@ -331,40 +354,166 @@ const term0 =
     Parser.return term0
 
 
+type OperatorKeyword
+    = -- Bool
+      ConstTrue
+    | ConstFalse
+    | IfThenElse
+      -- Pair
+    | Pair
+    | MatchPair
+      -- Sum
+    | Left
+    | Right
+    | MatchSum
+      -- Function
+    | Application
+    | Abstraction
+      -- Nat
+    | ConstZero
+    | Succ
+    | IterNat
+      -- List
+    | ConstEmpty
+    | Cons
+    | IterList
+
+
+
+-- Operator forest
+
+
+operatorKeyword : Parser ExpectedOperatorKeyword OperatorKeyword
+operatorKeyword =
+    let
+        handleKeywordError : PState.ExpectedStringIn -> ExpectedOperatorKeyword
+        handleKeywordError msg =
+            case msg of
+                PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
+                    ExpectedOperatorKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+
+        handleGapError : OperatorKeyword -> ExpectedKeywordGapCharacter -> ExpectedOperatorKeyword
+        handleGapError operatorKeyword0 msg =
+            case msg of
+                ExpectedKeywordGapCharacter { failedAtChar } ->
+                    ExpectedGapAfterOperatorKeyword { operatorKeyword = operatorKeyword0, failedAtChar = failedAtChar }
+    in
+    Parser.stringIn
+        [ -- Bool
+          ( "true", ConstTrue )
+        , ( "false", ConstFalse )
+        , ( "if", IfThenElse )
+
+        -- Pair
+        , ( "pair", Pair )
+        , ( "match-pair", MatchPair )
+
+        -- Sum
+        , ( "left", Left )
+        , ( "right", Right )
+        , ( "match-sum", MatchSum )
+
+        -- Function
+        , ( "@", Application )
+        , ( "\\", Abstraction )
+
+        -- Nat
+        , ( "zero", ConstZero )
+        , ( "succ", Succ )
+        , ( "iter-nat", IterNat )
+
+        -- List
+        , ( "empty", ConstEmpty )
+        , ( "cons", Cons )
+        , ( "iter-list", IterList )
+        ]
+        --  TODO: Should I worry about optional parenthesization here?
+        |> Parser.mapError handleKeywordError
+        |> Parser.andThen
+            (\operatorKeyword0 ->
+                Parser.return operatorKeyword0
+                    |> Parser.o (keywordGap |> Parser.mapError (handleGapError operatorKeyword0))
+            )
+        |> Parser.o spaces
+
+
 term : Parser ExpectedTerm Term
 term =
     let
-        handleMatchError error =
-            case error of
-                Either.Left msg ->
-                    ExpectedKnownOperatorName
+        constant : Term -> Parser ExpectedTerm Term
+        constant c =
+            optionalParens spaces
+                |> Parser.map (\() -> c)
+                |> Parser.mapError
+                    (\msg ->
+                        case msg of
+                            Either.Left parenError ->
+                                ExpectedParens parenError
 
-                Either.Right termError ->
-                    termError
-    in
-    -- TODO: error message on the input "(left (true" sucks, because the constants parser fails to find the closing paren, so we backtrack and try to do the operator parser. But the backtracking shouldn't be happening!
-    -- TODO: This may consume parentheses, but when parsing of constant fails, it backtracks together with all the parantheses and then they are consumed again. This is a bit inefficient, but probably not a big deal.
-    -- TODO: better error msg when on wrong number of arguments
-    pushOptionalParens
-        (parenthesizedTerm
-            (Parser.match
-                [ ( termKeyword "true", \_ -> true )
-                , ( termKeyword "false", \_ -> false )
-                , ( termKeyword "empty", \_ -> empty )
-                ]
-                |> Parser.mapError handleMatchError
-            )
-        )
-        |> Parser.ifSuccessIfError
-            Parser.return
-            (\matchConstantError ->
-                parenthesizedTerm
-                    (Parser.match
-                        [ ( termKeyword "pair", \_ -> pair )
-                        , ( termKeyword "left", \_ -> left )
-                        ]
-                        |> Parser.mapError handleMatchError
+                            Either.Right e ->
+                                -- Absurd case.
+                                e
                     )
+    in
+    -- TODO: better error msg when on wrong number of arguments
+    operatorKeyword
+        |> Parser.mapError ExpectedOperator
+        |> Parser.andThen
+            (\operatorkeyword0 ->
+                case operatorkeyword0 of
+                    -- Bool
+                    ConstTrue ->
+                        constant Base.ConstTrue
+
+                    ConstFalse ->
+                        constant Base.ConstFalse
+
+                    IfThenElse ->
+                        Debug.todo ""
+
+                    -- Pair
+                    Pair ->
+                        Debug.todo ""
+
+                    MatchPair ->
+                        Debug.todo ""
+
+                    -- Sum
+                    Left ->
+                        Debug.todo ""
+
+                    Right ->
+                        Debug.todo ""
+
+                    MatchSum ->
+                        Debug.todo ""
+
+                    -- Function
+                    Application ->
+                        Debug.todo ""
+
+                    Abstraction ->
+                        Debug.todo ""
+
+                    -- Nat
+                    ConstZero ->
+                        constant Base.ConstZero
+
+                    Succ ->
+                        Debug.todo ""
+
+                    IterNat ->
+                        Debug.todo ""
+
+                    -- List
+                    ConstEmpty ->
+                        constant Base.ConstEmpty
+
+                    Cons ->
+                        Debug.todo ""
+
+                    IterList ->
+                        Debug.todo ""
             )
 
 
