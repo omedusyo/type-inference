@@ -33,15 +33,15 @@ type Term
       -- intro
     | Pair Term Term
       -- elim
-    | MatchProduct
-        { arg : Term
-        , var0 : TermVarName
+    | MatchPair
+        Term
+        { var0 : TermVarName
         , var1 : TermVarName
         , body : Term
         }
       -- ==Function Space==
       -- intro
-    | Abstraction TermVarName Term
+    | Abstraction { var : TermVarName, body : Term }
       -- elim
       -- first arg is FunctionExpression, the second is the ArgumentExpression
     | Application Term Term
@@ -50,53 +50,50 @@ type Term
     | Left Term
     | Right Term
       -- elim
-    | Case
-        { arg : Term
-        , leftVar : TermVarName
-        , leftBody : Term
-        , rightVar : TermVarName
-        , rightBody : Term
+    | MatchSum
+        Term
+        { leftBranch : { var : TermVarName, body : Term }
+        , rightBranch : { var : TermVarName, body : Term }
         }
       -- Booleans
     | ConstTrue
     | ConstFalse
       -- first is the TestExpression then LeftBranch then RightBranch
-    | IfThenElse Term Term Term
+      -- basically if-then-else
+    | MatchBool Term { trueBranch : { body : Term }, falseBranch : { body : Term } }
       --==Natural Number Object==
       -- intro
-      -- TODO: introduces NatConst Int for efficiency
+      -- TODO: introduces ConstNat Int for efficiency
     | ConstZero
     | Succ Term
       -- elim
-      -- f : Nat -> X
-      -- f 0 = ....
-      -- f (n + 1) = you can use `f n` here
-    | NatLoop
-        -- TODO: rename to initState var
-        { base : Term
-        , loop :
-            { stateVar : TermVarName -- <- this should be interpreted as `f n`
+    | FoldNat
+        Term
+        { zeroBranch : { body : Term }
+        , succBranch :
+            { var : TermVarName
             , body : Term
             }
-        , arg : Term
         }
       -- ==Lists==
     | ConstEmpty
     | Cons Term Term
-    | ListLoop
-        { initState : Term
-        , loop :
-            { listElementVar : TermVarName
-            , stateVar : TermVarName
+    | FoldList
+        Term
+        { emptyBranch : { body : Term }
+        , consBranch :
+            -- cons(var0, var1)
+            { var0 : TermVarName
+            , var1 : TermVarName
             , body : Term
             }
-        , arg : Term
         }
     | -- ==Freeze==
       Delay Term
     | Force Term
     | -- ==Let==
-      Let TermVarName Term Term
+      -- let arg be x in body
+      LetBe Term { var : TermVarName, body : Term }
     | -- ==Module Access==
       ModuleAccess ModuleTerm TermVarName
 

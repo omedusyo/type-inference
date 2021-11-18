@@ -153,11 +153,11 @@ operatorTerm =
             , matchProduct
             , left
             , right
-            , sumCase
+            , matchSum
             , natSucc
-            , natLoop
+            , foldNat
             , cons
-            , listLoop
+            , foldList
             , letExpression
             , moduleAccess
             ]
@@ -281,7 +281,7 @@ bool =
 
 ifThenElse : Parser Term
 ifThenElse =
-    Parser.succeed Base.IfThenElse
+    Parser.succeed (\arg trueBody falseBody -> Base.MatchBool arg { trueBranch = { body = trueBody }, falseBranch = { body = falseBody } })
         |. keyword "if"
         -- test expression
         |= Parser.lazy (\() -> term)
@@ -327,9 +327,9 @@ matchProduct : Parser Term
 matchProduct =
     Parser.succeed
         (\arg ( ( var0, var1 ), body ) ->
-            Base.MatchProduct
-                { arg = arg
-                , var0 = var0
+            Base.MatchPair
+                arg
+                { var0 = var0
                 , var1 = var1
                 , body = body
                 }
@@ -364,10 +364,10 @@ abstraction =
                     Base.Delay body
 
                 [ var ] ->
-                    Base.Abstraction var body
+                    Base.Abstraction { var = var, body = body }
 
                 var :: vars1 ->
-                    Base.Abstraction var (abstractionWithListOfVars vars1 body)
+                    Base.Abstraction { var = var, body = abstractionWithListOfVars vars1 body }
     in
     Parser.succeed (\( vars0, body ) -> abstractionWithListOfVars vars0 body)
         |. keyword "fn"
@@ -455,8 +455,8 @@ rightPattern =
 -- (sum-case e {(left x) . e1} {(right y) . e2})
 
 
-sumCase : Parser Term
-sumCase =
+matchSum : Parser Term
+matchSum =
     -- TODO: we allow
     --          (sum-case e {(left x) . e1} {(right y) . e2})
     --       but we don't allow
@@ -464,12 +464,10 @@ sumCase =
     --       Order shouldn't matter.
     Parser.succeed
         (\arg ( leftVar, leftBody ) ( rightVar, rightBody ) ->
-            Base.Case
-                { arg = arg
-                , leftVar = leftVar
-                , leftBody = leftBody
-                , rightVar = rightVar
-                , rightBody = rightBody
+            Base.MatchSum
+                arg
+                { leftBranch = { var = leftVar, body = leftBody }
+                , rightBranch = { var = rightVar, body = rightBody }
                 }
         )
         |. keyword "match-sum"
@@ -510,17 +508,17 @@ natSucc =
 -- (nat-loop n initState { i s . body })
 
 
-natLoop : Parser Term
-natLoop =
+foldNat : Parser Term
+foldNat =
     Parser.succeed
-        (\arg initState ( stateVar, body ) ->
-            Base.NatLoop
-                { base = initState
-                , loop =
-                    { stateVar = stateVar
+        (\arg zeroBody ( succVar, body ) ->
+            Base.FoldNat
+                arg
+                { zeroBranch = { body = zeroBody }
+                , succBranch =
+                    { var = succVar
                     , body = body
                     }
-                , arg = arg
                 }
         )
         |. keyword "nat-loop"
@@ -556,18 +554,18 @@ cons =
 -- (list-loop xs initState { x s . body })
 
 
-listLoop : Parser Term
-listLoop =
+foldList : Parser Term
+foldList =
     Parser.succeed
-        (\arg initState ( ( listElementVar, stateVar ), body ) ->
-            Base.ListLoop
-                { initState = initState
-                , loop =
-                    { listElementVar = listElementVar
-                    , stateVar = stateVar
+        (\arg emptyBody ( ( listElementVar, stateVar ), body ) ->
+            Base.FoldList
+                arg
+                { emptyBranch = { body = emptyBody }
+                , consBranch =
+                    { var0 = listElementVar
+                    , var1 = stateVar
                     , body = body
                     }
-                , arg = arg
                 }
         )
         |. keyword "list-loop"
@@ -587,7 +585,7 @@ listLoop =
 
 letExpression : Parser Term
 letExpression =
-    Parser.succeed (\arg ( var, body ) -> Base.Let var arg body)
+    Parser.succeed (\arg ( var, body ) -> Base.LetBe arg { var = var, body = body })
         |. keyword "let"
         |= Parser.lazy (\() -> term)
         |= binding

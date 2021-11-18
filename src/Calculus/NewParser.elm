@@ -350,7 +350,7 @@ type OperatorKeyword
       -- Bool
     | ConstTrue
     | ConstFalse
-    | IfThenElse
+    | MatchBool
       -- Pair
     | Pair
     | MatchPair
@@ -364,11 +364,11 @@ type OperatorKeyword
       -- Nat
     | ConstZero
     | Succ
-    | IterNat
+    | FoldNat
       -- List
     | ConstEmpty
     | Cons
-    | IterList
+    | FoldList
 
 
 
@@ -396,7 +396,7 @@ operatorKeyword =
         -- Bool
         , ( "true", ConstTrue )
         , ( "false", ConstFalse )
-        , ( "if", IfThenElse )
+        , ( "match-bool", MatchBool )
 
         -- Pair
         , ( "pair", Pair )
@@ -414,12 +414,12 @@ operatorKeyword =
         -- Nat
         , ( "zero", ConstZero )
         , ( "succ", Succ )
-        , ( "iter-nat", IterNat )
+        , ( "fold-nat", FoldNat )
 
         -- List
         , ( "empty", ConstEmpty )
         , ( "cons", Cons )
-        , ( "iter-list", IterList )
+        , ( "fold-list", FoldList )
         ]
         --  TODO: Should I worry about optional parenthesization here?
         |> Parser.mapError handleKeywordError
@@ -555,11 +555,11 @@ term =
                     ConstFalse ->
                         constant Base.ConstFalse
 
-                    IfThenElse ->
+                    MatchBool ->
                         optionalParens
                             (Parser.return
                                 (\arg ( (), branch0 ) ( (), branch1 ) ->
-                                    Base.IfThenElse arg branch0 branch1
+                                    Base.MatchBool arg { trueBranch = { body = branch0 }, falseBranch = { body = branch1 } }
                                 )
                                 |> Parser.ooo term
                                 |> Parser.ooo (binding (pattern0 "true" ConstTrue) term)
@@ -574,7 +574,7 @@ term =
                         optionalParens
                             (Parser.return
                                 (\arg ( ( var0, var1 ), body ) ->
-                                    Base.MatchProduct { arg = arg, var0 = var0, var1 = var1, body = body }
+                                    Base.MatchPair arg { var0 = var0, var1 = var1, body = body }
                                 )
                                 |> Parser.ooo term
                                 |> Parser.ooo (binding (pattern2 "pair" Pair) term)
@@ -591,7 +591,7 @@ term =
                         optionalParens
                             (Parser.return
                                 (\arg ( leftVar, leftBody ) ( rightVar, rightBody ) ->
-                                    Base.Case { arg = arg, leftVar = leftVar, leftBody = leftBody, rightVar = rightVar, rightBody = rightBody }
+                                    Base.MatchSum arg { leftBranch = { var = leftVar, body = leftBody }, rightBranch = { var = rightVar, body = rightBody } }
                                 )
                                 |> Parser.ooo term
                                 |> Parser.ooo (binding (pattern1 "left" Left) term)
@@ -605,7 +605,7 @@ term =
                     Abstraction ->
                         optionalParens
                             (Parser.return
-                                (\( var, body ) -> Base.Abstraction var body)
+                                (\( var, body ) -> Base.Abstraction { var = var, body = body })
                                 |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedIdentifier) term)
                             )
 
@@ -616,19 +616,18 @@ term =
                     Succ ->
                         operator1 Base.Succ
 
-                    IterNat ->
+                    FoldNat ->
                         optionalParens
                             (Parser.return
                                 (\arg ( (), zeroBody ) ( succVar, succBody ) ->
-                                    Base.NatLoop
-                                        { arg = arg
-                                        , base = zeroBody
-                                        , loop =
-                                            { stateVar = succVar, body = succBody }
+                                    Base.FoldNat
+                                        arg
+                                        { zeroBranch = { body = zeroBody }
+                                        , succBranch = { var = succVar, body = succBody }
                                         }
                                 )
                                 |> Parser.ooo term
-                                |> Parser.ooo (binding (pattern0 "zero" IterNat) term)
+                                |> Parser.ooo (binding (pattern0 "zero" FoldNat) term)
                                 |> Parser.ooo (binding (pattern1 "succ" Succ) term)
                             )
 
@@ -639,15 +638,15 @@ term =
                     Cons ->
                         operator2 Base.Cons
 
-                    IterList ->
+                    FoldList ->
                         optionalParens
                             (Parser.return
                                 (\arg ( (), emptyBody ) ( ( consVar0, consVar1 ), consBody ) ->
-                                    Base.ListLoop
-                                        { arg = arg
-                                        , initState = emptyBody
-                                        , loop =
-                                            { listElementVar = consVar0, stateVar = consVar1, body = consBody }
+                                    Base.FoldList
+                                        arg
+                                        { emptyBranch = { body = emptyBody }
+                                        , consBranch =
+                                            { var0 = consVar0, var1 = consVar1, body = consBody }
                                         }
                                 )
                                 |> Parser.ooo term

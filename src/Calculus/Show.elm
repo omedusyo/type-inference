@@ -46,7 +46,7 @@ showTerm term =
             -- (pair e1 e2)
             String.concat [ "(pair ", showTerm fst, " ", showTerm snd, ")" ]
 
-        Base.MatchProduct { arg, var0, var1, body } ->
+        Base.MatchPair arg { var0, var1, body } ->
             String.concat
                 [ "(match-pair "
                 , showTerm arg
@@ -59,7 +59,7 @@ showTerm term =
                 , " })"
                 ]
 
-        Base.Abstraction var body ->
+        Base.Abstraction { var, body } ->
             -- (fn { x . body })
             String.concat [ "(fn { ", var, " . ", showTerm body, " })" ]
 
@@ -75,19 +75,19 @@ showTerm term =
             -- (right e)
             String.concat [ "(right ", showTerm term1, ")" ]
 
-        Base.Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+        Base.MatchSum arg { leftBranch, rightBranch } ->
             -- (match-sum e { (left x) . e1 } { (right y) . e2 })
             String.concat
                 [ "(match-sum "
                 , showTerm arg
                 , " { (left "
-                , leftVar
+                , leftBranch.var
                 , ") . "
-                , showTerm leftBody
+                , showTerm leftBranch.body
                 , " } { (right "
-                , rightVar
+                , rightBranch.var
                 , ") . "
-                , showTerm rightBody
+                , showTerm rightBranch.body
                 , " })"
                 ]
 
@@ -97,15 +97,15 @@ showTerm term =
         Base.ConstFalse ->
             "false"
 
-        Base.IfThenElse arg leftBody rightBody ->
+        Base.MatchBool arg { trueBranch, falseBranch } ->
             -- (if { x } { y })
             String.concat
                 [ "(if "
                 , showTerm arg
                 , " { "
-                , showTerm leftBody
+                , showTerm trueBranch.body
                 , " } { "
-                , showTerm rightBody
+                , showTerm falseBranch.body
                 , " })"
                 ]
 
@@ -116,17 +116,17 @@ showTerm term =
             -- (succ e)
             String.concat [ "(succ ", showTerm term1, ")" ]
 
-        Base.NatLoop { base, loop, arg } ->
+        Base.FoldNat arg { zeroBranch, succBranch } ->
             -- (loop-nat nExp initStateExp { i state . body })
             String.concat
                 [ "(loop-nat "
                 , showTerm arg
                 , " "
-                , showTerm base
+                , showTerm zeroBranch.body
                 , " { "
-                , loop.stateVar
+                , succBranch.var
                 , " . "
-                , showTerm loop.body
+                , showTerm succBranch.body
                 , " })"
                 ]
 
@@ -143,19 +143,19 @@ showTerm term =
                 , ")"
                 ]
 
-        Base.ListLoop { initState, loop, arg } ->
+        Base.FoldList arg { emptyBranch, consBranch } ->
             -- (loop-list xsExp initStateExp { x state . body } )
             String.concat
                 [ "(list-loop "
                 , showTerm arg
                 , " "
-                , showTerm initState
+                , showTerm emptyBranch.body
                 , " { "
-                , loop.listElementVar
+                , consBranch.var0
                 , " "
-                , loop.stateVar
+                , consBranch.var1
                 , " . "
-                , showTerm loop.body
+                , showTerm consBranch.body
                 , " })"
                 ]
 
@@ -173,7 +173,7 @@ showTerm term =
                 , ")"
                 ]
 
-        Base.Let var exp body ->
+        Base.LetBe exp { var, body } ->
             String.concat
                 [ "(let "
                 , showTerm exp
