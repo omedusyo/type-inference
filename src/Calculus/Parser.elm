@@ -513,12 +513,11 @@ natSucc =
 natLoop : Parser Term
 natLoop =
     Parser.succeed
-        (\arg initState ( ( indexVar, stateVar ), body ) ->
+        (\arg initState ( stateVar, body ) ->
             Base.NatLoop
                 { base = initState
                 , loop =
-                    { indexVar = indexVar
-                    , stateVar = stateVar
+                    { stateVar = stateVar
                     , body = body
                     }
                 , arg = arg
@@ -530,7 +529,8 @@ natLoop =
         -- the initial state of the loop
         |= Parser.lazy (\() -> term)
         |= binding
-            (Parser.succeed (\indexVar stateVar -> ( indexVar, stateVar )) |= varIntro |= varIntro)
+            -- TODO: indexVar is useless here
+            (Parser.succeed (\stateVar -> stateVar) |= varIntro)
             (Parser.lazy (\() -> term))
 
 

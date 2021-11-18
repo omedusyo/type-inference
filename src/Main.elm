@@ -124,19 +124,19 @@ initModuleModel =
             """(module
     (let-module Nat (module
         (let-term plus (fn { x y .
-                 (nat-loop $x $y { i state .
+                 (nat-loop $x $y { state .
                     (succ $state)
                  })
         })) 
    
         (let-term multiply (fn { x y .
-                 (nat-loop $x 0n0 { i state .
+                 (nat-loop $x 0n0 { state .
                      (@ $plus $y $state)
                  })
         }))
    
        (let-term exp (fn { x y .
-                (nat-loop $y 0n1 { i state .
+                (nat-loop $y 0n1 { state .
                       (@ $multiply $x $state)
                 })
        }))
@@ -168,7 +168,7 @@ initModuleModel =
    ))
             
        (let-term range-reverse (fn { n .
-                (nat-loop $n empty-list { i xs .
+                (nat-loop $n empty-list { xs .
                        (cons $i $xs)
                 })
        }))
@@ -820,7 +820,7 @@ viewHelp =
         , E.text "  (match-pair pairExp { (pair x y) . body })"
         , E.text "  (if e { e1 } { e2 })"
         , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
-        , E.text "  (nat-loop   n initState { i s . body })"
+        , E.text "  (nat-loop   n initState { s . body })"
         , E.text "  (list-loop xs initState { x s . body })"
         , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
         , E.text "  (fn {. body }) // freezes computation"

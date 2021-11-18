@@ -235,8 +235,7 @@ add =
             (Base.NatLoop
                 { base = Base.VarUse "x"
                 , loop =
-                    { indexVar = "i"
-                    , stateVar = "s"
+                    { stateVar = "s"
                     , body = Base.Succ (Base.VarUse "s")
                     }
                 , arg = Base.VarUse "y"
@@ -258,8 +257,7 @@ mul =
             (Base.NatLoop
                 { base = n0
                 , loop =
-                    { indexVar = "i"
-                    , stateVar = "s"
+                    { stateVar = "s"
                     , body = Base.Application (Base.Application add (Base.VarUse "x")) (Base.VarUse "s")
                     }
                 , arg = Base.VarUse "y"
@@ -281,8 +279,7 @@ exp =
             (Base.NatLoop
                 { base = n1
                 , loop =
-                    { indexVar = "i"
-                    , stateVar = "s"
+                    { stateVar = "s"
                     , body = Base.Application (Base.Application mul (Base.VarUse "x")) (Base.VarUse "s")
                     }
                 , arg = Base.VarUse "y"
@@ -297,14 +294,14 @@ expType =
 
 
 sumTerm =
+    -- TODO: WRONG: There's no such thing as "j"
     -- Sum
     -- \N -> (N - 1) + ... + 2 + 3 + 1 + 0
     Base.Abstraction "N"
         (Base.NatLoop
             { base = n0
             , loop =
-                { indexVar = "j"
-                , stateVar = "sum"
+                { stateVar = "sum"
                 , body = Base.Application (Base.Application add (Base.VarUse "j")) (Base.VarUse "sum")
                 }
             , arg = Base.VarUse "N"
@@ -345,8 +342,7 @@ constList =
             (Base.NatLoop
                 { base = Base.ConstEmpty
                 , loop =
-                    { indexVar = "i"
-                    , stateVar = "xs"
+                    { stateVar = "xs"
                     , body =
                         Base.Cons (Base.VarUse "x") (Base.VarUse "xs")
                     }

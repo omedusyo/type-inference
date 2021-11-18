@@ -49,15 +49,6 @@ type ExpectedOperatorKeyword
     | ExpectedGapAfterOperatorKeyword { operatorKeyword : OperatorKeyword, failedAtChar : Char }
 
 
-type ExpectedPattern a
-    = ExpectedPatternKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterPatternKeyword { patternKeyword : a, failedAtChar : Char }
-
-
-type Patterns
-    = ExpectedBoolPattern (ExpectedPattern BoolPatternKeyword)
-
-
 type ExpectedIdentifierIntroduction
     = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
@@ -74,12 +65,17 @@ type ExpectedParens
     | ExpectedClosingParens { failedAtChar : Maybe Char }
 
 
+type ExpectedPattern
+    = ExpectedPatternKeyword { patternKeyword : OperatorKeyword, consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterPatternKeyword { patternKeyword : OperatorKeyword, failedAtChar : Char }
+
+
 type ExpectedTerm
     = ExpectedOperator ExpectedOperatorKeyword
     | ExpectedIdentifier ExpectedIdentifierIntroduction
     | ExpectedParens ExpectedParens
     | ExpectedBindingTerm ExpectedBindingTerm
-    | ExpectedPattern Patterns
+    | ExpectedPattern ExpectedPattern
 
 
 whitespaceChars : Set Char
@@ -151,6 +147,14 @@ keywordGap =
                             Nothing ->
                                 Parser.unit
             )
+        |> Parser.o spaces
+
+
+keyword : String -> Parser (Either PState.ExpectedString ExpectedKeywordGapCharacter) ()
+keyword string0 =
+    Parser.unit
+        |> Parser.o (Parser.string string0 |> Parser.mapError Either.Left)
+        |> Parser.o (keywordGap |> Parser.mapError Either.Right)
 
 
 
@@ -311,34 +315,33 @@ varIntro =
         |> Parser.o spaces
 
 
+binding : Parser ExpectedTerm a -> Parser ExpectedTerm b -> Parser ExpectedTerm ( a, b )
+binding patternParser bodyParser =
+    let
+        handleOpenBraces : PState.ExpectedString -> ExpectedTerm
+        handleOpenBraces msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedBindingTerm (ExpectedOpenBraces { failedAtChar = failedAtChar })
 
--- binding : Parser e a -> Parser f b -> Parser (ExpectedBindingTerm e f) ( a, b )
--- binding varsParser bodyParser =
---     -- TODO: redo from scratch
---     let
---         handleOpenBraces : PState.ExpectedString -> ExpectedBindingTerm e f
---         handleOpenBraces msg =
---             case msg of
---                 PState.ExpectedString { failedAtChar } ->
---                     ExpectedOpenBraces { failedAtChar = failedAtChar }
---         handleDot : PState.ExpectedString -> ExpectedBindingTerm e f
---         handleDot msg =
---             case msg of
---                 PState.ExpectedString { failedAtChar } ->
---                     ExpectedDot { failedAtChar = failedAtChar }
---         handleClosingBraces : PState.ExpectedString -> ExpectedBindingTerm e f
---         handleClosingBraces msg =
---             case msg of
---                 PState.ExpectedString { failedAtChar } ->
---                     ExpectedClosingBraces { failedAtChar = failedAtChar }
---     in
---     Parser.return (\vars body -> ( vars, body ))
---         |> Parser.o (symbol "{" |> Parser.mapError handleOpenBraces)
---         |> Parser.ooo (varsParser |> Parser.mapError VariablesParserError)
---         |> Parser.o (symbol "." |> Parser.mapError handleDot)
---         -- TODO: here I need to somehow indicate that the parens are optional
---         |> Parser.ooo (bodyParser |> Parser.mapError BodyParserError)
---         |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
+        handleDot : PState.ExpectedString -> ExpectedTerm
+        handleDot msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedBindingTerm (ExpectedDot { failedAtChar = failedAtChar })
+
+        handleClosingBraces : PState.ExpectedString -> ExpectedTerm
+        handleClosingBraces msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedBindingTerm (ExpectedClosingBraces { failedAtChar = failedAtChar })
+    in
+    Parser.return (\vars body -> ( vars, body ))
+        |> Parser.o (symbol "{" |> Parser.mapError handleOpenBraces)
+        |> Parser.ooo patternParser
+        |> Parser.o (symbol "." |> Parser.mapError handleDot)
+        |> Parser.ooo bodyParser
+        |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
 
 
 type OperatorKeyword
@@ -366,49 +369,6 @@ type OperatorKeyword
     | ConstEmpty
     | Cons
     | IterList
-
-
-
--- Bool pattern forest
-
-
-type BoolPatternKeyword
-    = TruePatternKeyword
-    | FalsePatternKeyword
-
-
-boolPatternKeyword : Parser ExpectedTerm BoolPatternKeyword
-boolPatternKeyword =
-    let
-        handleKeywordError : PState.ExpectedStringIn -> ExpectedTerm
-        handleKeywordError msg =
-            case msg of
-                PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
-                    { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-                        |> ExpectedPatternKeyword
-                        |> ExpectedBoolPattern
-                        |> ExpectedPattern
-
-        handleGapError : BoolPatternKeyword -> ExpectedKeywordGapCharacter -> ExpectedTerm
-        handleGapError boolKeyword0 msg =
-            case msg of
-                ExpectedKeywordGapCharacter { failedAtChar } ->
-                    { patternKeyword = boolKeyword0, failedAtChar = failedAtChar }
-                        |> ExpectedGapAfterPatternKeyword
-                        |> ExpectedBoolPattern
-                        |> ExpectedPattern
-    in
-    Parser.stringIn
-        [ ( "true", TruePatternKeyword )
-        , ( "false", FalsePatternKeyword )
-        ]
-        |> Parser.mapError handleKeywordError
-        |> Parser.andThen
-            (\boolKeyword0 ->
-                Parser.return boolKeyword0
-                    |> Parser.o (keywordGap |> Parser.mapError (handleGapError boolKeyword0))
-            )
-        |> Parser.o spaces
 
 
 
@@ -498,17 +458,18 @@ term =
                 PState.ExpectedString { failedAtChar } ->
                     ExpectedBindingTerm (ExpectedClosingBraces { failedAtChar = failedAtChar })
 
-        openBrace : Parser ExpectedTerm ()
-        openBrace =
-            symbol "{" |> Parser.mapError handleOpenBraces
+        handlePatternError : OperatorKeyword -> Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
+        handlePatternError patternKeyword msg =
+            case msg of
+                Either.Left stringError ->
+                    case stringError of
+                        PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                            ExpectedPattern (ExpectedPatternKeyword { patternKeyword = patternKeyword, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar })
 
-        dot : Parser ExpectedTerm ()
-        dot =
-            symbol "." |> Parser.mapError handleDot
-
-        closingBrace : Parser ExpectedTerm ()
-        closingBrace =
-            symbol "}" |> Parser.mapError handleClosingBraces
+                Either.Right gapError ->
+                    case gapError of
+                        ExpectedKeywordGapCharacter { failedAtChar } ->
+                            ExpectedPattern (ExpectedGapAfterPatternKeyword { patternKeyword = patternKeyword, failedAtChar = failedAtChar })
 
         constant : Term -> Parser ExpectedTerm Term
         constant c =
@@ -529,6 +490,41 @@ term =
                     |> Parser.ooo term
                     |> Parser.ooo term
                 )
+
+        varSeq0 : Parser ExpectedTerm ()
+        varSeq0 =
+            optionalParens emptySequence
+
+        varSeq1 : Parser ExpectedTerm TermVarName
+        varSeq1 =
+            mandatoryParens
+                (varIntro |> Parser.mapError ExpectedIdentifier)
+
+        varSeq2 : Parser ExpectedTerm ( TermVarName, TermVarName )
+        varSeq2 =
+            mandatoryParens
+                (Parser.pair
+                    (varIntro |> Parser.mapError ExpectedIdentifier)
+                    (varIntro |> Parser.mapError ExpectedIdentifier)
+                )
+
+        pattern0 : String -> OperatorKeyword -> Parser ExpectedTerm ()
+        pattern0 str op =
+            Parser.unit
+                |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
+                |> Parser.o varSeq0
+
+        pattern1 : String -> OperatorKeyword -> Parser ExpectedTerm TermVarName
+        pattern1 str op =
+            Parser.identity
+                |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
+                |> Parser.ooo varSeq1
+
+        pattern2 : String -> OperatorKeyword -> Parser ExpectedTerm ( TermVarName, TermVarName )
+        pattern2 str op =
+            Parser.identity
+                |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
+                |> Parser.ooo varSeq2
     in
     -- TODO: better error msg when on wrong number of arguments
     --       actually allowing optional parens for unary operators will make this impossible...
@@ -560,41 +556,14 @@ term =
                         constant Base.ConstFalse
 
                     IfThenElse ->
-                        let
-                            branch =
-                                Parser.second
-                                    openBrace
-                                    (boolPatternKeyword
-                                        |> Parser.andThen
-                                            (\boolPattern ->
-                                                Parser.return
-                                                    (\body ->
-                                                        ( boolPattern, body )
-                                                    )
-                                                    |> Parser.o dot
-                                                    |> Parser.ooo term
-                                                    |> Parser.o closingBrace
-                                            )
-                                    )
-                        in
                         optionalParens
                             (Parser.return
-                                (\arg ( pattern0, branch0 ) ( pattern1, branch1 ) ->
-                                    case ( pattern0, pattern1 ) of
-                                        ( TruePatternKeyword, FalsePatternKeyword ) ->
-                                            Base.IfThenElse arg branch0 branch1
-
-                                        ( FalsePatternKeyword, TruePatternKeyword ) ->
-                                            Base.IfThenElse arg branch1 branch0
-
-                                        _ ->
-                                            -- TODO
-                                            Debug.todo "THIS IS AN ERROR. Both patterns are the same"
+                                (\arg ( (), branch0 ) ( (), branch1 ) ->
+                                    Base.IfThenElse arg branch0 branch1
                                 )
                                 |> Parser.ooo term
-                                -- TODO: make this commutative
-                                |> Parser.ooo branch
-                                |> Parser.ooo branch
+                                |> Parser.ooo (binding (pattern0 "true" ConstTrue) term)
+                                |> Parser.ooo (binding (pattern0 "false" ConstFalse) term)
                             )
 
                     -- Pair
@@ -602,7 +571,14 @@ term =
                         operator2 Base.Pair
 
                     MatchPair ->
-                        Debug.todo ""
+                        optionalParens
+                            (Parser.return
+                                (\arg ( ( var0, var1 ), body ) ->
+                                    Base.MatchProduct { arg = arg, var0 = var0, var1 = var1, body = body }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern2 "pair" Pair) term)
+                            )
 
                     -- Sum
                     Left ->
@@ -612,14 +588,26 @@ term =
                         operator1 Base.Right
 
                     MatchSum ->
-                        Debug.todo ""
+                        optionalParens
+                            (Parser.return
+                                (\arg ( leftVar, leftBody ) ( rightVar, rightBody ) ->
+                                    Base.Case { arg = arg, leftVar = leftVar, leftBody = leftBody, rightVar = rightVar, rightBody = rightBody }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern1 "left" Left) term)
+                                |> Parser.ooo (binding (pattern1 "right" Right) term)
+                            )
 
                     -- Function
                     Application ->
                         operator2 Base.Application
 
                     Abstraction ->
-                        Debug.todo ""
+                        optionalParens
+                            (Parser.return
+                                (\( var, body ) -> Base.Abstraction var body)
+                                |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedIdentifier) term)
+                            )
 
                     -- Nat
                     ConstZero ->
@@ -629,15 +617,41 @@ term =
                         operator1 Base.Succ
 
                     IterNat ->
-                        Debug.todo ""
+                        optionalParens
+                            (Parser.return
+                                (\arg ( (), zeroBody ) ( succVar, succBody ) ->
+                                    Base.NatLoop
+                                        { arg = arg
+                                        , base = zeroBody
+                                        , loop =
+                                            { stateVar = succVar, body = succBody }
+                                        }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern0 "zero" IterNat) term)
+                                |> Parser.ooo (binding (pattern1 "succ" Succ) term)
+                            )
 
                     -- List
                     ConstEmpty ->
                         constant Base.ConstEmpty
 
                     Cons ->
-                        Debug.todo ""
+                        operator2 Base.Cons
 
                     IterList ->
-                        Debug.todo ""
+                        optionalParens
+                            (Parser.return
+                                (\arg ( (), emptyBody ) ( ( consVar0, consVar1 ), consBody ) ->
+                                    Base.ListLoop
+                                        { arg = arg
+                                        , initState = emptyBody
+                                        , loop =
+                                            { listElementVar = consVar0, stateVar = consVar1, body = consBody }
+                                        }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern0 "empty" ConstEmpty) term)
+                                |> Parser.ooo (binding (pattern2 "cons" Cons) term)
+                            )
             )

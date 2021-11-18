@@ -403,7 +403,6 @@ eval term =
                                                             State.withReadOnly
                                                                 (\env _ ->
                                                                     env
-                                                                        |> Value.extendTermEnvironment loop.indexVar (Value.NatValue natVal1)
                                                                         |> Value.extendTermEnvironment loop.stateVar prevVal
                                                                 )
                                                                 (eval loop.body)

@@ -75,8 +75,7 @@ type Term
         -- TODO: rename to initState var
         { base : Term
         , loop :
-            { indexVar : TermVarName
-            , stateVar : TermVarName -- <- this should be interpreted as `f n`
+            { stateVar : TermVarName -- <- this should be interpreted as `f n`
             , body : Term
             }
         , arg : Term

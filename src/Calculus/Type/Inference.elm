@@ -523,7 +523,6 @@ infer term =
                                         (updateContext0
                                             (\context ->
                                                 context
-                                                    |> pushVarToContext loop.indexVar Base.ConstNat
                                                     |> pushVarToContext loop.stateVar baseType
                                             )
                                         )
@@ -532,7 +531,6 @@ infer term =
                                             (\context ->
                                                 context
                                                     |> popVarFromContext loop.stateVar
-                                                    |> popVarFromContext loop.indexVar
                                             )
                                         )
                             in

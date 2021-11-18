@@ -124,8 +124,6 @@ showTerm term =
                 , " "
                 , showTerm base
                 , " { "
-                , loop.indexVar
-                , " "
                 , loop.stateVar
                 , " . "
                 , showTerm loop.body
