@@ -167,11 +167,6 @@ initModuleModel =
 
    ))
             
-       (let-term range-reverse (fn { n .
-                (nat-loop $n empty-list { xs .
-                       (cons $i $xs)
-                })
-       }))
 
    (let-term square (fn { x . (@ (-> $Nat multiply) $x $x) }))
 )
