@@ -240,23 +240,25 @@ closingParens numOfExpectedClosingParens =
             |> Parser.o spaces
 
 
-optionalParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
+optionalParens : Parser e a -> Parser (Either ExpectedParens e) a
 optionalParens parser =
     zeroOrMoreOpenParens
         |> Parser.andThen
             (\numOfOpenParens ->
                 parser
-                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError ExpectedParens)
+                    |> Parser.mapError Either.Right
+                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError Either.Left)
             )
 
 
-mandatoryParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
+mandatoryParens : Parser e a -> Parser (Either ExpectedParens e) a
 mandatoryParens parser =
-    (atleastOneOpenParens |> Parser.mapError ExpectedParens)
+    (atleastOneOpenParens |> Parser.mapError Either.Left)
         |> Parser.andThen
             (\numOfOpenParens ->
                 parser
-                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError ExpectedParens)
+                    |> Parser.mapError Either.Right
+                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError Either.Left)
             )
 
 
@@ -320,6 +322,10 @@ varIntro =
         |> Parser.o spaces
 
 
+
+-- ===Binding===
+
+
 binding : Parser ExpectedTerm a -> Parser ExpectedTerm b -> Parser ExpectedTerm ( a, b )
 binding patternParser bodyParser =
     let
@@ -349,26 +355,18 @@ binding patternParser bodyParser =
         |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
 
 
-defEquals : Parser ExpectedTerm ()
+defEquals : Parser PState.ExpectedString ()
 defEquals =
-    let
-        handleLeftArrow msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedDefEquals { failedAtChar = failedAtChar })
-    in
-    symbol "=" |> Parser.mapError handleLeftArrow
+    symbol "="
 
 
-semicolon : Parser ExpectedTerm ()
+semicolon : Parser PState.ExpectedString ()
 semicolon =
-    let
-        handleLeftArrow msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedSemicolon { failedAtChar = failedAtChar })
-    in
-    symbol ";" |> Parser.mapError handleLeftArrow
+    symbol ";"
+
+
+
+-- ===Operators===
 
 
 type OperatorKeyword
@@ -402,10 +400,6 @@ type OperatorKeyword
       -- Freeze
     | Delay
     | Force
-
-
-
--- Operator forest
 
 
 operatorKeyword : Parser ExpectedOperatorKeyword OperatorKeyword
@@ -478,27 +472,67 @@ operatorKeyword =
         |> Parser.o spaces
 
 
+
+-- helpers
+
+
+mandatoryTermParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
+mandatoryTermParens parser =
+    mandatoryParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+optionalTermParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
+optionalTermParens parser =
+    optionalParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+semicolonTerm : Parser ExpectedTerm ()
+semicolonTerm =
+    semicolon
+        |> Parser.mapError
+            (\msg ->
+                case msg of
+                    PState.ExpectedString { failedAtChar } ->
+                        ExpectedBindingTerm (ExpectedSemicolon { failedAtChar = failedAtChar })
+            )
+
+
+defEqualsTerm : Parser ExpectedTerm ()
+defEqualsTerm =
+    let
+        handleLeftArrow msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedBindingTerm (ExpectedDefEquals { failedAtChar = failedAtChar })
+    in
+    defEquals |> Parser.mapError handleLeftArrow
+
+
+
+-- ===Term===
+
+
 term : Parser ExpectedTerm Term
 term =
     let
-        handleOpenBraces : PState.ExpectedString -> ExpectedTerm
-        handleOpenBraces msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedOpenBraces { failedAtChar = failedAtChar })
-
-        handleDot : PState.ExpectedString -> ExpectedTerm
-        handleDot msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedDot { failedAtChar = failedAtChar })
-
-        handleClosingBraces : PState.ExpectedString -> ExpectedTerm
-        handleClosingBraces msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedClosingBraces { failedAtChar = failedAtChar })
-
         handlePatternError : OperatorKeyword -> Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
         handlePatternError patternKeyword msg =
             case msg of
@@ -514,19 +548,19 @@ term =
 
         constant : Term -> Parser ExpectedTerm Term
         constant c =
-            optionalParens emptySequence
+            optionalTermParens emptySequence
                 |> Parser.map (\() -> c)
 
         operator1 : (Term -> Term) -> Parser ExpectedTerm Term
         operator1 f =
-            mandatoryParens
+            mandatoryTermParens
                 (Parser.return f
                     |> Parser.ooo term
                 )
 
         operator2 : (Term -> Term -> Term) -> Parser ExpectedTerm Term
         operator2 f =
-            mandatoryParens
+            mandatoryTermParens
                 (Parser.return f
                     |> Parser.ooo term
                     |> Parser.ooo term
@@ -534,16 +568,16 @@ term =
 
         varSeq0 : Parser ExpectedTerm ()
         varSeq0 =
-            optionalParens emptySequence
+            optionalTermParens emptySequence
 
         varSeq1 : Parser ExpectedTerm TermVarName
         varSeq1 =
-            mandatoryParens
+            mandatoryTermParens
                 (varIntro |> Parser.mapError ExpectedIdentifier)
 
         varSeq2 : Parser ExpectedTerm ( TermVarName, TermVarName )
         varSeq2 =
-            mandatoryParens
+            mandatoryTermParens
                 (Parser.pair
                     (varIntro |> Parser.mapError ExpectedIdentifier)
                     (varIntro |> Parser.mapError ExpectedIdentifier)
@@ -567,17 +601,6 @@ term =
                 |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
                 |> Parser.ooo varSeq2
     in
-    -- TODO: better error msg when on wrong number of arguments
-    --       actually allowing optional parens for unary operators will make this impossible...
-    --       Note `pair(left true right false)` is valid    q. Maybe we should require comma when not using parens?
-    --         e.g. `pair(left true, right false)`  valid
-    --         e.g. `pair(left(true) right(false))` valid
-    --         but  `pair(left true  right false )` invalid
-    --         e.g. `pair(pair true false, pair empty zero)`  valid
-    --         e.g. `pair(pair true false ,,,, pair empty zero)`  valid
-    --         e.g. `pair(pair(true false) pair(empty zero))` valid
-    --         but  `pair(pair true false  pair empty zero )` invalid but how can I tell?
-    --         but  `pair pair true false  pair empty zero  ` invalid but how can I tell?
     operatorKeyword
         |> Parser.mapError ExpectedOperator
         |> Parser.andThen
@@ -597,7 +620,7 @@ term =
                         constant Base.ConstFalse
 
                     MatchBool ->
-                        optionalParens
+                        optionalTermParens
                             (Parser.return
                                 (\arg ( (), branch0 ) ( (), branch1 ) ->
                                     Base.MatchBool arg { trueBranch = { body = branch0 }, falseBranch = { body = branch1 } }
@@ -612,7 +635,7 @@ term =
                         operator2 Base.Pair
 
                     MatchPair ->
-                        optionalParens
+                        optionalTermParens
                             (Parser.return
                                 (\arg ( ( var0, var1 ), body ) ->
                                     Base.MatchPair arg { var0 = var0, var1 = var1, body = body }
@@ -629,7 +652,7 @@ term =
                         operator1 Base.Right
 
                     MatchSum ->
-                        optionalParens
+                        optionalTermParens
                             (Parser.return
                                 (\arg ( leftVar, leftBody ) ( rightVar, rightBody ) ->
                                     Base.MatchSum arg { leftBranch = { var = leftVar, body = leftBody }, rightBranch = { var = rightVar, body = rightBody } }
@@ -644,7 +667,7 @@ term =
                         operator2 Base.Application
 
                     Abstraction ->
-                        optionalParens
+                        optionalTermParens
                             (Parser.return
                                 (\( var, body ) -> Base.Abstraction { var = var, body = body })
                                 |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedIdentifier) term)
@@ -658,7 +681,7 @@ term =
                         operator1 Base.Succ
 
                     FoldNat ->
-                        optionalParens
+                        optionalTermParens
                             (Parser.return
                                 (\arg ( (), zeroBody ) ( succVar, succBody ) ->
                                     Base.FoldNat
@@ -680,7 +703,7 @@ term =
                         operator2 Base.Cons
 
                     FoldList ->
-                        optionalParens
+                        optionalTermParens
                             (Parser.return
                                 (\arg ( (), emptyBody ) ( ( consVar0, consVar1 ), consBody ) ->
                                     Base.FoldList
@@ -699,7 +722,7 @@ term =
                     LetBe ->
                         -- let-be(e { x . body })
                         -- let-be e { x . body }
-                        optionalParens
+                        optionalTermParens
                             (Parser.return
                                 (\arg ( var, body ) ->
                                     Base.LetBe arg { var = var, body = body }
@@ -715,9 +738,9 @@ term =
                                 Base.LetBe arg { var = var, body = body }
                             )
                             |> Parser.ooo (varIntro |> Parser.mapError ExpectedIdentifier)
-                            |> Parser.o defEquals
+                            |> Parser.o defEqualsTerm
                             |> Parser.ooo term
-                            |> Parser.o semicolon
+                            |> Parser.o semicolonTerm
                             |> Parser.ooo term
 
                     -- Freeze
