@@ -2,6 +2,7 @@ module Calculus.NewParser exposing
     ( atleastOneOpenParens
     , closingParens
     , mandatoryParens
+    , nat
     , operatorKeyword
     , optionalParens
     , spaces
@@ -80,6 +81,7 @@ type ExpectedTerm
     | ExpectedPattern ExpectedPattern
     | ExpectedAtleastTwoArgumentsToApplication { got : Int }
     | ExpectedAtleastOneParameterToAbstraction { got : Int }
+    | ExpectedNatConstant
 
 
 whitespaceChars : Set Char
@@ -117,6 +119,47 @@ isGapChar c =
 
 type alias Parser e a =
     Parser.Parser {} e a
+
+
+
+-- ===nat===
+
+
+nat : Parser () Int
+nat =
+    let
+        -- sends a char digit to its corresponding int
+        charToInt : Char -> Int
+        charToInt c =
+            -- 48 == Char.toCode '0'
+            Char.toCode c - 48
+
+        digitStringToInt : String -> Int
+        digitStringToInt str =
+            String.foldr
+                (\c ( x, exponent ) ->
+                    ( 10 ^ exponent * charToInt c + x, exponent + 1 )
+                )
+                ( 0, 0 )
+                str
+                |> Tuple.first
+    in
+    -- Fails IFF the input doesn't start with a digit
+    Parser.anyCharSatisfying Char.isDigit
+        |> Parser.andThen
+            (\c ->
+                if c == '0' then
+                    Parser.second
+                        (Parser.allWhileTrue (\d -> d == '0'))
+                        (Parser.allWhileTrue Char.isDigit)
+
+                else
+                    Parser.allWhileTrue Char.isDigit
+                        -- this is a bit inefficient
+                        |> Parser.map (\digits -> digits ++ String.fromChar c)
+            )
+        |> Parser.map digitStringToInt
+        |> Parser.mapError (\_ -> ())
 
 
 
@@ -389,6 +432,7 @@ type OperatorKeyword
     | Abstraction
       -- Nat
     | ConstZero
+    | ConstNat
     | Succ
     | FoldNat
       -- List
@@ -441,6 +485,7 @@ operatorKeyword =
 
         -- Nat
         , ( "zero", ConstZero )
+        , ( "n", ConstNat )
         , ( "succ", Succ )
         , ( "fold-nat", FoldNat )
 
@@ -465,6 +510,10 @@ operatorKeyword =
                     VarUse ->
                         -- Var use can't have keyword Gap
                         Parser.return VarUse
+
+                    ConstNat ->
+                        -- ConstNat use can't have keyword Gap
+                        Parser.return ConstNat
 
                     _ ->
                         Parser.return operatorKeyword0
@@ -601,6 +650,13 @@ term =
             Parser.identity
                 |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
                 |> Parser.ooo varSeq2
+
+        natTerm : Parser ExpectedTerm Term
+        natTerm =
+            nat
+                |> Parser.o spaces
+                |> Parser.map Base.intToNatTerm
+                |> Parser.mapError (\_ -> ExpectedNatConstant)
     in
     operatorKeyword
         |> Parser.mapError ExpectedOperator
@@ -719,6 +775,9 @@ term =
                     -- Nat
                     ConstZero ->
                         constant Base.ConstZero
+
+                    ConstNat ->
+                        natTerm
 
                     Succ ->
                         operator1 Base.Succ
