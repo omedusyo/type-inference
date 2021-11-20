@@ -89,7 +89,7 @@ type Term
             }
         }
     | -- ==Freeze==
-      Delay Term
+      Delay { body : Term }
     | Force Term
     | -- ==Let==
       -- let arg be x in body

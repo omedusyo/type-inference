@@ -632,7 +632,7 @@ infer term =
                 generateFreshVar
 
         -- ===Freeze===
-        Base.Delay body ->
+        Base.Delay { body } ->
             infer body
                 |> State.map Base.Frozen
 

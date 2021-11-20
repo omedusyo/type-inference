@@ -159,7 +159,7 @@ showTerm term =
                 , " })"
                 ]
 
-        Base.Delay body ->
+        Base.Delay { body } ->
             String.concat
                 [ "(fn { "
                 , showTerm body

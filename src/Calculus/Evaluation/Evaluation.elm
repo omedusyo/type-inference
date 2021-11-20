@@ -461,7 +461,7 @@ eval term =
                                 throwEvalError [ ExpectedList ]
                     )
 
-        Base.Delay body ->
+        Base.Delay { body } ->
             State.get0
                 (\env _ ->
                     storeNewThunk env body

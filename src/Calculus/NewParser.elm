@@ -399,6 +399,9 @@ type OperatorKeyword
       -- Let binding
     | LetBe
     | Let
+      -- Freeze
+    | Delay
+    | Force
 
 
 
@@ -454,6 +457,10 @@ operatorKeyword =
         -- Let binding
         , ( "let-be", LetBe )
         , ( "let", Let )
+
+        -- Freeze
+        , ( "delay", Delay )
+        , ( "force", Force )
         ]
         --  TODO: Should I worry about optional parenthesization here?
         |> Parser.mapError handleKeywordError
@@ -712,4 +719,14 @@ term =
                             |> Parser.ooo term
                             |> Parser.o semicolon
                             |> Parser.ooo term
+
+                    -- Freeze
+                    Delay ->
+                        binding
+                            spaces
+                            term
+                            |> Parser.map (\( (), body ) -> Base.Delay { body = body })
+
+                    Force ->
+                        operator1 Base.Force
             )

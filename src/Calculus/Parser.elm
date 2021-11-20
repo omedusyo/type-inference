@@ -361,7 +361,7 @@ abstraction =
         abstractionWithListOfVars vars0 body =
             case vars0 of
                 [] ->
-                    Base.Delay body
+                    Base.Delay { body = body }
 
                 [ var ] ->
                     Base.Abstraction { var = var, body = body }
