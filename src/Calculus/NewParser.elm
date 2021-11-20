@@ -58,6 +58,8 @@ type ExpectedBindingTerm
     = ExpectedOpenBraces { failedAtChar : Maybe Char }
     | ExpectedDot { failedAtChar : Maybe Char }
     | ExpectedClosingBraces { failedAtChar : Maybe Char }
+    | ExpectedDefEquals { failedAtChar : Maybe Char }
+    | ExpectedSemicolon { failedAtChar : Maybe Char }
 
 
 type ExpectedParens
@@ -96,7 +98,10 @@ isWhitespaceChar c =
 gapChars : Set Char
 gapChars =
     -- TODO: maybe I should consider characters like `@` or `\\`? Or will I allow
-    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"' ])
+    -- TODO: This should actually be strings because I want to include "<-" and "->". Right now use symbols `>` and `<`. Damn it... but I want `<` and `>` for record angle parens.
+    --         gapSymbols...
+    --       But I also want to have dashes in variable names...
+    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"', '%', '/', '=', ';' ])
 
 
 isGapChar : Char -> Bool
@@ -276,7 +281,7 @@ varIntro =
         excludedChars : Set Char
         excludedChars =
             Set.union
-                (Set.fromList [ '$', '.', '(', ')', '{', '}', '\'', '"' ])
+                (Set.fromList [ '$', '.', '(', ')', '{', '}', '\'', '"', '/', '%', '=', ';' ])
                 whitespaceChars
 
         isExcludedChar : Char -> Bool
@@ -344,6 +349,28 @@ binding patternParser bodyParser =
         |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
 
 
+defEquals : Parser ExpectedTerm ()
+defEquals =
+    let
+        handleLeftArrow msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedBindingTerm (ExpectedDefEquals { failedAtChar = failedAtChar })
+    in
+    symbol "=" |> Parser.mapError handleLeftArrow
+
+
+semicolon : Parser ExpectedTerm ()
+semicolon =
+    let
+        handleLeftArrow msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedBindingTerm (ExpectedSemicolon { failedAtChar = failedAtChar })
+    in
+    symbol ";" |> Parser.mapError handleLeftArrow
+
+
 type OperatorKeyword
     = -- Var Intro
       VarUse
@@ -369,6 +396,9 @@ type OperatorKeyword
     | ConstEmpty
     | Cons
     | FoldList
+      -- Let binding
+    | LetBe
+    | Let
 
 
 
@@ -420,6 +450,10 @@ operatorKeyword =
         , ( "empty", ConstEmpty )
         , ( "cons", Cons )
         , ( "fold-list", FoldList )
+
+        -- Let binding
+        , ( "let-be", LetBe )
+        , ( "let", Let )
         ]
         --  TODO: Should I worry about optional parenthesization here?
         |> Parser.mapError handleKeywordError
@@ -653,4 +687,29 @@ term =
                                 |> Parser.ooo (binding (pattern0 "empty" ConstEmpty) term)
                                 |> Parser.ooo (binding (pattern2 "cons" Cons) term)
                             )
+
+                    -- Let binding
+                    LetBe ->
+                        -- let-be(e { x . body })
+                        -- let-be e { x . body }
+                        optionalParens
+                            (Parser.return
+                                (\arg ( var, body ) ->
+                                    Base.LetBe arg { var = var, body = body }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedIdentifier) term)
+                            )
+
+                    Let ->
+                        -- let x < e; body
+                        Parser.return
+                            (\var arg body ->
+                                Base.LetBe arg { var = var, body = body }
+                            )
+                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedIdentifier)
+                            |> Parser.o defEquals
+                            |> Parser.ooo term
+                            |> Parser.o semicolon
+                            |> Parser.ooo term
             )
