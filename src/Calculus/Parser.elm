@@ -27,7 +27,7 @@ import Set exposing (Set)
 -- Constants/vars:
 --   true, false
 --   0n0, 0n1, 0n2, 0n3, ...
---   empty-list
+--   empty
 --   $foo
 -- Simple Operators
 --   (pair e e')
@@ -40,10 +40,10 @@ import Set exposing (Set)
 -- Bindings Operators
 --   (fn { x . body })
 --   (match-pair pairExp { (pair x y) . body })
---   (if e { e1 } { e2 })
---   (sum-case e { (left x) . e1 } { (right y) . e2 })
---   (nat-loop   n initState { i s . body })
---   (list-loop xs initState { x s . body })
+--   (match-bool e { true . e1 } { false . e2 })
+--   (match-sum e { (left x) . e1 } { (right y) . e2 })
+--   (fold-nat n { zero . initState } { (succ s) . body })
+--   (fold-list xs { empty initState { x s . body })
 --   (fn { e }) -- delay
 --   (let exp { x . body })
 

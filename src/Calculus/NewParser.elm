@@ -78,6 +78,8 @@ type ExpectedTerm
     | ExpectedParens ExpectedParens
     | ExpectedBindingTerm ExpectedBindingTerm
     | ExpectedPattern ExpectedPattern
+    | ExpectedAtleastTwoArgumentsToApplication { got : Int }
+    | ExpectedAtleastOneParameterToAbstraction { got : Int }
 
 
 whitespaceChars : Set Char
@@ -264,7 +266,6 @@ mandatoryParens parser =
 
 
 -- ===Sequences===
--- TODO
 
 
 emptySequence : Parser e ()
@@ -664,13 +665,55 @@ term =
 
                     -- Function
                     Application ->
-                        operator2 Base.Application
+                        -- operator2 Base.Application
+                        mandatoryTermParens
+                            (Parser.repeat term
+                                |> Parser.andThen
+                                    (\terms ->
+                                        case terms of
+                                            [] ->
+                                                Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 0 })
+
+                                            [ _ ] ->
+                                                Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 1 })
+
+                                            fn0 :: arg0 :: args ->
+                                                let
+                                                    applicationWithListOfArgs : Term -> List Term -> Term
+                                                    applicationWithListOfArgs fn args0 =
+                                                        case args0 of
+                                                            [] ->
+                                                                fn
+
+                                                            arg :: args1 ->
+                                                                applicationWithListOfArgs (Base.Application fn arg) args1
+                                                in
+                                                Parser.return (applicationWithListOfArgs (Base.Application fn0 arg0) args)
+                                    )
+                            )
 
                     Abstraction ->
+                        let
+                            abstractionWithListOfVars : List TermVarName -> Term -> Term
+                            abstractionWithListOfVars vars0 body =
+                                case vars0 of
+                                    [] ->
+                                        body
+
+                                    var :: vars1 ->
+                                        Base.Abstraction { var = var, body = abstractionWithListOfVars vars1 body }
+                        in
                         optionalTermParens
-                            (Parser.return
-                                (\( var, body ) -> Base.Abstraction { var = var, body = body })
-                                |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedIdentifier) term)
+                            (binding (Parser.repeat varIntro |> Parser.mapError ExpectedIdentifier) term
+                                |> Parser.andThen
+                                    (\( vars, body ) ->
+                                        case vars of
+                                            [] ->
+                                                Parser.fail (ExpectedAtleastOneParameterToAbstraction { got = 0 })
+
+                                            var0 :: vars1 ->
+                                                Parser.return (Base.Abstraction { var = var0, body = abstractionWithListOfVars vars1 body })
+                                    )
                             )
 
                     -- Nat
