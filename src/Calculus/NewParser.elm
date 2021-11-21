@@ -1,14 +1,9 @@
 module Calculus.NewParser exposing
-    ( ExpectedBindingTerm(..)
-    , ExpectedIdentifierIntroduction(..)
-    , ExpectedKeywordGapCharacter(..)
-    , ExpectedOperatorKeyword(..)
-    , ExpectedParens(..)
-    , ExpectedPattern(..)
-    , ExpectedTerm(..)
+    ( ExpectedTerm(..)
     , runTerm
     , term
     , termErrorToString
+    , typeTerm
     )
 
 import Calculus.Base as Base
@@ -44,9 +39,9 @@ type ExpectedKeywordGapCharacter
     = ExpectedKeywordGapCharacter { failedAtChar : Char }
 
 
-type ExpectedOperatorKeyword
+type ExpectedOperatorKeyword a
     = ExpectedOperatorKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterOperatorKeyword { operatorKeyword : OperatorKeyword, failedAtChar : Char }
+    | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : Char }
 
 
 type ExpectedIdentifierIntroduction
@@ -68,13 +63,13 @@ type ExpectedParens
 
 
 type ExpectedPattern
-    = ExpectedPatternKeyword { patternKeyword : OperatorKeyword, consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterPatternKeyword { patternKeyword : OperatorKeyword, failedAtChar : Char }
+    = ExpectedPatternKeyword { patternKeyword : TermOperatorKeyword, consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterPatternKeyword { patternKeyword : TermOperatorKeyword, failedAtChar : Char }
 
 
 type ExpectedTerm
-    = ExpectedOperator ExpectedOperatorKeyword
-    | ExpectedIdentifier ExpectedIdentifierIntroduction
+    = ExpectedOperator (ExpectedOperatorKeyword TermOperatorKeyword)
+    | ExpectedTermIdentifier ExpectedIdentifierIntroduction
     | ExpectedParens ExpectedParens
     | ExpectedBindingTerm ExpectedBindingTerm
     | ExpectedPattern ExpectedPattern
@@ -84,7 +79,7 @@ type ExpectedTerm
     | ExpectedClosingOfApplication { failedAtChar : Maybe Char }
 
 
-expectedOperatorKeywordToString : ExpectedOperatorKeyword -> String
+expectedOperatorKeywordToString : ExpectedOperatorKeyword TermOperatorKeyword -> String
 expectedOperatorKeywordToString msg =
     case msg of
         ExpectedOperatorKeyword opKeyword ->
@@ -96,7 +91,6 @@ expectedOperatorKeywordToString msg =
                 , ")"
                 ]
 
-        -- ExpectedGapAfterOperatorKeyword { operatorKeyword : OperatorKeyword, failedAtChar : Char } ->
         ExpectedGapAfterOperatorKeyword gapAfter ->
             String.concat
                 [ "Succesfully parsed operator keyword `"
@@ -185,7 +179,7 @@ expectedPatternToString msg =
                 ]
 
 
-operatorKeywordToString : OperatorKeyword -> String
+operatorKeywordToString : TermOperatorKeyword -> String
 operatorKeywordToString op =
     case op of
         -- Var Intro
@@ -230,7 +224,7 @@ operatorKeywordToString op =
         ConstZero ->
             "zero"
 
-        ConstNat ->
+        NatLiteral ->
             "0nat-literal"
 
         Succ ->
@@ -270,7 +264,7 @@ expectedTermToString msg =
         ExpectedOperator expectedOperatorKeyword ->
             expectedOperatorKeywordToString expectedOperatorKeyword
 
-        ExpectedIdentifier expectedIdentifierIntroduction ->
+        ExpectedTermIdentifier expectedIdentifierIntroduction ->
             expectedIdentifierIntroductionToString expectedIdentifierIntroduction
 
         ExpectedParens expectedParens ->
@@ -624,7 +618,7 @@ semicolon =
 -- ===Operators===
 
 
-type OperatorKeyword
+type TermOperatorKeyword
     = -- Var Intro
       VarUse
       -- Bool
@@ -643,7 +637,7 @@ type OperatorKeyword
     | Abstraction
       -- Nat
     | ConstZero
-    | ConstNat
+    | NatLiteral
     | Succ
     | FoldNat
       -- List
@@ -658,21 +652,22 @@ type OperatorKeyword
     | Force
 
 
-operatorKeyword : Parser ExpectedOperatorKeyword OperatorKeyword
-operatorKeyword =
-    let
-        handleKeywordError : PState.ExpectedStringIn -> ExpectedOperatorKeyword
-        handleKeywordError msg =
-            case msg of
-                PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
-                    ExpectedOperatorKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+handleKeywordError : PState.ExpectedStringIn -> ExpectedOperatorKeyword a
+handleKeywordError msg =
+    case msg of
+        PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
+            ExpectedOperatorKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
 
-        handleGapError : OperatorKeyword -> ExpectedKeywordGapCharacter -> ExpectedOperatorKeyword
-        handleGapError operatorKeyword0 msg =
-            case msg of
-                ExpectedKeywordGapCharacter { failedAtChar } ->
-                    ExpectedGapAfterOperatorKeyword { operatorKeyword = operatorKeyword0, failedAtChar = failedAtChar }
-    in
+
+handleKeywordGapError : a -> ExpectedKeywordGapCharacter -> ExpectedOperatorKeyword a
+handleKeywordGapError operatorKeyword0 msg =
+    case msg of
+        ExpectedKeywordGapCharacter { failedAtChar } ->
+            ExpectedGapAfterOperatorKeyword { operatorKeyword = operatorKeyword0, failedAtChar = failedAtChar }
+
+
+operatorKeyword : Parser (ExpectedOperatorKeyword TermOperatorKeyword) TermOperatorKeyword
+operatorKeyword =
     Parser.stringIn
         [ ( "$", VarUse )
 
@@ -696,7 +691,7 @@ operatorKeyword =
 
         -- Nat
         , ( "zero", ConstZero )
-        , ( "0", ConstNat )
+        , ( "0", NatLiteral )
         , ( "succ", Succ )
         , ( "fold-nat", FoldNat )
 
@@ -722,13 +717,13 @@ operatorKeyword =
                         -- Var use can't have keyword Gap
                         Parser.return VarUse
 
-                    ConstNat ->
-                        -- ConstNat use can't have keyword Gap
-                        Parser.return ConstNat
+                    NatLiteral ->
+                        -- NatLiteral use can't have keyword Gap
+                        Parser.return NatLiteral
 
                     _ ->
                         Parser.return operatorKeyword0
-                            |> Parser.o (keywordGap |> Parser.mapError (handleGapError operatorKeyword0))
+                            |> Parser.o (keywordGap |> Parser.mapError (handleKeywordGapError operatorKeyword0))
             )
         |> Parser.o spaces
 
@@ -794,7 +789,7 @@ defEqualsTerm =
 term : Parser ExpectedTerm Term
 term =
     let
-        handlePatternError : OperatorKeyword -> Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
+        handlePatternError : TermOperatorKeyword -> Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
         handlePatternError patternKeyword msg =
             case msg of
                 Either.Left stringError ->
@@ -853,29 +848,29 @@ term =
         varSeq1 : Parser ExpectedTerm TermVarName
         varSeq1 =
             mandatoryTermParens
-                (varIntro |> Parser.mapError ExpectedIdentifier)
+                (varIntro |> Parser.mapError ExpectedTermIdentifier)
 
         varSeq2 : Parser ExpectedTerm ( TermVarName, TermVarName )
         varSeq2 =
             mandatoryTermParens
                 (Parser.pair
-                    (varIntro |> Parser.mapError ExpectedIdentifier)
-                    (varIntro |> Parser.mapError ExpectedIdentifier)
+                    (varIntro |> Parser.mapError ExpectedTermIdentifier)
+                    (varIntro |> Parser.mapError ExpectedTermIdentifier)
                 )
 
-        pattern0 : String -> OperatorKeyword -> Parser ExpectedTerm ()
+        pattern0 : String -> TermOperatorKeyword -> Parser ExpectedTerm ()
         pattern0 str op =
             Parser.unit
                 |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
                 |> Parser.o varSeq0
 
-        pattern1 : String -> OperatorKeyword -> Parser ExpectedTerm TermVarName
+        pattern1 : String -> TermOperatorKeyword -> Parser ExpectedTerm TermVarName
         pattern1 str op =
             Parser.identity
                 |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
                 |> Parser.ooo varSeq1
 
-        pattern2 : String -> OperatorKeyword -> Parser ExpectedTerm ( TermVarName, TermVarName )
+        pattern2 : String -> TermOperatorKeyword -> Parser ExpectedTerm ( TermVarName, TermVarName )
         pattern2 str op =
             Parser.identity
                 |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
@@ -889,7 +884,7 @@ term =
                     -- Var
                     VarUse ->
                         varIntro
-                            |> Parser.mapError ExpectedIdentifier
+                            |> Parser.mapError ExpectedTermIdentifier
                             |> Parser.map Base.VarUse
 
                     -- Bool
@@ -982,7 +977,7 @@ term =
                                         Base.Abstraction { var = var, body = abstractionWithListOfVars vars1 body }
                         in
                         optionalTermParens
-                            (binding (Parser.repeat varIntro |> Parser.mapError ExpectedIdentifier) term
+                            (binding (Parser.repeat varIntro |> Parser.mapError ExpectedTermIdentifier) term
                                 |> Parser.andThen
                                     (\( vars, body ) ->
                                         case vars of
@@ -998,7 +993,7 @@ term =
                     ConstZero ->
                         constant Base.ConstZero
 
-                    ConstNat ->
+                    NatLiteral ->
                         naturalNumberLiteral
 
                     Succ ->
@@ -1052,7 +1047,7 @@ term =
                                     Base.LetBe arg { var = var, body = body }
                                 )
                                 |> Parser.ooo term
-                                |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedIdentifier) term)
+                                |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedTermIdentifier) term)
                             )
 
                     Let ->
@@ -1061,7 +1056,7 @@ term =
                             (\var arg body ->
                                 Base.LetBe arg { var = var, body = body }
                             )
-                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedIdentifier)
+                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifier)
                             |> Parser.o defEqualsTerm
                             |> Parser.ooo term
                             |> Parser.o semicolonTerm
@@ -1083,3 +1078,168 @@ runTerm : String -> Result (PError.Error ExpectedTerm) Term
 runTerm input =
     Parser.run term {} (PState.return input)
         |> Result.map Tuple.second
+
+
+
+-- ===Types===
+-- ==Errors==
+-- type ExpectedTypeIdentifierIntroduction
+--     = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
+--     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
+
+
+type ExpectedType
+    = ExpectedTypeIdentifier { failedAtChar : Maybe Char }
+    | ExpectedTypeVarUseToStartWithQuote { failedAtChar : Maybe Char }
+    | ExpectedTypeOperator (ExpectedOperatorKeyword TypeOperatorKeyword)
+    | ExpectedTypeParens ExpectedParens
+
+
+mandatoryTypeTermParens : Parser ExpectedType a -> Parser ExpectedType a
+mandatoryTypeTermParens parser =
+    mandatoryParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedTypeParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+optionalTypeTermParens : Parser ExpectedType a -> Parser ExpectedType a
+optionalTypeTermParens parser =
+    optionalParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedTypeParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+typeVarIntro : Parser ExpectedType TypeVarName
+typeVarIntro =
+    -- Why can't we just use `Parser.int`?
+    -- Because it consumes spaces and dots in `123  .`. WTF?
+    Parser.naturalNumber
+        |> Parser.o spaces
+        |> Parser.mapError
+            (\msg ->
+                case msg of
+                    PState.ExpectedDecimalNaturalNumber msg0 ->
+                        ExpectedTypeIdentifier msg0
+            )
+
+
+typeVar : Parser ExpectedType Type
+typeVar =
+    let
+        handleQuote : PState.ExpectedString -> ExpectedType
+        handleQuote msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedTypeVarUseToStartWithQuote { failedAtChar = failedAtChar }
+    in
+    Parser.return (\typeVarName -> Base.VarType typeVarName)
+        |> Parser.o (Parser.string "'" |> Parser.mapError handleQuote)
+        |> Parser.ooo typeVarIntro
+
+
+type TypeOperatorKeyword
+    = TypeVarUse
+    | Product
+    | Sum
+    | Arrow
+    | ConstBool
+    | ConstNat
+    | List
+      -- TODO: forall
+    | Frozen
+
+
+typeOperatorKeyword : Parser (ExpectedOperatorKeyword TypeOperatorKeyword) TypeOperatorKeyword
+typeOperatorKeyword =
+    Parser.stringIn
+        [ ( "'", TypeVarUse )
+        , ( "Product", Product )
+        , ( "Sum", Sum )
+        , ( "Arrow", Arrow )
+        , ( "Bool", ConstBool )
+        , ( "Nat", ConstNat )
+        , ( "List", List )
+        , ( "Frozen", Frozen )
+        ]
+        |> Parser.mapError handleKeywordError
+        |> Parser.andThen
+            (\typeOperatorKeyword0 ->
+                case typeOperatorKeyword0 of
+                    TypeVarUse ->
+                        -- Var use can't have keyword Gap
+                        Parser.return TypeVarUse
+
+                    _ ->
+                        Parser.return typeOperatorKeyword0
+                            |> Parser.o (keywordGap |> Parser.mapError (handleKeywordGapError typeOperatorKeyword0))
+            )
+        |> Parser.o spaces
+
+
+typeTerm : Parser ExpectedType Type
+typeTerm =
+    let
+        constant : Type -> Parser ExpectedType Type
+        constant c =
+            optionalTypeTermParens emptySequence
+                |> Parser.map (\() -> c)
+
+        operator1 : (Type -> Type) -> Parser ExpectedType Type
+        operator1 f =
+            mandatoryTypeTermParens
+                (Parser.return f
+                    |> Parser.ooo typeTerm
+                )
+
+        operator2 : (Type -> Type -> Type) -> Parser ExpectedType Type
+        operator2 f =
+            mandatoryTypeTermParens
+                (Parser.return f
+                    |> Parser.ooo typeTerm
+                    |> Parser.ooo typeTerm
+                )
+    in
+    typeOperatorKeyword
+        |> Parser.mapError ExpectedTypeOperator
+        |> Parser.andThen
+            (\typeOperatorKeyword0 ->
+                case typeOperatorKeyword0 of
+                    TypeVarUse ->
+                        typeVarIntro |> Parser.map Base.VarType
+
+                    Product ->
+                        operator2 Base.Product
+
+                    Sum ->
+                        operator2 Base.Sum
+
+                    Arrow ->
+                        operator2 Base.Arrow
+
+                    ConstBool ->
+                        constant Base.ConstBool
+
+                    ConstNat ->
+                        constant Base.ConstNat
+
+                    List ->
+                        operator1 Base.List
+
+                    -- TODO: forall
+                    Frozen ->
+                        operator1 Base.Frozen
+            )

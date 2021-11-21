@@ -201,8 +201,7 @@ tabs =
 
 initTab : Tab
 initTab =
-    -- Module
-    ProgramBindings
+    Module
 
 
 tabToString : Tab -> String
