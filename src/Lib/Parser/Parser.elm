@@ -34,6 +34,7 @@ module Lib.Parser.Parser exposing
     , match2
     , match3
     , mid
+    , naturalNumber
     , o
     , oneOf
     , ooo
@@ -460,6 +461,49 @@ stringIn forest =
     make <|
         \_ s0 ->
             State.consumeForest (Forest.fromStringList forest) s0
+
+
+naturalNumber : Parser r State.ExpectedDecimalNaturalNumber Int
+naturalNumber =
+    -- This can only fail on empty input or on input that doesn't start with a digit
+    let
+        -- sends a char digit to its corresponding int
+        charToInt : Char -> Int
+        charToInt c =
+            -- 48 == Char.toCode '0'
+            Char.toCode c - 48
+
+        digitStringToInt : String -> Int
+        digitStringToInt str =
+            String.foldr
+                (\c ( x, exponent ) ->
+                    ( 10 ^ exponent * charToInt c + x, exponent + 1 )
+                )
+                ( 0, 0 )
+                str
+                |> Tuple.first
+    in
+    -- Fails IFF the input doesn't start with a digit
+    anyCharSatisfying Char.isDigit
+        |> andThen
+            (\c ->
+                if c == '0' then
+                    second
+                        (allWhileTrue (\d -> d == '0'))
+                        (allWhileTrue Char.isDigit)
+
+                else
+                    allWhileTrue Char.isDigit
+                        -- TODO: this is a bit inefficient
+                        |> map (\digits -> digits ++ String.fromChar c)
+            )
+        |> map digitStringToInt
+        |> mapError
+            (\msg ->
+                case msg of
+                    State.CharFailedTest { failedAtChar } ->
+                        State.ExpectedDecimalNaturalNumber { failedAtChar = failedAtChar }
+            )
 
 
 

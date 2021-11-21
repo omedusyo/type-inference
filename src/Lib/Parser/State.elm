@@ -1,5 +1,6 @@
 module Lib.Parser.State exposing
     ( CharFailedTest(..)
+    , ExpectedDecimalNaturalNumber(..)
     , ExpectedEndOfInput(..)
     , ExpectedNonEmptyInput(..)
     , ExpectedString(..)
@@ -59,6 +60,10 @@ type ExpectedString
 type ExpectedStringIn
     = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
       ExpectedStringIn { consumedSuccessfully : String, failedAtChar : Maybe Char }
+
+
+type ExpectedDecimalNaturalNumber
+    = ExpectedDecimalNaturalNumber { failedAtChar : Maybe Char }
 
 
 type ExpectedEndOfInput
