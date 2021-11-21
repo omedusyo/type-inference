@@ -5,6 +5,7 @@ import Calculus.Base as L exposing (Term, Type)
 import Calculus.Evaluation.Evaluation as L exposing (ThunkContext)
 import Calculus.Evaluation.Value as Value exposing (Value)
 import Calculus.Example
+import Calculus.NewParser as NewParser
 import Calculus.Parser as L
 import Calculus.Show as L
 import Calculus.Type.Inference as L
@@ -15,6 +16,8 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html as H exposing (Html)
+import Lib.Parser.Error as NewParser
+import Lib.Parser.Parser as NewParser
 import Lib.State.StatefulWithErr as State
 import List.Extra as List
 import Return exposing (Return)
@@ -230,7 +233,7 @@ type alias Binding =
     { name : BindingName
     , input : String
     , -- Nothing means haven't parsed anything yet
-      parsedTerm : Maybe (Result L.TermParsingError Term)
+      parsedTerm : Maybe (Result (NewParser.Error NewParser.ExpectedTerm) Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
@@ -251,54 +254,55 @@ exampleBinding : Binding
 exampleBinding =
     let
         input0 =
-            """(let 
-    (fn { p .
-        (match-pair $p
-            { (pair x y) . (pair $y $x) }) })
-    { flip .
-       (pair
-           (@ $flip (pair 0n0 0n1) )
-           (@ $flip (pair true false) ) )
-    })"""
+            """let flip = \\{ p .
+    match-pair $p
+        { pair(x y) . pair($y $x) }
+};
+pair(
+    [$flip pair(00 01)],
+    [$flip pair(true false)]
+)
+"""
 
         input1 =
-            "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
-
-        input2 =
-            "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
-
-        input3 =
-            "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
+            """pair(
+    match-bool true { true . $a } { false . $b },
+    pair(
+        match-bool true { true . 00 } { false . $a },
+        match-bool true { true . 01 } { false . $b },
+    )
+)"""
 
         input4 =
-            "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
+            -- { pair(x y) . [$f $x $y] }
+            """\\{ f p .
+    match-pair $p
+        { pair(x y) . [$f $x $y] }
+}
+"""
 
         input5 =
-            "(let (fn { x . $x }) { f . $f })"
+            -- "(let (fn { x . $x }) { f . $f })"
+            """let f = \\{ x . $x };
+$f"""
 
         input6 =
-            """(let
-        (fn {f x . (@ $f (@ $f $x) ) })
-        { twice .
-           (let
-              (fn { x . (succ $x) })
-              { plus-one .
-                 (let (fn { b .  (if $b { false } { true }) })
-                   { not .
-                      (pair $twice $plus-one )
-                   })
-              })
-        })
-        """
+            """let twice = \\{ f x .
+    [$f [$f $x]]
+};
+let plus-one = \\{ x . succ($x) };
+let not = \\{ b . match-bool $b { true . false } { false . true } };
+pair($twice $plus-one)
+"""
 
         input7 =
-            "(@ (fn {. 0n0}) )"
+            "delay {. 00}"
 
         input =
             input0
 
         termResult =
-            L.parseTerm input
+            NewParser.runTerm input
     in
     { name = "foo"
     , input = input
@@ -415,7 +419,7 @@ updateBinding msg model =
         InputChanged input ->
             { model
                 | input = input
-                , parsedTerm = Just (L.parseTerm input)
+                , parsedTerm = Just (NewParser.runTerm input)
                 , evaledTerm = Nothing
                 , inferedType = Nothing
             }
@@ -789,37 +793,49 @@ viewModule moduleModel =
 viewHelp : Element Msg
 viewHelp =
     E.column [ E.width E.fill ]
-        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
+        [ E.text ""
+        , E.text "example: `\\{ p . match-pair $p { pair(x y) . pair($y $x) } }`"
         , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
+        , E.text ""
         , E.text "SYNTAX"
+        , E.text ""
         , E.text "Constants"
         , E.text "  true, false"
-        , E.text "  0n0, 0n1, 0n2, 0n3, ..."
-        , E.text "  empty-list"
+        , E.text "  zero"
+        , E.text "  00, 01, 02, 03, ... // nat literals have to start with 0 digit (`zero` is the same as `00`)"
+        , E.text "  empty // empty list"
+        , E.text ""
         , E.text ""
         , E.text "Variable Use"
         , E.text "  $foo // when using a variable, you have to prepend a dollar sign to it"
         , E.text ""
+        , E.text ""
         , E.text "Simple Operators"
-        , E.text "  (pair e e')"
-        , E.text "  (@ f x) // this is function application"
-        , E.text "  (@ f x y)"
-        , E.text "  (left e)"
-        , E.text "  (right e)"
-        , E.text "  (succ n)      // this is the natural numbers successor function"
-        , E.text "  (cons x xs) // this is consing of an element to a list"
+        , E.text "  pair($e1 $e2)"
+        , E.text "  [$f $x] // function application"
+        , E.text "  [$f $x $y]"
+        , E.text "  left($e1)"
+        , E.text "  right($e2)"
+        , E.text "  succ($n)      // natural numbers successor function"
+        , E.text "  cons($x $xs) // consing of an element to a list"
+        , E.text ""
         , E.text ""
         , E.text "Bindings Operators"
-        , E.text "  (fn { x . body })"
-        , E.text "  (fn { x y . body })"
-        , E.text "  (match-pair pairExp { (pair x y) . body })"
-        , E.text "  (if e { e1 } { e2 })"
-        , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
-        , E.text "  (nat-loop   n initState { s . body })"
-        , E.text "  (list-loop xs initState { x s . body })"
-        , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
-        , E.text "  (fn {. body }) // freezes computation"
-        , E.text "  (@ thunk) // forces computation"
+        , E.text "  \\{ x . $body }"
+        , E.text "  \\{ x y . $body }"
+        , E.text ""
+        , E.text "  match-pair $pair-exp { pair(x y) . $body }"
+        , E.text "  match-bool $test-exp { true . $e1 } { false . $e2 } // if expression"
+        , E.text "  match-sum $sum-exp { left(x) . $e1 } { right(y) . $e2 }"
+        , E.text ""
+        , E.text "  fold-nat $n { zero . $init-state } { succ(prev-state) . $next-state } // for-loop over natural numbers"
+        , E.text "  fold-list $xs { empty . $init-state } { cons(x prev-state) . $next-state } // for-loop over lists"
+        , E.text ""
+        , E.text "  let-be $exp { x . $body }) // standard syntax `let x = exp in body`"
+        , E.text "  let x = $exp; $body // syntactic sugar for `let-be`"
+        , E.text ""
+        , E.text "  delay {. $body } // freezes computation"
+        , E.text "  force($thunk) // forces computation"
         ]
 
 

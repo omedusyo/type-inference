@@ -1,16 +1,14 @@
 module Calculus.NewParser exposing
-    ( atleastOneOpenParens
-    , closingParens
-    , mandatoryParens
+    ( ExpectedBindingTerm(..)
+    , ExpectedIdentifierIntroduction(..)
+    , ExpectedKeywordGapCharacter(..)
+    , ExpectedOperatorKeyword(..)
+    , ExpectedParens(..)
+    , ExpectedPattern(..)
+    , ExpectedTerm(..)
     , nat
-    , operatorKeyword
-    , optionalParens
-    , spaces
-    , symbol
+    , runTerm
     , term
-    , varIntro
-    , whitespaceChars
-    , zeroOrMoreOpenParens
     )
 
 import Calculus.Base as Base
@@ -82,6 +80,7 @@ type ExpectedTerm
     | ExpectedAtleastTwoArgumentsToApplication { got : Int }
     | ExpectedAtleastOneParameterToAbstraction { got : Int }
     | ExpectedNatConstant
+    | ExpectedClosingOfApplication { failedAtChar : Maybe Char }
 
 
 whitespaceChars : Set Char
@@ -105,7 +104,7 @@ gapChars =
     -- TODO: This should actually be strings because I want to include "<-" and "->". Right now use symbols `>` and `<`. Damn it... but I want `<` and `>` for record angle parens.
     --         gapSymbols...
     --       But I also want to have dashes in variable names...
-    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"', '%', '/', '=', ';' ])
+    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"', '%', '/', '=', ';', '[', ']' ])
 
 
 isGapChar : Char -> Bool
@@ -327,7 +326,7 @@ varIntro =
         excludedChars : Set Char
         excludedChars =
             Set.union
-                (Set.fromList [ '$', '.', '(', ')', '{', '}', '\'', '"', '/', '%', '=', ';' ])
+                (Set.fromList [ '$', '.', '(', ')', '{', '}', '\'', '"', '/', '%', '=', ';', '[', ']' ])
                 whitespaceChars
 
         isExcludedChar : Char -> Bool
@@ -480,12 +479,12 @@ operatorKeyword =
         , ( "match-sum", MatchSum )
 
         -- Function
-        , ( "@", Application )
+        , ( "[", Application )
         , ( "\\", Abstraction )
 
         -- Nat
         , ( "zero", ConstZero )
-        , ( "n", ConstNat )
+        , ( "0", ConstNat )
         , ( "succ", Succ )
         , ( "fold-nat", FoldNat )
 
@@ -595,6 +594,12 @@ term =
                     case gapError of
                         ExpectedKeywordGapCharacter { failedAtChar } ->
                             ExpectedPattern (ExpectedGapAfterPatternKeyword { patternKeyword = patternKeyword, failedAtChar = failedAtChar })
+
+        handleClosingOfApplication : PState.ExpectedString -> ExpectedTerm
+        handleClosingOfApplication msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedClosingOfApplication { failedAtChar = failedAtChar }
 
         constant : Term -> Parser ExpectedTerm Term
         constant c =
@@ -722,31 +727,30 @@ term =
                     -- Function
                     Application ->
                         -- operator2 Base.Application
-                        mandatoryTermParens
-                            (Parser.repeat term
-                                |> Parser.andThen
-                                    (\terms ->
-                                        case terms of
-                                            [] ->
-                                                Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 0 })
+                        Parser.repeat term
+                            |> Parser.andThen
+                                (\terms ->
+                                    case terms of
+                                        [] ->
+                                            Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 0 })
 
-                                            [ _ ] ->
-                                                Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 1 })
+                                        [ _ ] ->
+                                            Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 1 })
 
-                                            fn0 :: arg0 :: args ->
-                                                let
-                                                    applicationWithListOfArgs : Term -> List Term -> Term
-                                                    applicationWithListOfArgs fn args0 =
-                                                        case args0 of
-                                                            [] ->
-                                                                fn
+                                        fn0 :: arg0 :: args ->
+                                            let
+                                                applicationWithListOfArgs : Term -> List Term -> Term
+                                                applicationWithListOfArgs fn args0 =
+                                                    case args0 of
+                                                        [] ->
+                                                            fn
 
-                                                            arg :: args1 ->
-                                                                applicationWithListOfArgs (Base.Application fn arg) args1
-                                                in
-                                                Parser.return (applicationWithListOfArgs (Base.Application fn0 arg0) args)
-                                    )
-                            )
+                                                        arg :: args1 ->
+                                                            applicationWithListOfArgs (Base.Application fn arg) args1
+                                            in
+                                            Parser.return (applicationWithListOfArgs (Base.Application fn0 arg0) args)
+                                )
+                            |> Parser.o (symbol "]" |> Parser.mapError handleClosingOfApplication)
 
                     Abstraction ->
                         let
@@ -855,3 +859,9 @@ term =
                     Force ->
                         operator1 Base.Force
             )
+
+
+runTerm : String -> Result (PError.Error ExpectedTerm) Term
+runTerm input =
+    Parser.run term {} (PState.return input)
+        |> Result.map Tuple.second
