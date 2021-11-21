@@ -9,6 +9,7 @@ module Calculus.NewParser exposing
     , nat
     , runTerm
     , term
+    , termErrorToString
     )
 
 import Calculus.Base as Base
@@ -31,6 +32,7 @@ import Dict exposing (Dict)
 import Either exposing (Either)
 import Lib.Parser.Error as PError
 import Lib.Parser.Parser as Parser
+import Lib.Parser.Position as PPosition
 import Lib.Parser.State as PState
 import Set exposing (Set)
 
@@ -83,6 +85,257 @@ type ExpectedTerm
     | ExpectedClosingOfApplication { failedAtChar : Maybe Char }
 
 
+expectedOperatorKeywordToString : ExpectedOperatorKeyword -> String
+expectedOperatorKeywordToString msg =
+    case msg of
+        ExpectedOperatorKeyword opKeyword ->
+            String.concat
+                [ "Expected operator keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtCharToString opKeyword
+                , ")"
+                ]
+
+        -- ExpectedGapAfterOperatorKeyword { operatorKeyword : OperatorKeyword, failedAtChar : Char } ->
+        ExpectedGapAfterOperatorKeyword gapAfter ->
+            String.concat
+                [ "Succesfully parsed operator keyword `"
+                , operatorKeywordToString gapAfter.operatorKeyword
+                , "`, but failed to see a gap following it ("
+                , failedAtCharToString { failedAtChar = Just gapAfter.failedAtChar }
+                , ")"
+                ]
+
+
+expectedIdentifierIntroductionToString : ExpectedIdentifierIntroduction -> String
+expectedIdentifierIntroductionToString msg =
+    case msg of
+        ExpectedIdentifierCharacters expIden ->
+            String.concat
+                [ "Expected to see identifier character but "
+                , failedAtCharToString expIden
+                ]
+
+        ExpectedIdentifierToStartWithNonDigit { failedAtChar } ->
+            String.concat
+                [ "Expected identifier to start with non-digit ("
+                , failedAtCharToString { failedAtChar = Just failedAtChar }
+                , ")"
+                ]
+
+
+expectedParensToString : ExpectedParens -> String
+expectedParensToString msg =
+    case msg of
+        ExpectedOpenParens msg0 ->
+            String.concat
+                [ "Expected open parentheses ("
+                , failedAtCharToString msg0
+                , ")"
+                ]
+
+        ExpectedClosingParens msg0 ->
+            String.concat
+                [ "Expected closing parentheses ("
+                , failedAtCharToString msg0
+                , ")"
+                ]
+
+
+expectedBindingTermToString : ExpectedBindingTerm -> String
+expectedBindingTermToString msg =
+    case msg of
+        ExpectedOpenBraces msg0 ->
+            String.concat [ "Expected open braces (", failedAtCharToString msg0, ")" ]
+
+        ExpectedDot msg0 ->
+            String.concat [ "Expected dot (", failedAtCharToString msg0, ")" ]
+
+        ExpectedClosingBraces msg0 ->
+            String.concat [ "Expected closing braces (", failedAtCharToString msg0, ")" ]
+
+        ExpectedDefEquals msg0 ->
+            String.concat [ "Expected def. equals symbol in let binding (", failedAtCharToString msg0, ")" ]
+
+        ExpectedSemicolon msg0 ->
+            String.concat [ "Expected semicolon after let binding (", failedAtCharToString msg0, ")" ]
+
+
+expectedPatternToString : ExpectedPattern -> String
+expectedPatternToString msg =
+    case msg of
+        ExpectedPatternKeyword msg0 ->
+            String.concat
+                [ "Expected the pattern keyword `"
+                , operatorKeywordToString msg0.patternKeyword
+                , "` ("
+                , consumedSuccessfullyToString msg0
+                , ", "
+                , failedAtCharToString msg0
+                , ")"
+                ]
+
+        ExpectedGapAfterPatternKeyword msg0 ->
+            String.concat
+                [ "Expected a gap after the pattern keyword `"
+                , operatorKeywordToString msg0.patternKeyword
+                , "` ("
+                , failedAtCharToString { failedAtChar = Just msg0.failedAtChar }
+                , ")"
+                ]
+
+
+operatorKeywordToString : OperatorKeyword -> String
+operatorKeywordToString op =
+    case op of
+        -- Var Intro
+        VarUse ->
+            "$"
+
+        -- Bool
+        ConstTrue ->
+            "true"
+
+        ConstFalse ->
+            "false"
+
+        MatchBool ->
+            "match-bool"
+
+        -- Pair
+        Pair ->
+            "pair"
+
+        MatchPair ->
+            "match-pair"
+
+        -- Sum ->
+        Left ->
+            "left"
+
+        Right ->
+            "right"
+
+        MatchSum ->
+            "match-sum"
+
+        -- Function
+        Application ->
+            "["
+
+        Abstraction ->
+            "\\"
+
+        -- Nat
+        ConstZero ->
+            "zero"
+
+        ConstNat ->
+            "0nat-literal"
+
+        Succ ->
+            "succ"
+
+        FoldNat ->
+            "fold-nat"
+
+        -- List
+        ConstEmpty ->
+            "empty"
+
+        Cons ->
+            "cons"
+
+        FoldList ->
+            "fold-list"
+
+        -- Let binding
+        LetBe ->
+            "let-be"
+
+        Let ->
+            "let"
+
+        -- Freeze
+        Delay ->
+            "delay"
+
+        Force ->
+            "force"
+
+
+expectedTermToString : ExpectedTerm -> String
+expectedTermToString msg =
+    case msg of
+        ExpectedOperator expectedOperatorKeyword ->
+            expectedOperatorKeywordToString expectedOperatorKeyword
+
+        ExpectedIdentifier expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString expectedIdentifierIntroduction
+
+        ExpectedParens expectedParens ->
+            expectedParensToString expectedParens
+
+        ExpectedBindingTerm expectedBindingTerm ->
+            expectedBindingTermToString expectedBindingTerm
+
+        ExpectedPattern expectedPattern ->
+            expectedPatternToString expectedPattern
+
+        ExpectedAtleastTwoArgumentsToApplication { got } ->
+            String.concat [ "Expected atleast two arguments to application, instead got ", String.fromInt got ]
+
+        ExpectedAtleastOneParameterToAbstraction { got } ->
+            String.concat [ "Expected atleast one parameter to abstraction, instead got ", String.fromInt got ]
+
+        ExpectedNatConstant ->
+            "Expected nat-constant"
+
+        ExpectedClosingOfApplication failedAtChar ->
+            String.concat [ "Expected closing of application (", failedAtCharToString failedAtChar, ")" ]
+
+
+failedAtCharToString : { e | failedAtChar : Maybe Char } -> String
+failedAtCharToString { failedAtChar } =
+    case failedAtChar of
+        Just c ->
+            String.concat [ "failed at char `", String.fromChar c, "`" ]
+
+        Nothing ->
+            "failed at empty input"
+
+
+consumedSuccessfullyToString : { e | consumedSuccessfully : String } -> String
+consumedSuccessfullyToString { consumedSuccessfully } =
+    String.concat [ "consumed successfully: ", consumedSuccessfully ]
+
+
+termErrorToString : PError.Error ExpectedTerm -> String
+termErrorToString error =
+    let
+        position : PPosition.Position
+        position =
+            PError.getPosition error
+
+        msg : ExpectedTerm
+        msg =
+            PError.getMsg error
+    in
+    String.concat
+        [ expectedTermToString msg
+        , " at (line="
+        , String.fromInt position.line
+        , ", col="
+        , String.fromInt position.col
+        , ")"
+        ]
+
+
+
+-- ===Whitesepace/Gaps===
+
+
 whitespaceChars : Set Char
 whitespaceChars =
     -- \u{000D} === \r
@@ -104,7 +357,7 @@ gapChars =
     -- TODO: This should actually be strings because I want to include "<-" and "->". Right now use symbols `>` and `<`. Damn it... but I want `<` and `>` for record angle parens.
     --         gapSymbols...
     --       But I also want to have dashes in variable names...
-    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"', '%', '/', '=', ';', '[', ']' ])
+    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"', '%', '/', '=', ';', '\\', '[', ']' ])
 
 
 isGapChar : Char -> Bool

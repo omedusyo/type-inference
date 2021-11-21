@@ -201,7 +201,8 @@ tabs =
 
 initTab : Tab
 initTab =
-    Module
+    -- Module
+    ProgramBindings
 
 
 tabToString : Tab -> String
@@ -272,6 +273,10 @@ pair(
         match-bool true { true . 01 } { false . $b },
     )
 )"""
+
+        input2 =
+            """[ \\{x . succ($x)} 04 ]
+"""
 
         input4 =
             -- { pair(x y) . [$f $x $y] }
@@ -561,7 +566,8 @@ viewBinding binding =
                                             L.showTerm term
 
                                         Err err ->
-                                            "Parsing Error"
+                                            -- "Parsing Error"
+                                            NewParser.termErrorToString err
                             ]
                         )
                     , E.el []
@@ -775,7 +781,7 @@ viewModule moduleModel =
                                                         E.text ""
 
                                             Err err ->
-                                                E.text "Parsing error"
+                                                E.text "Parsing Error"
 
                                     Nothing ->
                                         E.text ""
