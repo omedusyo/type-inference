@@ -1,8 +1,12 @@
 module Calculus.NewParser exposing
-    ( ExpectedTerm(..)
+    ( ExpectedModuleTerm(..)
+    , ExpectedTerm(..)
     , moduleLetBinding
     , moduleLetBindingKeyword
     , moduleLiteral
+    , moduleTerm
+    , moduleTermErrorToString
+    , runModuleTerm
     , runTerm
     , term
     , termErrorToString
@@ -32,300 +36,6 @@ import Lib.Parser.Parser as Parser
 import Lib.Parser.Position as PPosition
 import Lib.Parser.State as PState
 import Set exposing (Set)
-
-
-
--- ===Errors===
-
-
-type ExpectedKeywordGapCharacter
-    = ExpectedKeywordGapCharacter { failedAtChar : Char }
-
-
-type ExpectedOperatorKeyword a
-    = ExpectedOperatorKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : Char }
-
-
-type ExpectedIdentifierIntroduction
-    = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
-    | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
-
-
-type ExpectedBindingTerm
-    = ExpectedOpenBraces { failedAtChar : Maybe Char }
-    | ExpectedDot { failedAtChar : Maybe Char }
-    | ExpectedClosingBraces { failedAtChar : Maybe Char }
-    | ExpectedDefEquals { failedAtChar : Maybe Char }
-    | ExpectedSemicolon { failedAtChar : Maybe Char }
-
-
-type ExpectedParens
-    = ExpectedOpenParens { failedAtChar : Maybe Char }
-    | ExpectedClosingParens { failedAtChar : Maybe Char }
-
-
-type ExpectedPattern
-    = ExpectedPatternKeyword { patternKeyword : TermOperatorKeyword, consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterPatternKeyword { patternKeyword : TermOperatorKeyword, failedAtChar : Char }
-
-
-type ExpectedTerm
-    = ExpectedOperator (ExpectedOperatorKeyword TermOperatorKeyword)
-    | ExpectedTermIdentifier ExpectedIdentifierIntroduction
-    | ExpectedParens ExpectedParens
-    | ExpectedBindingTerm ExpectedBindingTerm
-    | ExpectedPattern ExpectedPattern
-    | ExpectedAtleastTwoArgumentsToApplication { got : Int }
-    | ExpectedAtleastOneParameterToAbstraction { got : Int }
-    | ExpectedNatConstant { failedAtChar : Maybe Char }
-    | ExpectedClosingOfApplication { failedAtChar : Maybe Char }
-
-
-expectedOperatorKeywordToString : ExpectedOperatorKeyword TermOperatorKeyword -> String
-expectedOperatorKeywordToString msg =
-    case msg of
-        ExpectedOperatorKeyword opKeyword ->
-            String.concat
-                [ "Expected operator keyword ("
-                , consumedSuccessfullyToString opKeyword
-                , ", "
-                , failedAtCharToString opKeyword
-                , ")"
-                ]
-
-        ExpectedGapAfterOperatorKeyword gapAfter ->
-            String.concat
-                [ "Succesfully parsed operator keyword `"
-                , operatorKeywordToString gapAfter.operatorKeyword
-                , "`, but failed to see a gap following it ("
-                , failedAtCharToString { failedAtChar = Just gapAfter.failedAtChar }
-                , ")"
-                ]
-
-
-expectedIdentifierIntroductionToString : ExpectedIdentifierIntroduction -> String
-expectedIdentifierIntroductionToString msg =
-    case msg of
-        ExpectedIdentifierCharacters expIden ->
-            String.concat
-                [ "Expected to see identifier character but "
-                , failedAtCharToString expIden
-                ]
-
-        ExpectedIdentifierToStartWithNonDigit { failedAtChar } ->
-            String.concat
-                [ "Expected identifier to start with non-digit ("
-                , failedAtCharToString { failedAtChar = Just failedAtChar }
-                , ")"
-                ]
-
-
-expectedParensToString : ExpectedParens -> String
-expectedParensToString msg =
-    case msg of
-        ExpectedOpenParens msg0 ->
-            String.concat
-                [ "Expected open parentheses ("
-                , failedAtCharToString msg0
-                , ")"
-                ]
-
-        ExpectedClosingParens msg0 ->
-            String.concat
-                [ "Expected closing parentheses ("
-                , failedAtCharToString msg0
-                , ")"
-                ]
-
-
-expectedBindingTermToString : ExpectedBindingTerm -> String
-expectedBindingTermToString msg =
-    case msg of
-        ExpectedOpenBraces msg0 ->
-            String.concat [ "Expected open braces (", failedAtCharToString msg0, ")" ]
-
-        ExpectedDot msg0 ->
-            String.concat [ "Expected dot (", failedAtCharToString msg0, ")" ]
-
-        ExpectedClosingBraces msg0 ->
-            String.concat [ "Expected closing braces (", failedAtCharToString msg0, ")" ]
-
-        ExpectedDefEquals msg0 ->
-            String.concat [ "Expected def. equals symbol in let binding (", failedAtCharToString msg0, ")" ]
-
-        ExpectedSemicolon msg0 ->
-            String.concat [ "Expected semicolon after let binding (", failedAtCharToString msg0, ")" ]
-
-
-expectedPatternToString : ExpectedPattern -> String
-expectedPatternToString msg =
-    case msg of
-        ExpectedPatternKeyword msg0 ->
-            String.concat
-                [ "Expected the pattern keyword `"
-                , operatorKeywordToString msg0.patternKeyword
-                , "` ("
-                , consumedSuccessfullyToString msg0
-                , ", "
-                , failedAtCharToString msg0
-                , ")"
-                ]
-
-        ExpectedGapAfterPatternKeyword msg0 ->
-            String.concat
-                [ "Expected a gap after the pattern keyword `"
-                , operatorKeywordToString msg0.patternKeyword
-                , "` ("
-                , failedAtCharToString { failedAtChar = Just msg0.failedAtChar }
-                , ")"
-                ]
-
-
-operatorKeywordToString : TermOperatorKeyword -> String
-operatorKeywordToString op =
-    case op of
-        -- Var Intro
-        VarUse ->
-            "$"
-
-        -- Bool
-        ConstTrue ->
-            "true"
-
-        ConstFalse ->
-            "false"
-
-        MatchBool ->
-            "match-bool"
-
-        -- Pair
-        Pair ->
-            "pair"
-
-        MatchPair ->
-            "match-pair"
-
-        -- Sum ->
-        Left ->
-            "left"
-
-        Right ->
-            "right"
-
-        MatchSum ->
-            "match-sum"
-
-        -- Function
-        Application ->
-            "["
-
-        Abstraction ->
-            "\\"
-
-        -- Nat
-        ConstZero ->
-            "zero"
-
-        NatLiteral ->
-            "0nat-literal"
-
-        Succ ->
-            "succ"
-
-        FoldNat ->
-            "fold-nat"
-
-        -- List
-        ConstEmpty ->
-            "empty"
-
-        Cons ->
-            "cons"
-
-        FoldList ->
-            "fold-list"
-
-        -- Let binding
-        LetBe ->
-            "let-be"
-
-        Let ->
-            "let"
-
-        -- Freeze
-        Delay ->
-            "delay"
-
-        Force ->
-            "force"
-
-
-expectedTermToString : ExpectedTerm -> String
-expectedTermToString msg =
-    case msg of
-        ExpectedOperator expectedOperatorKeyword ->
-            expectedOperatorKeywordToString expectedOperatorKeyword
-
-        ExpectedTermIdentifier expectedIdentifierIntroduction ->
-            expectedIdentifierIntroductionToString expectedIdentifierIntroduction
-
-        ExpectedParens expectedParens ->
-            expectedParensToString expectedParens
-
-        ExpectedBindingTerm expectedBindingTerm ->
-            expectedBindingTermToString expectedBindingTerm
-
-        ExpectedPattern expectedPattern ->
-            expectedPatternToString expectedPattern
-
-        ExpectedAtleastTwoArgumentsToApplication { got } ->
-            String.concat [ "Expected atleast two arguments to application, instead got ", String.fromInt got ]
-
-        ExpectedAtleastOneParameterToAbstraction { got } ->
-            String.concat [ "Expected atleast one parameter to abstraction, instead got ", String.fromInt got ]
-
-        ExpectedNatConstant msg0 ->
-            String.concat [ "Expected natural number literal (", failedAtCharToString msg0, ")" ]
-
-        ExpectedClosingOfApplication msg0 ->
-            String.concat [ "Expected closing of application (", failedAtCharToString msg0, ")" ]
-
-
-failedAtCharToString : { e | failedAtChar : Maybe Char } -> String
-failedAtCharToString { failedAtChar } =
-    case failedAtChar of
-        Just c ->
-            String.concat [ "failed at char `", String.fromChar c, "`" ]
-
-        Nothing ->
-            "failed at empty input"
-
-
-consumedSuccessfullyToString : { e | consumedSuccessfully : String } -> String
-consumedSuccessfullyToString { consumedSuccessfully } =
-    String.concat [ "consumed successfully: ", consumedSuccessfully ]
-
-
-termErrorToString : PError.Error ExpectedTerm -> String
-termErrorToString error =
-    let
-        position : PPosition.Position
-        position =
-            PError.getPosition error
-
-        msg : ExpectedTerm
-        msg =
-            PError.getMsg error
-    in
-    String.concat
-        [ expectedTermToString msg
-        , " at (line="
-        , String.fromInt position.line
-        , ", col="
-        , String.fromInt position.col
-        , ")"
-        ]
 
 
 
@@ -385,6 +95,16 @@ symbol symbol0 =
     Parser.unit
         |> Parser.o (Parser.string symbol0)
         |> Parser.o spaces
+
+
+defEquals : Parser PState.ExpectedString ()
+defEquals =
+    symbol "="
+
+
+semicolon : Parser PState.ExpectedString ()
+semicolon =
+    symbol ";"
 
 
 
@@ -516,15 +236,6 @@ mandatoryParens parser =
 
 
 
--- ===Sequences===
-
-
-emptySequence : Parser e ()
-emptySequence =
-    spaces
-
-
-
 -- ===Identifier===
 
 
@@ -575,6 +286,341 @@ identifier =
 
 
 
+-- ===Generic Errors===
+
+
+type ExpectedIdentifierIntroduction
+    = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
+    | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
+
+
+type ExpectedKeywordGapCharacter
+    = ExpectedKeywordGapCharacter { failedAtChar : Char }
+
+
+type ExpectedParens
+    = ExpectedOpenParens { failedAtChar : Maybe Char }
+    | ExpectedClosingParens { failedAtChar : Maybe Char }
+
+
+failedAtCharToStringHelper : Char -> String
+failedAtCharToStringHelper c =
+    String.concat
+        [ "failed at char '"
+        , if c == '\n' then
+            "<new-line>"
+
+          else if c == ' ' then
+            "<space>"
+
+          else if c == '\t' then
+            "<tab>"
+
+          else
+            String.fromChar c
+        , "`"
+        ]
+
+
+failedAtMaybeCharToString : { e | failedAtChar : Maybe Char } -> String
+failedAtMaybeCharToString { failedAtChar } =
+    case failedAtChar of
+        Just c ->
+            failedAtCharToStringHelper c
+
+        Nothing ->
+            "failed at <empty-input>"
+
+
+failedAtCharToString : { e | failedAtChar : Char } -> String
+failedAtCharToString { failedAtChar } =
+    failedAtCharToStringHelper failedAtChar
+
+
+consumedSuccessfullyToString : { e | consumedSuccessfully : String } -> String
+consumedSuccessfullyToString { consumedSuccessfully } =
+    String.concat [ "consumed successfully: ", consumedSuccessfully ]
+
+
+expectedParensToString : ExpectedParens -> String
+expectedParensToString msg =
+    case msg of
+        ExpectedOpenParens msg0 ->
+            String.concat
+                [ "Expected open parentheses ("
+                , failedAtMaybeCharToString msg0
+                , ")"
+                ]
+
+        ExpectedClosingParens msg0 ->
+            String.concat
+                [ "Expected closing parentheses ("
+                , failedAtMaybeCharToString msg0
+                , ")"
+                ]
+
+
+expectedIdentifierIntroductionToString : String -> ExpectedIdentifierIntroduction -> String
+expectedIdentifierIntroductionToString identifierKind msg =
+    case msg of
+        ExpectedIdentifierCharacters expIden ->
+            String.concat
+                [ "Expected to see "
+                , identifierKind
+                , " identifier character but "
+                , failedAtMaybeCharToString expIden
+                ]
+
+        ExpectedIdentifierToStartWithNonDigit failedAtCharError ->
+            String.concat
+                [ "Expected "
+                , identifierKind
+                , " identifier to start with non-digit ("
+                , failedAtCharToString failedAtCharError
+                , ")"
+                ]
+
+
+
+-- ===Term Errors===
+
+
+type ExpectedOperatorKeyword a
+    = ExpectedOperatorKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : Char }
+
+
+type ExpectedBindingTerm
+    = ExpectedOpenBraces { failedAtChar : Maybe Char }
+    | ExpectedDot { failedAtChar : Maybe Char }
+    | ExpectedClosingBraces { failedAtChar : Maybe Char }
+    | ExpectedDefEquals { failedAtChar : Maybe Char }
+    | ExpectedSemicolon { failedAtChar : Maybe Char }
+
+
+type ExpectedPattern
+    = ExpectedPatternKeyword { patternKeyword : TermOperatorKeyword, consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterPatternKeyword { patternKeyword : TermOperatorKeyword, failedAtChar : Char }
+
+
+type ExpectedTerm
+    = ExpectedOperator (ExpectedOperatorKeyword TermOperatorKeyword)
+    | ExpectedTermIdentifier ExpectedIdentifierIntroduction
+    | ExpectedParens ExpectedParens
+    | ExpectedBindingTerm ExpectedBindingTerm
+    | ExpectedPattern ExpectedPattern
+    | ExpectedAtleastTwoArgumentsToApplication { got : Int }
+    | ExpectedAtleastOneParameterToAbstraction { got : Int }
+    | ExpectedNatConstant { failedAtChar : Maybe Char }
+    | ExpectedClosingOfApplication { failedAtChar : Maybe Char }
+
+
+expectedOperatorKeywordToString : ExpectedOperatorKeyword TermOperatorKeyword -> String
+expectedOperatorKeywordToString msg =
+    case msg of
+        ExpectedOperatorKeyword opKeyword ->
+            String.concat
+                [ "Expected operator keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterOperatorKeyword gapAfter ->
+            String.concat
+                [ "Succesfully parsed operator keyword `"
+                , operatorKeywordToString gapAfter.operatorKeyword
+                , "`, but failed to see a gap following it ("
+                , failedAtCharToString { failedAtChar = gapAfter.failedAtChar }
+                , ")"
+                ]
+
+
+expectedBindingTermToString : ExpectedBindingTerm -> String
+expectedBindingTermToString msg =
+    case msg of
+        ExpectedOpenBraces msg0 ->
+            String.concat [ "Expected open braces (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedDot msg0 ->
+            String.concat [ "Expected dot (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedClosingBraces msg0 ->
+            String.concat [ "Expected closing braces (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedDefEquals msg0 ->
+            String.concat [ "Expected def. equals symbol in let binding (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedSemicolon msg0 ->
+            String.concat [ "Expected semicolon after let binding (", failedAtMaybeCharToString msg0, ")" ]
+
+
+expectedPatternToString : ExpectedPattern -> String
+expectedPatternToString msg =
+    case msg of
+        ExpectedPatternKeyword msg0 ->
+            String.concat
+                [ "Expected the pattern keyword `"
+                , operatorKeywordToString msg0.patternKeyword
+                , "` ("
+                , consumedSuccessfullyToString msg0
+                , ", "
+                , failedAtMaybeCharToString msg0
+                , ")"
+                ]
+
+        ExpectedGapAfterPatternKeyword msg0 ->
+            String.concat
+                [ "Expected a gap after the pattern keyword `"
+                , operatorKeywordToString msg0.patternKeyword
+                , "` ("
+                , failedAtMaybeCharToString { failedAtChar = Just msg0.failedAtChar }
+                , ")"
+                ]
+
+
+operatorKeywordToString : TermOperatorKeyword -> String
+operatorKeywordToString op =
+    case op of
+        -- Var Intro
+        VarUse ->
+            "$"
+
+        -- Bool
+        ConstTrue ->
+            "true"
+
+        ConstFalse ->
+            "false"
+
+        MatchBool ->
+            "match-bool"
+
+        -- Pair
+        Pair ->
+            "pair"
+
+        MatchPair ->
+            "match-pair"
+
+        -- Sum ->
+        Left ->
+            "left"
+
+        Right ->
+            "right"
+
+        MatchSum ->
+            "match-sum"
+
+        -- Function
+        Application ->
+            "["
+
+        Abstraction ->
+            "\\"
+
+        -- Nat
+        ConstZero ->
+            "zero"
+
+        NatLiteral ->
+            "0nat-literal"
+
+        Succ ->
+            "succ"
+
+        FoldNat ->
+            "fold-nat"
+
+        -- List
+        ConstEmpty ->
+            "empty"
+
+        Cons ->
+            "cons"
+
+        FoldList ->
+            "fold-list"
+
+        -- Let binding
+        LetBe ->
+            "let-be"
+
+        Let ->
+            "let"
+
+        -- Freeze
+        Delay ->
+            "delay"
+
+        Force ->
+            "force"
+
+
+expectedTermToString : ExpectedTerm -> String
+expectedTermToString msg =
+    case msg of
+        ExpectedOperator expectedOperatorKeyword ->
+            expectedOperatorKeywordToString expectedOperatorKeyword
+
+        ExpectedTermIdentifier expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "term" expectedIdentifierIntroduction
+
+        ExpectedParens expectedParens ->
+            expectedParensToString expectedParens
+
+        ExpectedBindingTerm expectedBindingTerm ->
+            expectedBindingTermToString expectedBindingTerm
+
+        ExpectedPattern expectedPattern ->
+            expectedPatternToString expectedPattern
+
+        ExpectedAtleastTwoArgumentsToApplication { got } ->
+            String.concat [ "Expected atleast two arguments to application, instead got ", String.fromInt got ]
+
+        ExpectedAtleastOneParameterToAbstraction { got } ->
+            String.concat [ "Expected atleast one parameter to abstraction, instead got ", String.fromInt got ]
+
+        ExpectedNatConstant msg0 ->
+            String.concat [ "Expected natural number literal (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedClosingOfApplication msg0 ->
+            String.concat [ "Expected closing of application (", failedAtMaybeCharToString msg0, ")" ]
+
+
+termErrorToString : PError.Error ExpectedTerm -> String
+termErrorToString error =
+    let
+        position : PPosition.Position
+        position =
+            PError.getPosition error
+
+        msg : ExpectedTerm
+        msg =
+            PError.getMsg error
+    in
+    String.concat
+        [ expectedTermToString msg
+        , " at (line="
+        , String.fromInt position.line
+        , ", col="
+        , String.fromInt position.col
+        , ")"
+        ]
+
+
+
+-- ===Sequences===
+
+
+emptySequence : Parser e ()
+emptySequence =
+    spaces
+
+
+
 -- ===Binding===
 
 
@@ -610,16 +656,6 @@ binding patternParser bodyParser =
         |> Parser.o (symbol "." |> Parser.mapError handleDot)
         |> Parser.ooo bodyParser
         |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
-
-
-defEquals : Parser PState.ExpectedString ()
-defEquals =
-    symbol "="
-
-
-semicolon : Parser PState.ExpectedString ()
-semicolon =
-    symbol ";"
 
 
 
@@ -1255,14 +1291,10 @@ typeTerm =
 
 
 -- ===Module===
+-- =Errors=
 
 
-moduleVarIntro : Parser ExpectedIdentifierIntroduction ModuleVarName
-moduleVarIntro =
-    identifier
-
-
-type ExpectedModule
+type ExpectedModuleTerm
     = ExpectedModuleKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
     | ExpectedGapAfterModuleKeyword { failedAtChar : Char }
     | ExpectedModuleOpenBraces { failedAtChar : Maybe Char }
@@ -1271,19 +1303,136 @@ type ExpectedModule
     | ExpectedModuleClosingBraces { failedAtChar : Maybe Char }
 
 
-moduleTerm : Parser ExpectedModule ModuleTerm
+type ExpectedModuleLetBinding
+    = ExpectedModuleLetBindingKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterModuleLetBindingKeyword { failedAtChar : Char }
+    | ExpectedEqualsInModuleLetBinding { consumedSuccessfully : String, failedAtChar : Maybe Char }
+      -- term
+    | ExpectedTermIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
+    | ExpectedTermInModuleLetBinding ExpectedTerm
+      -- module
+    | ExpectedModuleIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
+    | ExpectedModuleTermInModuleLetBinding ExpectedModuleTerm
+
+
+expectedModuleTermToString : ExpectedModuleTerm -> String
+expectedModuleTermToString msg =
+    case msg of
+        ExpectedModuleKeyword failedAtCharError ->
+            String.concat
+                [ "Expected the keyword `module` "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedGapAfterModuleKeyword failedAtCharError ->
+            String.concat
+                [ "Expected a gap after the `module` keyword "
+                , String.concat [ "(", failedAtCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedModuleOpenBraces failedAtCharError ->
+            String.concat
+                [ "Expected an open brace `{` after the `module` keyword "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedModuleLetBinding expectedModuleLetBinding ->
+            expectedModuleLetBindingToString expectedModuleLetBinding
+
+        ExpectedSemicolonAfterModuleLetBinding failedAtCharError ->
+            String.concat
+                [ "Expected a semicolon `;` to separate the module let-bindings "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedModuleClosingBraces failedAtCharError ->
+            String.concat
+                [ "Expected a closing brace `}` to end the module expression "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+
+expectedModuleLetBindingToString : ExpectedModuleLetBinding -> String
+expectedModuleLetBindingToString msg =
+    case msg of
+        ExpectedModuleLetBindingKeyword err ->
+            -- TODO consumed succesfully?
+            String.concat
+                [ "Expected module let binding keyword "
+                , String.concat [ "(such as ", allModuleLetBindingKeywords |> List.map (\keyword0 -> String.concat [ "`", moduleLetBindingKeywordToString keyword0, "`" ]) |> String.join ", ", ")" ]
+                , " "
+                , String.concat [ "(", failedAtMaybeCharToString err, ")" ]
+                ]
+
+        ExpectedGapAfterModuleLetBindingKeyword failedAtCharError ->
+            String.concat
+                [ "Expected a gap after the let-binding keyword "
+                , String.concat [ "(", failedAtCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedEqualsInModuleLetBinding err ->
+            -- TODO err.consumedSuccessfully?
+            String.concat
+                [ "Expected equals `=` symbol "
+                , String.concat [ "(", failedAtMaybeCharToString err, ")" ]
+                ]
+
+        -- term
+        ExpectedTermIdentifierInModuleLetBinding expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "term" expectedIdentifierIntroduction
+
+        ExpectedTermInModuleLetBinding expectedTerm ->
+            expectedTermToString expectedTerm
+
+        -- module
+        ExpectedModuleIdentifierInModuleLetBinding expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "module" expectedIdentifierIntroduction
+
+        ExpectedModuleTermInModuleLetBinding expectedModuleTerm ->
+            expectedModuleTermToString expectedModuleTerm
+
+
+moduleTermErrorToString : PError.Error ExpectedModuleTerm -> String
+moduleTermErrorToString error =
+    let
+        position : PPosition.Position
+        position =
+            PError.getPosition error
+
+        msg : ExpectedModuleTerm
+        msg =
+            PError.getMsg error
+    in
+    String.concat
+        [ expectedModuleTermToString msg
+        , " at (line="
+        , String.fromInt position.line
+        , ", col="
+        , String.fromInt position.col
+        , ")"
+        ]
+
+
+
+-- =Terms=
+
+
+moduleVarIntro : Parser ExpectedIdentifierIntroduction ModuleVarName
+moduleVarIntro =
+    identifier
+
+
+moduleTerm : Parser ExpectedModuleTerm ModuleTerm
 moduleTerm =
     -- Either a module literal or a functor application
     -- TODO: add functor application/module var use
     moduleLiteral |> Parser.map Base.ModuleLiteralTerm
 
 
-moduleLiteral : Parser ExpectedModule ModuleLiteral
+moduleLiteral : Parser ExpectedModuleTerm ModuleLiteral
 moduleLiteral =
-    -- TODO:
-    --   2. [open braces, sequence of module-bindings separated by semi-colons, closing brace]
     let
-        handleModuleKeyword : Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedModule
+        handleModuleKeyword : Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedModuleTerm
         handleModuleKeyword err =
             case err of
                 Either.Left expectedStringMsg ->
@@ -1296,13 +1445,13 @@ moduleLiteral =
                         ExpectedKeywordGapCharacter { failedAtChar } ->
                             ExpectedGapAfterModuleKeyword { failedAtChar = failedAtChar }
 
-        handleOpenBraces : PState.ExpectedString -> ExpectedModule
+        handleOpenBraces : PState.ExpectedString -> ExpectedModuleTerm
         handleOpenBraces msg =
             case msg of
                 PState.ExpectedString { failedAtChar } ->
                     ExpectedModuleOpenBraces { failedAtChar = failedAtChar }
 
-        handleClosingBraces : PState.ExpectedString -> ExpectedModule
+        handleClosingBraces : PState.ExpectedString -> ExpectedModuleTerm
         handleClosingBraces msg =
             case msg of
                 PState.ExpectedString { failedAtChar } ->
@@ -1325,23 +1474,32 @@ moduleLiteral =
             )
 
 
-type ExpectedModuleLetBinding
-    = ExpectedModuleLetBindingKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterModuleLetBindingKeyword { failedAtChar : Char }
-    | ExpectedEqualsInModuleLetBinding { consumedSuccessfully : String, failedAtChar : Maybe Char }
-      -- term
-    | ExpectedTermIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
-    | ExpectedTermInModuleLetBinding ExpectedTerm
-      -- module
-    | ExpectedModuleIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
-    | ExpectedModuleTermInModuleLetBinding ExpectedModule
-
-
 type ModuleLetBindingKeyword
     = LetTerm
     | LetType
     | LetModule
     | LetFunctor
+
+
+allModuleLetBindingKeywords : List ModuleLetBindingKeyword
+allModuleLetBindingKeywords =
+    [ LetTerm, LetType, LetModule, LetFunctor ]
+
+
+moduleLetBindingKeywordToString : ModuleLetBindingKeyword -> String
+moduleLetBindingKeywordToString keyword0 =
+    case keyword0 of
+        LetTerm ->
+            "let-term"
+
+        LetType ->
+            "let-type"
+
+        LetModule ->
+            "let-module"
+
+        LetFunctor ->
+            "let-functor"
 
 
 moduleLetBindingKeyword : Parser ExpectedModuleLetBinding ModuleLetBindingKeyword
@@ -1401,3 +1559,9 @@ moduleLetBinding =
                     LetFunctor ->
                         Debug.todo ""
             )
+
+
+runModuleTerm : String -> Result (PError.Error ExpectedModuleTerm) ModuleTerm
+runModuleTerm input =
+    Parser.run moduleTerm {} (PState.return input)
+        |> Result.map Tuple.second

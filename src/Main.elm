@@ -1,11 +1,11 @@
 module Main exposing (..)
 
 import Browser
-import Calculus.Base as L exposing (Term, Type)
+import Calculus.Base as L exposing (ModuleTerm, Term, Type)
 import Calculus.Evaluation.Evaluation as L exposing (ThunkContext)
 import Calculus.Evaluation.Value as Value exposing (Value)
 import Calculus.Example
-import Calculus.NewParser as NewParser
+import Calculus.NewParser as NewLambdaParser
 import Calculus.Parser as L
 import Calculus.Show as L
 import Calculus.Type.Inference as L
@@ -16,7 +16,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html as H exposing (Html)
-import Lib.Parser.Error as NewParser
+import Lib.Parser.Error as PError
 import Lib.Parser.Parser as NewParser
 import Lib.State.StatefulWithErr as State
 import List.Extra as List
@@ -58,7 +58,7 @@ type alias Model =
 type alias ModuleModel =
     { moduleInput : String
     , -- Nothing means haven't parsed anything yet
-      parsedModule : Maybe (Result L.TermParsingError L.ModuleTerm)
+      parsedModule : Maybe (Result (PError.Error NewLambdaParser.ExpectedModuleTerm) ModuleTerm)
     , evaledModule : Maybe (Result (List L.EvalError) Value.ModuleValue)
     , env : Value.Environment
     , -- ===REPL===
@@ -71,7 +71,7 @@ type alias ModuleModel =
 parseModule : ModuleModel -> ModuleModel
 parseModule model =
     { model
-        | parsedModule = Just (L.parseModuleTerm model.moduleInput)
+        | parsedModule = Just (NewLambdaParser.runModuleTerm model.moduleInput)
     }
 
 
@@ -176,8 +176,54 @@ initModuleModel =
 """
 
         input1 =
-            """(module )
-          """
+            """module {
+
+  let-module Nat = module {
+    let-term plus = \\{ x y .
+      fold-nat $x
+        { zero . $y }
+        { succ(state) . succ($state) }
+    };
+
+    let-term multiply = \\{ x y .
+      fold-nat $x
+        { zero . 00 }
+        { succ(state) . [$plus $y $state] }
+    };
+
+    let-term exp = \\{ base exponent .
+      fold-nat $exponent
+        { zero . 01 }
+        { succ(state) . [$multiply $base $state] }
+    };
+
+  };
+
+  let-module List = module {
+    let-term map = \\{ f xs .
+      fold-list $xs
+        { empty . empty }
+        { cons(x state) . cons([$f $x] $state) }
+    };
+
+    let-term concat = \\{ xs ys .
+      fold-list $xs
+        { empty . $ys }
+        { cons(x state) . cons($x $state) }
+    };
+
+    let-term singleton = \\{ x . cons($x empty) };
+
+    let-term and-then = \\{ f xs .
+      fold-list $xs
+        { empty . empty }
+        { cons(x state) . [$concat [$f $x] $state] }
+    };
+  };
+
+  let-term identity = \\{ x . $x };
+}
+"""
 
         input =
             input1
@@ -240,7 +286,7 @@ type alias Binding =
     { name : BindingName
     , input : String
     , -- Nothing means haven't parsed anything yet
-      parsedTerm : Maybe (Result (NewParser.Error NewParser.ExpectedTerm) Term)
+      parsedTerm : Maybe (Result (PError.Error NewLambdaParser.ExpectedTerm) Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
@@ -313,7 +359,7 @@ pair($twice $plus-one)
             input0
 
         termResult =
-            NewParser.runTerm input
+            NewLambdaParser.runTerm input
     in
     { name = "foo"
     , input = input
@@ -430,7 +476,7 @@ updateBinding msg model =
         InputChanged input ->
             { model
                 | input = input
-                , parsedTerm = Just (NewParser.runTerm input)
+                , parsedTerm = Just (NewLambdaParser.runTerm input)
                 , evaledTerm = Nothing
                 , inferedType = Nothing
             }
@@ -463,7 +509,7 @@ updateModuleModel msg model =
         ModuleInputChanged input ->
             { model
                 | moduleInput = input
-                , parsedModule = Just (L.parseModuleTerm input)
+                , parsedModule = Just (NewLambdaParser.runModuleTerm input)
                 , evaledTerm = Nothing
                 , env = Value.emptyEnvironment
             }
@@ -573,7 +619,7 @@ viewBinding binding =
 
                                         Err err ->
                                             -- "Parsing Error"
-                                            NewParser.termErrorToString err
+                                            NewLambdaParser.termErrorToString err
                             ]
                         )
                     , E.el []
@@ -733,7 +779,7 @@ viewModule moduleModel =
                 , label = E.text "Run"
                 }
             , Input.multiline
-                [ E.height (E.px 700)
+                [ E.height (E.px 500)
                 , E.width E.fill
                 ]
                 { onChange = ModuleInputChanged
@@ -793,8 +839,8 @@ viewModule moduleModel =
                                         E.text ""
                                 ]
 
-                        Err _ ->
-                            E.text "Parsing error"
+                        Err err ->
+                            E.text (NewLambdaParser.moduleTermErrorToString err)
 
                 Nothing ->
                     E.text ""
