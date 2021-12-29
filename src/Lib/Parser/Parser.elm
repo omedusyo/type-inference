@@ -44,6 +44,7 @@ module Lib.Parser.Parser exposing
     , read
     , repeat
     , repeatAtleastOnce
+    , repeatUntil
     , return
     , run
     , second
@@ -611,6 +612,10 @@ loop x0 f =
                     Err error
 
 
+
+-- TODO: This is kinda useless in terms of errors
+
+
 repeat : Parser r e a -> Parser r e (List a)
 repeat parser =
     loop []
@@ -619,6 +624,21 @@ repeat parser =
                 |> ifSuccessIfError
                     return
                     (\error -> return (Done (List.reverse reversed_xs)))
+        )
+
+
+
+-- This will never throw an error when `conditionParser` fails. It can only throw when `toBeRepeatedParser` fails.
+
+
+repeatUntil : Parser r e1 a -> Parser r e2 b -> Parser r e1 (List a)
+repeatUntil toBeRepeatedParser conditionParser =
+    loop []
+        (\reversed_xs ->
+            conditionParser
+                |> ifSuccessIfError
+                    (\_ -> return (Done (List.reverse reversed_xs)))
+                    (\_ -> toBeRepeatedParser |> map (\x -> Loop (x :: reversed_xs)))
         )
 
 
