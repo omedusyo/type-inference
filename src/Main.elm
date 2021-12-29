@@ -123,7 +123,7 @@ openModule model =
 initModuleModel : ModuleModel
 initModuleModel =
     let
-        input =
+        input0 =
             """(module
     (let-module Nat (module
         (let-term plus (fn { x y .
@@ -174,6 +174,13 @@ initModuleModel =
    (let-term square (fn { x . (@ (-> $Nat multiply) $x $x) }))
 )
 """
+
+        input1 =
+            """(module )
+          """
+
+        input =
+            input1
     in
     { moduleInput = input
     , parsedModule = Nothing

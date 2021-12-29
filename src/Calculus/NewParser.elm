@@ -1,5 +1,8 @@
 module Calculus.NewParser exposing
     ( ExpectedTerm(..)
+    , moduleLetBinding
+    , moduleLetBindingKeyword
+    , moduleLiteral
     , runTerm
     , term
     , termErrorToString
@@ -522,11 +525,11 @@ emptySequence =
 
 
 
--- ===VAR===
+-- ===Identifier===
 
 
-varIntro : Parser ExpectedIdentifierIntroduction TermVarName
-varIntro =
+identifier : Parser ExpectedIdentifierIntroduction String
+identifier =
     -- TODO: You can make the error messages better
     let
         excludedChars : Set Char
@@ -573,6 +576,11 @@ varIntro =
 
 
 -- ===Binding===
+
+
+varIntro : Parser ExpectedIdentifierIntroduction TermVarName
+varIntro =
+    identifier
 
 
 binding : Parser ExpectedTerm a -> Parser ExpectedTerm b -> Parser ExpectedTerm ( a, b )
@@ -1242,4 +1250,154 @@ typeTerm =
                     -- TODO: forall
                     Frozen ->
                         operator1 Base.Frozen
+            )
+
+
+
+-- ===Module===
+
+
+moduleVarIntro : Parser ExpectedIdentifierIntroduction ModuleVarName
+moduleVarIntro =
+    identifier
+
+
+type ExpectedModule
+    = ExpectedModuleKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterModuleKeyword { failedAtChar : Char }
+    | ExpectedModuleOpenBraces { failedAtChar : Maybe Char }
+    | ExpectedModuleLetBinding ExpectedModuleLetBinding
+    | ExpectedSemicolonAfterModuleLetBinding { failedAtChar : Maybe Char }
+    | ExpectedModuleClosingBraces { failedAtChar : Maybe Char }
+
+
+moduleTerm : Parser ExpectedModule ModuleTerm
+moduleTerm =
+    -- Either a module literal or a functor application
+    -- TODO: add functor application/module var use
+    moduleLiteral |> Parser.map Base.ModuleLiteralTerm
+
+
+moduleLiteral : Parser ExpectedModule ModuleLiteral
+moduleLiteral =
+    -- TODO:
+    --   2. [open braces, sequence of module-bindings separated by semi-colons, closing brace]
+    let
+        handleModuleKeyword : Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedModule
+        handleModuleKeyword err =
+            case err of
+                Either.Left expectedStringMsg ->
+                    case expectedStringMsg of
+                        PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                            ExpectedModuleKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+
+                Either.Right expectedKeywordGapCharacter ->
+                    case expectedKeywordGapCharacter of
+                        ExpectedKeywordGapCharacter { failedAtChar } ->
+                            ExpectedGapAfterModuleKeyword { failedAtChar = failedAtChar }
+
+        handleOpenBraces : PState.ExpectedString -> ExpectedModule
+        handleOpenBraces msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedModuleOpenBraces { failedAtChar = failedAtChar }
+
+        handleClosingBraces : PState.ExpectedString -> ExpectedModule
+        handleClosingBraces msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedModuleClosingBraces { failedAtChar = failedAtChar }
+
+        handleSemicolon msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedSemicolonAfterModuleLetBinding { failedAtChar = failedAtChar }
+    in
+    Parser.return (\bindings -> { bindings = bindings })
+        |> Parser.o (keyword "module" |> Parser.mapError handleModuleKeyword)
+        |> Parser.o (symbol "{" |> Parser.mapError handleOpenBraces)
+        |> Parser.ooo
+            (Parser.repeatUntil
+                ((moduleLetBinding |> Parser.mapError ExpectedModuleLetBinding)
+                    |> Parser.o (semicolon |> Parser.mapError handleSemicolon)
+                )
+                (symbol "}" |> Parser.mapError handleClosingBraces)
+            )
+
+
+type ExpectedModuleLetBinding
+    = ExpectedModuleLetBindingKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterModuleLetBindingKeyword { failedAtChar : Char }
+    | ExpectedEqualsInModuleLetBinding { consumedSuccessfully : String, failedAtChar : Maybe Char }
+      -- term
+    | ExpectedTermIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
+    | ExpectedTermInModuleLetBinding ExpectedTerm
+      -- module
+    | ExpectedModuleIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
+    | ExpectedModuleTermInModuleLetBinding ExpectedModule
+
+
+type ModuleLetBindingKeyword
+    = LetTerm
+    | LetType
+    | LetModule
+    | LetFunctor
+
+
+moduleLetBindingKeyword : Parser ExpectedModuleLetBinding ModuleLetBindingKeyword
+moduleLetBindingKeyword =
+    let
+        handleLetBindingKeywordError : PState.ExpectedStringIn -> ExpectedModuleLetBinding
+        handleLetBindingKeywordError msg =
+            case msg of
+                PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
+                    ExpectedModuleLetBindingKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+
+        handleLetBindingGapError msg =
+            case msg of
+                ExpectedKeywordGapCharacter { failedAtChar } ->
+                    ExpectedGapAfterModuleLetBindingKeyword { failedAtChar = failedAtChar }
+    in
+    Parser.stringIn
+        [ ( "let-term", LetTerm )
+        , ( "let-type", LetType )
+        , ( "let-module", LetModule )
+        , ( "let-functor", LetFunctor )
+        ]
+        |> Parser.mapError handleLetBindingKeywordError
+        |> Parser.o (keywordGap |> Parser.mapError handleLetBindingGapError)
+        |> Parser.o spaces
+
+
+moduleLetBinding : Parser ExpectedModuleLetBinding ModuleLetBinding
+moduleLetBinding =
+    let
+        handleEquals msg =
+            case msg of
+                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
+                    ExpectedEqualsInModuleLetBinding { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+    in
+    moduleLetBindingKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    LetTerm ->
+                        -- TODO: are you sure `symbol` is enough? Maybe you need `keyword` here?
+                        Parser.return Base.LetTerm
+                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifierInModuleLetBinding)
+                            |> Parser.o (symbol "=" |> Parser.mapError handleEquals)
+                            |> Parser.ooo (term |> Parser.mapError ExpectedTermInModuleLetBinding)
+
+                    LetType ->
+                        Debug.todo ""
+
+                    LetModule ->
+                        -- TODO: are you sure `symbol` is enough? Maybe you need `keyword` here?
+                        Parser.return Base.LetModule
+                            |> Parser.ooo (moduleVarIntro |> Parser.mapError ExpectedModuleIdentifierInModuleLetBinding)
+                            |> Parser.o (symbol "=" |> Parser.mapError handleEquals)
+                            |> Parser.ooo (moduleTerm |> Parser.mapError ExpectedModuleTermInModuleLetBinding)
+
+                    LetFunctor ->
+                        Debug.todo ""
             )
