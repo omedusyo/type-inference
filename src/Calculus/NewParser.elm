@@ -275,18 +275,26 @@ identifier =
 -- ===Generic Errors===
 
 
+type alias FailedAtCharOrEmpty =
+    { failedAtChar : ParserError.FailedAtCharOrEmpty }
+
+
+type alias FailedAtChar =
+    { failedAtChar : ParserError.FailedAtChar }
+
+
 type ExpectedIdentifierIntroduction
     = ExpectedIdentifierCharacters ParserError.CharFailedTest
-    | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
+    | ExpectedIdentifierToStartWithNonDigit FailedAtChar
 
 
 type ExpectedKeywordGapCharacter
-    = ExpectedKeywordGapCharacter { failedAtChar : Char }
+    = ExpectedKeywordGapCharacter FailedAtChar
 
 
 type ExpectedParens
-    = ExpectedOpenParens { failedAtChar : Maybe Char }
-    | ExpectedClosingParens { failedAtChar : Maybe Char }
+    = ExpectedOpenParens FailedAtCharOrEmpty
+    | ExpectedClosingParens FailedAtCharOrEmpty
 
 
 failedAtCharToStringHelper : Char -> String
@@ -308,7 +316,7 @@ failedAtCharToStringHelper c =
         ]
 
 
-failedAtMaybeCharToString : { e | failedAtChar : Maybe Char } -> String
+failedAtMaybeCharToString : { e | failedAtChar : ParserError.FailedAtCharOrEmpty } -> String
 failedAtMaybeCharToString { failedAtChar } =
     case failedAtChar of
         Just c ->
@@ -318,7 +326,7 @@ failedAtMaybeCharToString { failedAtChar } =
             "failed at <empty-input>"
 
 
-failedAtCharToString : { e | failedAtChar : Char } -> String
+failedAtCharToString : { e | failedAtChar : ParserError.FailedAtChar } -> String
 failedAtCharToString { failedAtChar } =
     failedAtCharToStringHelper failedAtChar
 
@@ -373,7 +381,7 @@ expectedIdentifierIntroductionToString identifierKind msg =
 
 type ExpectedOperatorKeyword a
     = ExpectedOperatorKeyword ParserError.ExpectedStringIn
-    | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : Char }
+    | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : ParserError.FailedAtChar }
 
 
 type ExpectedBindingTerm
@@ -385,8 +393,8 @@ type ExpectedBindingTerm
 
 
 type ExpectedPattern
-    = ExpectedPatternKeyword { patternKeyword : TermOperatorKeyword, consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterPatternKeyword { patternKeyword : TermOperatorKeyword, failedAtChar : Char }
+    = ExpectedPatternKeyword { patternKeyword : TermOperatorKeyword, consumedSuccessfully : String, failedAtChar : ParserError.FailedAtCharOrEmpty }
+    | ExpectedGapAfterPatternKeyword { patternKeyword : TermOperatorKeyword, failedAtChar : ParserError.FailedAtChar }
 
 
 type ExpectedTerm
