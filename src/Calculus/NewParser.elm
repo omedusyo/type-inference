@@ -113,15 +113,13 @@ keywordGap : Parser ExpectedKeywordGapCharacter ()
 keywordGap =
     Parser.check (Parser.anyCharSatisfying isGapChar)
         |> Parser.ifError
-            (\error ->
-                case error of
-                    PState.CharFailedTest { failedAtChar } ->
-                        case failedAtChar of
-                            Just c ->
-                                Parser.fail (ExpectedKeywordGapCharacter { failedAtChar = c })
+            (\failedAtCharErr ->
+                case failedAtCharErr.failedAtChar of
+                    Just c ->
+                        Parser.fail (ExpectedKeywordGapCharacter { failedAtChar = c })
 
-                            Nothing ->
-                                Parser.unit
+                    Nothing ->
+                        Parser.unit
             )
         |> Parser.o spaces
 
@@ -157,10 +155,8 @@ atleastOneOpenParens : Parser ExpectedParens Int
 atleastOneOpenParens =
     let
         handleFirstOpenParen : PState.ExpectedString -> ExpectedParens
-        handleFirstOpenParen msg =
-            case msg of
-                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                    ExpectedOpenParens { failedAtChar = failedAtChar }
+        handleFirstOpenParen { expected, consumedSuccessfully, failedAtChar } =
+            ExpectedOpenParens { failedAtChar = failedAtChar }
     in
     Parser.identity
         |> Parser.o (Parser.string "(" |> Parser.mapError handleFirstOpenParen)
@@ -173,10 +169,8 @@ closingParens : Int -> Parser ExpectedParens ()
 closingParens numOfExpectedClosingParens =
     let
         handleFirstClosingParen : PState.ExpectedString -> ExpectedParens
-        handleFirstClosingParen msg =
-            case msg of
-                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                    ExpectedClosingParens { failedAtChar = failedAtChar }
+        handleFirstClosingParen { expected, consumedSuccessfully, failedAtChar } =
+            ExpectedClosingParens { failedAtChar = failedAtChar }
     in
     if numOfExpectedClosingParens == 0 then
         spaces
@@ -262,15 +256,9 @@ identifier =
         isInnerVarChar : Char -> Bool
         isInnerVarChar c =
             not (isExcludedChar c) && isPrintableChar c
-
-        handleCharError : PState.CharFailedTest -> ExpectedIdentifierIntroduction
-        handleCharError msg =
-            case msg of
-                PState.CharFailedTest { failedAtChar } ->
-                    ExpectedIdentifierCharacters { failedAtChar = failedAtChar }
     in
     Parser.anyCharSatisfying isInnerVarChar
-        |> Parser.mapError handleCharError
+        |> Parser.mapError ExpectedIdentifierCharacters
         |> Parser.andThen
             (\c ->
                 if Char.isDigit c then
@@ -288,7 +276,7 @@ identifier =
 
 
 type ExpectedIdentifierIntroduction
-    = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
+    = ExpectedIdentifierCharacters PState.CharFailedTest
     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
 
 
@@ -384,16 +372,16 @@ expectedIdentifierIntroductionToString identifierKind msg =
 
 
 type ExpectedOperatorKeyword a
-    = ExpectedOperatorKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    = ExpectedOperatorKeyword PState.ExpectedStringIn
     | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : Char }
 
 
 type ExpectedBindingTerm
-    = ExpectedOpenBraces { failedAtChar : Maybe Char }
-    | ExpectedDot { failedAtChar : Maybe Char }
-    | ExpectedClosingBraces { failedAtChar : Maybe Char }
-    | ExpectedDefEquals { failedAtChar : Maybe Char }
-    | ExpectedSemicolon { failedAtChar : Maybe Char }
+    = ExpectedOpenBraces PState.ExpectedString
+    | ExpectedDot PState.ExpectedString
+    | ExpectedClosingBraces PState.ExpectedString
+    | ExpectedDefEquals PState.ExpectedString
+    | ExpectedSemicolon PState.ExpectedString
 
 
 type ExpectedPattern
@@ -409,10 +397,10 @@ type ExpectedTerm
     | ExpectedPattern ExpectedPattern
     | ExpectedAtleastTwoArgumentsToApplication { got : Int }
     | ExpectedAtleastOneParameterToAbstraction { got : Int }
-    | ExpectedNatConstant { failedAtChar : Maybe Char }
-    | ExpectedClosingOfApplication { failedAtChar : Maybe Char }
+    | ExpectedNatConstant PState.ExpectedDecimalNaturalNumber
+    | ExpectedClosingOfApplication PState.ExpectedString
     | ExpectedModuleTermInModuleAccess ExpectedModuleTerm
-    | ExpectedModuleAccessSymbol { failedAtChar : Maybe Char }
+    | ExpectedModuleAccessSymbol PState.ExpectedString
 
 
 expectedOperatorKeywordToString : ExpectedOperatorKeyword TermOperatorKeyword -> String
@@ -641,31 +629,12 @@ varIntro =
 
 binding : Parser ExpectedTerm a -> Parser ExpectedTerm b -> Parser ExpectedTerm ( a, b )
 binding patternParser bodyParser =
-    let
-        handleOpenBraces : PState.ExpectedString -> ExpectedTerm
-        handleOpenBraces msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedOpenBraces { failedAtChar = failedAtChar })
-
-        handleDot : PState.ExpectedString -> ExpectedTerm
-        handleDot msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedDot { failedAtChar = failedAtChar })
-
-        handleClosingBraces : PState.ExpectedString -> ExpectedTerm
-        handleClosingBraces msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedClosingBraces { failedAtChar = failedAtChar })
-    in
     Parser.return (\vars body -> ( vars, body ))
-        |> Parser.o (symbol "{" |> Parser.mapError handleOpenBraces)
+        |> Parser.o (symbol "{" |> Parser.mapError (ExpectedBindingTerm << ExpectedOpenBraces))
         |> Parser.ooo patternParser
-        |> Parser.o (symbol "." |> Parser.mapError handleDot)
+        |> Parser.o (symbol "." |> Parser.mapError (ExpectedBindingTerm << ExpectedDot))
         |> Parser.ooo bodyParser
-        |> Parser.o (symbol "}" |> Parser.mapError handleClosingBraces)
+        |> Parser.o (symbol "}" |> Parser.mapError (ExpectedBindingTerm << ExpectedClosingBraces))
 
 
 
@@ -706,13 +675,6 @@ type TermOperatorKeyword
     | Force
       -- Module Access
     | ModuleAccess
-
-
-handleKeywordError : PState.ExpectedStringIn -> ExpectedOperatorKeyword a
-handleKeywordError msg =
-    case msg of
-        PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
-            ExpectedOperatorKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
 
 
 handleKeywordGapError : a -> ExpectedKeywordGapCharacter -> ExpectedOperatorKeyword a
@@ -768,7 +730,7 @@ operatorKeyword =
         , ( "/", ModuleAccess )
         ]
         --  TODO: Should I worry about optional parenthesization here?
-        |> Parser.mapError handleKeywordError
+        |> Parser.mapError ExpectedOperatorKeyword
         |> Parser.andThen
             (\operatorKeyword0 ->
                 case operatorKeyword0 of
@@ -821,24 +783,12 @@ optionalTermParens parser =
 
 semicolonTerm : Parser ExpectedTerm ()
 semicolonTerm =
-    semicolon
-        |> Parser.mapError
-            (\msg ->
-                case msg of
-                    PState.ExpectedString { failedAtChar } ->
-                        ExpectedBindingTerm (ExpectedSemicolon { failedAtChar = failedAtChar })
-            )
+    semicolon |> Parser.mapError (ExpectedBindingTerm << ExpectedSemicolon)
 
 
 defEqualsTerm : Parser ExpectedTerm ()
 defEqualsTerm =
-    let
-        handleLeftArrow msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedBindingTerm (ExpectedDefEquals { failedAtChar = failedAtChar })
-    in
-    defEquals |> Parser.mapError handleLeftArrow
+    defEquals |> Parser.mapError (ExpectedBindingTerm << ExpectedDefEquals)
 
 
 
@@ -851,34 +801,20 @@ term =
         handlePatternError : TermOperatorKeyword -> Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
         handlePatternError patternKeyword msg =
             case msg of
-                Either.Left stringError ->
-                    case stringError of
-                        PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                            ExpectedPattern (ExpectedPatternKeyword { patternKeyword = patternKeyword, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar })
+                Either.Left { expected, consumedSuccessfully, failedAtChar } ->
+                    ExpectedPattern (ExpectedPatternKeyword { patternKeyword = patternKeyword, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar })
 
                 Either.Right gapError ->
                     case gapError of
                         ExpectedKeywordGapCharacter { failedAtChar } ->
                             ExpectedPattern (ExpectedGapAfterPatternKeyword { patternKeyword = patternKeyword, failedAtChar = failedAtChar })
 
-        handleClosingOfApplication : PState.ExpectedString -> ExpectedTerm
-        handleClosingOfApplication msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedClosingOfApplication { failedAtChar = failedAtChar }
-
-        handleNaturalNumber : PState.ExpectedDecimalNaturalNumber -> ExpectedTerm
-        handleNaturalNumber msg =
-            case msg of
-                PState.ExpectedDecimalNaturalNumber msg0 ->
-                    ExpectedNatConstant msg0
-
         naturalNumberLiteral : Parser ExpectedTerm Term
         naturalNumberLiteral =
             Parser.naturalNumber
+                |> Parser.mapError ExpectedNatConstant
                 |> Parser.o spaces
                 |> Parser.map Base.intToNatTerm
-                |> Parser.mapError handleNaturalNumber
 
         constant : Term -> Parser ExpectedTerm Term
         constant c =
@@ -934,12 +870,6 @@ term =
             Parser.identity
                 |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
                 |> Parser.ooo varSeq2
-
-        handleModuleAccessSymbol : PState.ExpectedString -> ExpectedTerm
-        handleModuleAccessSymbol msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedModuleAccessSymbol { failedAtChar = failedAtChar }
     in
     operatorKeyword
         |> Parser.mapError ExpectedOperator
@@ -1028,7 +958,7 @@ term =
                                             in
                                             Parser.return (applicationWithListOfArgs (Base.Application fn0 arg0) args)
                                 )
-                            |> Parser.o (symbol "]" |> Parser.mapError handleClosingOfApplication)
+                            |> Parser.o (symbol "]" |> Parser.mapError ExpectedClosingOfApplication)
 
                     Abstraction ->
                         let
@@ -1165,8 +1095,8 @@ runTerm input =
 
 
 type ExpectedType
-    = ExpectedTypeIdentifier { failedAtChar : Maybe Char }
-    | ExpectedTypeVarUseToStartWithQuote { failedAtChar : Maybe Char }
+    = ExpectedTypeIdentifier PState.ExpectedDecimalNaturalNumber
+    | ExpectedTypeVarUseToStartWithQuote PState.ExpectedString
     | ExpectedTypeOperator (ExpectedOperatorKeyword TypeOperatorKeyword)
     | ExpectedTypeParens ExpectedParens
 
@@ -1205,25 +1135,13 @@ typeVarIntro =
     -- Because it consumes spaces and dots in `123  .`. WTF?
     Parser.naturalNumber
         |> Parser.o spaces
-        |> Parser.mapError
-            (\msg ->
-                case msg of
-                    PState.ExpectedDecimalNaturalNumber msg0 ->
-                        ExpectedTypeIdentifier msg0
-            )
+        |> Parser.mapError ExpectedTypeIdentifier
 
 
 typeVar : Parser ExpectedType Type
 typeVar =
-    let
-        handleQuote : PState.ExpectedString -> ExpectedType
-        handleQuote msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedTypeVarUseToStartWithQuote { failedAtChar = failedAtChar }
-    in
     Parser.return (\typeVarName -> Base.VarType typeVarName)
-        |> Parser.o (Parser.string "'" |> Parser.mapError handleQuote)
+        |> Parser.o (Parser.string "'" |> Parser.mapError ExpectedTypeVarUseToStartWithQuote)
         |> Parser.ooo typeVarIntro
 
 
@@ -1251,7 +1169,7 @@ typeOperatorKeyword =
         , ( "List", List )
         , ( "Frozen", Frozen )
         ]
-        |> Parser.mapError handleKeywordError
+        |> Parser.mapError ExpectedOperatorKeyword
         |> Parser.andThen
             (\typeOperatorKeyword0 ->
                 case typeOperatorKeyword0 of
@@ -1328,23 +1246,23 @@ typeTerm =
 
 type ExpectedModuleTerm
     = -- Module Operator Keyword
-      ExpectedModuleOperator { consumedSuccessfully : String, failedAtChar : Maybe Char }
+      ExpectedModuleOperator PState.ExpectedStringIn
     | ExpectedGapAfterModuleOperator { operatorKeyword : ModuleOperatorKeyword, failedAtChar : Char }
       -- Module Var Use
     | ExpectedModuleIdentifier ExpectedIdentifierIntroduction
       -- Module Literal
     | ExpectedModuleKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
     | ExpectedGapAfterModuleKeyword { failedAtChar : Char }
-    | ExpectedModuleOpenBraces { failedAtChar : Maybe Char }
+    | ExpectedModuleOpenBraces PState.ExpectedString
     | ExpectedModuleLetBinding ExpectedModuleLetBinding
-    | ExpectedSemicolonAfterModuleLetBinding { failedAtChar : Maybe Char }
-    | ExpectedModuleClosingBraces { failedAtChar : Maybe Char }
+    | ExpectedSemicolonAfterModuleLetBinding PState.ExpectedString
+    | ExpectedModuleClosingBraces PState.ExpectedString
 
 
 type ExpectedModuleLetBinding
-    = ExpectedModuleLetBindingKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    = ExpectedModuleLetBindingKeyword PState.ExpectedStringIn
     | ExpectedGapAfterModuleLetBindingKeyword { failedAtChar : Char }
-    | ExpectedEqualsInModuleLetBinding { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedEqualsInModuleLetBinding PState.ExpectedString
       -- term
     | ExpectedTermIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
     | ExpectedTermInModuleLetBinding ExpectedTerm
@@ -1506,11 +1424,6 @@ moduleOperatorKeywordToString keyword0 =
 moduleOperatorKeyword : Parser ExpectedModuleTerm ModuleOperatorKeyword
 moduleOperatorKeyword =
     let
-        handleKeyword msg =
-            case msg of
-                PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
-                    ExpectedModuleOperator { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-
         handleGap keyword0 msg =
             case msg of
                 ExpectedKeywordGapCharacter { failedAtChar } ->
@@ -1521,7 +1434,7 @@ moduleOperatorKeyword =
         , ( "module", ModuleLiteralTerm )
         , ( "[", FunctorApplication )
         ]
-        |> Parser.mapError handleKeyword
+        |> Parser.mapError ExpectedModuleOperator
         |> Parser.andThen
             (\keyword0 ->
                 case keyword0 of
@@ -1561,33 +1474,15 @@ moduleTerm =
 
 moduleLiteral : Parser ExpectedModuleTerm ModuleLiteral
 moduleLiteral =
-    let
-        handleOpenBraces : PState.ExpectedString -> ExpectedModuleTerm
-        handleOpenBraces msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedModuleOpenBraces { failedAtChar = failedAtChar }
-
-        handleClosingBraces : PState.ExpectedString -> ExpectedModuleTerm
-        handleClosingBraces msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedModuleClosingBraces { failedAtChar = failedAtChar }
-
-        handleSemicolon msg =
-            case msg of
-                PState.ExpectedString { failedAtChar } ->
-                    ExpectedSemicolonAfterModuleLetBinding { failedAtChar = failedAtChar }
-    in
     Parser.return (\bindings -> { bindings = bindings })
         -- TODO: move the parsing of "module" keyword to `moduleTerm`
-        |> Parser.o (symbol "{" |> Parser.mapError handleOpenBraces)
+        |> Parser.o (symbol "{" |> Parser.mapError ExpectedModuleOpenBraces)
         |> Parser.ooo
             (Parser.repeatUntil
                 ((moduleLetBinding |> Parser.mapError ExpectedModuleLetBinding)
-                    |> Parser.o (semicolon |> Parser.mapError handleSemicolon)
+                    |> Parser.o (semicolon |> Parser.mapError ExpectedSemicolonAfterModuleLetBinding)
                 )
-                (symbol "}" |> Parser.mapError handleClosingBraces)
+                (symbol "}" |> Parser.mapError ExpectedModuleClosingBraces)
             )
 
 
@@ -1622,12 +1517,6 @@ moduleLetBindingKeywordToString keyword0 =
 moduleLetBindingKeyword : Parser ExpectedModuleLetBinding ModuleLetBindingKeyword
 moduleLetBindingKeyword =
     let
-        handleLetBindingKeywordError : PState.ExpectedStringIn -> ExpectedModuleLetBinding
-        handleLetBindingKeywordError msg =
-            case msg of
-                PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
-                    ExpectedModuleLetBindingKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-
         handleLetBindingGapError msg =
             case msg of
                 ExpectedKeywordGapCharacter { failedAtChar } ->
@@ -1639,19 +1528,13 @@ moduleLetBindingKeyword =
         , ( "let-module", LetModule )
         , ( "let-functor", LetFunctor )
         ]
-        |> Parser.mapError handleLetBindingKeywordError
+        |> Parser.mapError ExpectedModuleLetBindingKeyword
         |> Parser.o (keywordGap |> Parser.mapError handleLetBindingGapError)
         |> Parser.o spaces
 
 
 moduleLetBinding : Parser ExpectedModuleLetBinding ModuleLetBinding
 moduleLetBinding =
-    let
-        handleEquals msg =
-            case msg of
-                PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                    ExpectedEqualsInModuleLetBinding { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-    in
     moduleLetBindingKeyword
         |> Parser.andThen
             (\keyword0 ->
@@ -1660,7 +1543,7 @@ moduleLetBinding =
                         -- TODO: are you sure `symbol` is enough? Maybe you need `keyword` here?
                         Parser.return Base.LetTerm
                             |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifierInModuleLetBinding)
-                            |> Parser.o (symbol "=" |> Parser.mapError handleEquals)
+                            |> Parser.o (symbol "=" |> Parser.mapError ExpectedEqualsInModuleLetBinding)
                             |> Parser.ooo (term |> Parser.mapError ExpectedTermInModuleLetBinding)
 
                     LetType ->
@@ -1670,7 +1553,7 @@ moduleLetBinding =
                         -- TODO: are you sure `symbol` is enough? Maybe you need `keyword` here?
                         Parser.return Base.LetModule
                             |> Parser.ooo (moduleVarIntro |> Parser.mapError ExpectedModuleIdentifierInModuleLetBinding)
-                            |> Parser.o (symbol "=" |> Parser.mapError handleEquals)
+                            |> Parser.o (symbol "=" |> Parser.mapError ExpectedEqualsInModuleLetBinding)
                             |> Parser.ooo (moduleTerm |> Parser.mapError ExpectedModuleTermInModuleLetBinding)
 
                     LetFunctor ->

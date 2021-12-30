@@ -1,10 +1,10 @@
 module Lib.Parser.State exposing
-    ( CharFailedTest(..)
-    , ExpectedDecimalNaturalNumber(..)
-    , ExpectedEndOfInput(..)
-    , ExpectedNonEmptyInput(..)
-    , ExpectedString(..)
-    , ExpectedStringIn(..)
+    ( CharFailedTest
+    , ExpectedDecimalNaturalNumber
+    , ExpectedEndOfInput
+    , ExpectedNonEmptyInput
+    , ExpectedString
+    , ExpectedStringIn
     , State
     , consumeAnyChar
     , consumeAnyCharSatisfying
@@ -43,31 +43,31 @@ throw msg s =
     { position = s.position, msg = msg }
 
 
-type ExpectedNonEmptyInput
-    = ExpectedNonEmptyInput
+type alias ExpectedNonEmptyInput =
+    {}
 
 
-type CharFailedTest
-    = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      CharFailedTest { failedAtChar : Maybe Char }
+type alias CharFailedTest =
+    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
+    { failedAtChar : Maybe Char }
 
 
-type ExpectedString
-    = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      ExpectedString { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
+type alias ExpectedString =
+    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
+    { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
 
 
-type ExpectedStringIn
-    = -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-      ExpectedStringIn { consumedSuccessfully : String, failedAtChar : Maybe Char }
+type alias ExpectedStringIn =
+    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
+    { consumedSuccessfully : String, failedAtChar : Maybe Char }
 
 
-type ExpectedDecimalNaturalNumber
-    = ExpectedDecimalNaturalNumber { failedAtChar : Maybe Char }
+type alias ExpectedDecimalNaturalNumber =
+    { failedAtChar : Maybe Char }
 
 
-type ExpectedEndOfInput
-    = ExpectedEndOfInput
+type alias ExpectedEndOfInput =
+    {}
 
 
 
@@ -147,10 +147,10 @@ consumeAnyCharSatisfying test s =
                     )
 
             else
-                Err (s |> throw (CharFailedTest { failedAtChar = Just c }))
+                Err (s |> throw (CharFailedTest (Just c)))
 
         Nothing ->
-            Err (s |> throw (CharFailedTest { failedAtChar = Nothing }))
+            Err (s |> throw (CharFailedTest Nothing))
 
 
 consumeString : String -> State -> Result (Error ExpectedString) State
@@ -167,10 +167,10 @@ consumeString strToBeMatched init_s =
                             (String.cons c reversed_strConsumedSoFar)
 
                     else
-                        Err (s |> throw (ExpectedString { expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c }))
+                        Err (s |> throw (ExpectedString strToBeMatched (String.reverse reversed_strConsumedSoFar) (Just c)))
 
                 ( Just _, Nothing ) ->
-                    Err (s |> throw (ExpectedString { expected = strToBeMatched, consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing }))
+                    Err (s |> throw (ExpectedString strToBeMatched (String.reverse reversed_strConsumedSoFar) Nothing))
 
                 ( Nothing, _ ) ->
                     Ok s
@@ -205,10 +205,10 @@ consumeForest forestToBeMatched init_s =
                             loop2 forest1 new_s new_s v
 
                         Forest.Empty ->
-                            Err (s |> throw (ExpectedStringIn { consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Just c }))
+                            Err (s |> throw (ExpectedStringIn (String.reverse reversed_strConsumedSoFar) (Just c)))
 
                 Nothing ->
-                    Err (s |> throw (ExpectedStringIn { consumedSuccessfully = String.reverse reversed_strConsumedSoFar, failedAtChar = Nothing }))
+                    Err (s |> throw (ExpectedStringIn (String.reverse reversed_strConsumedSoFar) Nothing))
 
         loop2 : Forest Char v -> State -> State -> v -> Result (Error ExpectedStringIn) ( State, v )
         loop2 forest0 s lastSuccessful_s lastValue =

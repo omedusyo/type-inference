@@ -499,12 +499,6 @@ naturalNumber =
                         |> map (\digits -> digits ++ String.fromChar c)
             )
         |> map digitStringToInt
-        |> mapError
-            (\msg ->
-                case msg of
-                    State.CharFailedTest { failedAtChar } ->
-                        State.ExpectedDecimalNaturalNumber { failedAtChar = failedAtChar }
-            )
 
 
 
