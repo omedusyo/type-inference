@@ -1,8 +1,10 @@
 module Calculus.NewParser exposing
     ( ExpectedModuleTerm(..)
     , ExpectedTerm(..)
+    , interface
     , moduleTerm
     , moduleTermErrorToString
+    , runInterface
     , runModuleTerm
     , runTerm
     , term
@@ -116,7 +118,7 @@ keywordGap =
             (\failedAtCharErr ->
                 case failedAtCharErr.failedAtChar of
                     Just c ->
-                        Parser.fail (ExpectedKeywordGapCharacter { failedAtChar = c })
+                        Parser.fail { failedAtChar = c }
 
                     Nothing ->
                         Parser.unit
@@ -288,8 +290,8 @@ type ExpectedIdentifierIntroduction
     | ExpectedIdentifierToStartWithNonDigit FailedAtChar
 
 
-type ExpectedKeywordGapCharacter
-    = ExpectedKeywordGapCharacter FailedAtChar
+type alias ExpectedKeywordGapCharacter =
+    FailedAtChar
 
 
 type ExpectedParens
@@ -686,10 +688,8 @@ type TermOperatorKeyword
 
 
 handleKeywordGapError : a -> ExpectedKeywordGapCharacter -> ExpectedOperatorKeyword a
-handleKeywordGapError operatorKeyword0 msg =
-    case msg of
-        ExpectedKeywordGapCharacter { failedAtChar } ->
-            ExpectedGapAfterOperatorKeyword { operatorKeyword = operatorKeyword0, failedAtChar = failedAtChar }
+handleKeywordGapError operatorKeyword0 gapError =
+    ExpectedGapAfterOperatorKeyword { operatorKeyword = operatorKeyword0, failedAtChar = gapError.failedAtChar }
 
 
 operatorKeyword : Parser (ExpectedOperatorKeyword TermOperatorKeyword) TermOperatorKeyword
@@ -813,9 +813,7 @@ term =
                     ExpectedPattern (ExpectedPatternKeyword { patternKeyword = patternKeyword, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar })
 
                 Either.Right gapError ->
-                    case gapError of
-                        ExpectedKeywordGapCharacter { failedAtChar } ->
-                            ExpectedPattern (ExpectedGapAfterPatternKeyword { patternKeyword = patternKeyword, failedAtChar = failedAtChar })
+                    ExpectedPattern (ExpectedGapAfterPatternKeyword { patternKeyword = patternKeyword, failedAtChar = gapError.failedAtChar })
 
         naturalNumberLiteral : Parser ExpectedTerm Term
         naturalNumberLiteral =
@@ -1255,12 +1253,11 @@ typeTerm =
 type ExpectedModuleTerm
     = -- Module Operator Keyword
       ExpectedModuleOperator ParserError.ExpectedStringIn
-    | ExpectedGapAfterModuleOperator { operatorKeyword : ModuleOperatorKeyword, failedAtChar : Char }
+    | ExpectedGapAfterModuleOperator { operatorKeyword : ModuleOperatorKeyword, failedAtChar : ParserError.FailedAtChar }
       -- Module Var Use
     | ExpectedModuleIdentifier ExpectedIdentifierIntroduction
       -- Module Literal
-    | ExpectedModuleKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
-    | ExpectedGapAfterModuleKeyword { failedAtChar : Char }
+    | ExpectedGapAfterModuleKeyword { failedAtChar : ParserError.FailedAtChar }
     | ExpectedModuleOpenBraces ParserError.ExpectedString
     | ExpectedModuleLetBinding ExpectedModuleLetBinding
     | ExpectedSemicolonAfterModuleLetBinding ParserError.ExpectedString
@@ -1269,7 +1266,7 @@ type ExpectedModuleTerm
 
 type ExpectedModuleLetBinding
     = ExpectedModuleLetBindingKeyword ParserError.ExpectedStringIn
-    | ExpectedGapAfterModuleLetBindingKeyword { failedAtChar : Char }
+    | ExpectedGapAfterModuleLetBindingKeyword FailedAtChar
     | ExpectedEqualsInModuleLetBinding ParserError.ExpectedString
       -- term
     | ExpectedTermIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
@@ -1306,12 +1303,6 @@ expectedModuleTermToString msg =
             expectedIdentifierIntroductionToString "module" err
 
         -- Module Literal
-        ExpectedModuleKeyword failedAtCharError ->
-            String.concat
-                [ "Expected the keyword `module` "
-                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
-                ]
-
         ExpectedGapAfterModuleKeyword failedAtCharError ->
             String.concat
                 [ "Expected a gap after the `module` keyword "
@@ -1432,10 +1423,8 @@ moduleOperatorKeywordToString keyword0 =
 moduleOperatorKeyword : Parser ExpectedModuleTerm ModuleOperatorKeyword
 moduleOperatorKeyword =
     let
-        handleGap keyword0 msg =
-            case msg of
-                ExpectedKeywordGapCharacter { failedAtChar } ->
-                    ExpectedGapAfterModuleOperator { operatorKeyword = keyword0, failedAtChar = failedAtChar }
+        handleGap keyword0 gapError =
+            ExpectedGapAfterModuleOperator { operatorKeyword = keyword0, failedAtChar = gapError.failedAtChar }
     in
     Parser.stringIn
         [ ( "$", ModuleVarUse )
@@ -1482,8 +1471,7 @@ moduleTerm =
 
 moduleLiteral : Parser ExpectedModuleTerm ModuleLiteral
 moduleLiteral =
-    Parser.return (\bindings -> { bindings = bindings })
-        -- TODO: move the parsing of "module" keyword to `moduleTerm`
+    Parser.return ModuleLiteral
         |> Parser.o (symbol "{" |> Parser.mapError ExpectedModuleOpenBraces)
         |> Parser.ooo
             (Parser.repeatUntil
@@ -1524,12 +1512,6 @@ moduleLetBindingKeywordToString keyword0 =
 
 moduleLetBindingKeyword : Parser ExpectedModuleLetBinding ModuleLetBindingKeyword
 moduleLetBindingKeyword =
-    let
-        handleLetBindingGapError msg =
-            case msg of
-                ExpectedKeywordGapCharacter { failedAtChar } ->
-                    ExpectedGapAfterModuleLetBindingKeyword { failedAtChar = failedAtChar }
-    in
     Parser.stringIn
         [ ( "let-term", LetTerm )
         , ( "let-type", LetType )
@@ -1537,7 +1519,7 @@ moduleLetBindingKeyword =
         , ( "let-functor", LetFunctor )
         ]
         |> Parser.mapError ExpectedModuleLetBindingKeyword
-        |> Parser.o (keywordGap |> Parser.mapError handleLetBindingGapError)
+        |> Parser.o (keywordGap |> Parser.mapError ExpectedGapAfterModuleLetBindingKeyword)
         |> Parser.o spaces
 
 
@@ -1548,7 +1530,6 @@ moduleLetBinding =
             (\keyword0 ->
                 case keyword0 of
                     LetTerm ->
-                        -- TODO: are you sure `symbol` is enough? Maybe you need `keyword` here?
                         Parser.return Base.LetTerm
                             |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifierInModuleLetBinding)
                             |> Parser.o (symbol "=" |> Parser.mapError ExpectedEqualsInModuleLetBinding)
@@ -1558,7 +1539,6 @@ moduleLetBinding =
                         Debug.todo ""
 
                     LetModule ->
-                        -- TODO: are you sure `symbol` is enough? Maybe you need `keyword` here?
                         Parser.return Base.LetModule
                             |> Parser.ooo (moduleVarIntro |> Parser.mapError ExpectedModuleIdentifierInModuleLetBinding)
                             |> Parser.o (symbol "=" |> Parser.mapError ExpectedEqualsInModuleLetBinding)
@@ -1572,4 +1552,131 @@ moduleLetBinding =
 runModuleTerm : String -> Result (ParserError.Error ExpectedModuleTerm) ModuleTerm
 runModuleTerm input =
     Parser.run moduleTerm {} (ParserState.return input)
+        |> Result.map Tuple.second
+
+
+
+-- ===Interface===
+
+
+type ExpectedInterface
+    = ExpectedInterfaceKeyword ParserError.ExpectedString
+    | ExpectedGapAfterInterfaceKeyword { failedAtChar : ParserError.FailedAtChar }
+    | ExpectedInterfaceOpenBraces ParserError.ExpectedString
+    | ExpectedInterfaceAssumption ExpectedInterfaceAssumption
+    | ExpectedSemicolonAfterInterfaceAssumption ParserError.ExpectedString
+    | ExpectedInterfaceClosingBraces ParserError.ExpectedString
+
+
+type ExpectedInterfaceAssumption
+    = ExpectedInterfaceAssumptionKeyword ParserError.ExpectedStringIn
+    | ExpectedGapAfterInterfaceAssumptionKeyword FailedAtChar
+    | ExpectedTypingSymbolInInterfaceAssumption ParserError.ExpectedString
+      -- term
+    | ExpectedTermIdentifierInInterfaceAssumption ExpectedIdentifierIntroduction
+    | ExpectedTypeInInterfaceAssumption ExpectedType
+      -- module
+    | ExpectedModuleIdentifierInInterfaceAssumption ExpectedIdentifierIntroduction
+    | ExpectedInterfaceLiteralInInterfaceAssumption ExpectedInterface
+
+
+interface : Parser ExpectedInterface Interface
+interface =
+    let
+        handleKeyword msg =
+            case msg of
+                Either.Left expectedStringErr ->
+                    ExpectedInterfaceKeyword expectedStringErr
+
+                Either.Right gapErr ->
+                    ExpectedGapAfterInterfaceKeyword gapErr
+    in
+    Parser.identity
+        |> Parser.o (keyword "interface" |> Parser.mapError handleKeyword)
+        |> Parser.ooo interfaceLiteral
+
+
+interfaceLiteral : Parser ExpectedInterface Interface
+interfaceLiteral =
+    Parser.return Base.Interface
+        |> Parser.o (symbol "{" |> Parser.mapError ExpectedInterfaceOpenBraces)
+        |> Parser.ooo
+            (Parser.repeatUntil
+                ((interfaceAssumption |> Parser.mapError ExpectedInterfaceAssumption)
+                    |> Parser.o (semicolon |> Parser.mapError ExpectedSemicolonAfterInterfaceAssumption)
+                )
+                (symbol "}" |> Parser.mapError ExpectedModuleClosingBraces)
+            )
+
+
+type InterfaceAssumptionKeyword
+    = AssumeTerm
+    | AssumeType
+    | AssumeModule
+    | AssumeFunctor
+
+
+allInterfaceAssumptionKeywords : List InterfaceAssumptionKeyword
+allInterfaceAssumptionKeywords =
+    [ AssumeTerm, AssumeType, AssumeModule, AssumeFunctor ]
+
+
+interfaceAssumptionKeywordToString : InterfaceAssumptionKeyword -> String
+interfaceAssumptionKeywordToString keyword0 =
+    case keyword0 of
+        AssumeTerm ->
+            "assume-term"
+
+        AssumeType ->
+            "assume-type"
+
+        AssumeModule ->
+            "assume-module"
+
+        AssumeFunctor ->
+            "assume-functor"
+
+
+interfaceAssumptionKeyword : Parser ExpectedInterfaceAssumption InterfaceAssumptionKeyword
+interfaceAssumptionKeyword =
+    Parser.stringIn
+        [ ( "assume-term", AssumeTerm )
+        , ( "assume-type", AssumeType )
+        , ( "assume-module", AssumeModule )
+        , ( "assume-functor", AssumeFunctor )
+        ]
+        |> Parser.mapError ExpectedInterfaceAssumptionKeyword
+        |> Parser.o (keywordGap |> Parser.mapError ExpectedGapAfterInterfaceAssumptionKeyword)
+        |> Parser.o spaces
+
+
+interfaceAssumption : Parser ExpectedInterfaceAssumption InterfaceAssumption
+interfaceAssumption =
+    interfaceAssumptionKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    AssumeTerm ->
+                        Parser.return Base.AssumeTerm
+                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifierInInterfaceAssumption)
+                            |> Parser.o (symbol ":" |> Parser.mapError ExpectedTypingSymbolInInterfaceAssumption)
+                            |> Parser.ooo (typeTerm |> Parser.mapError ExpectedTypeInInterfaceAssumption)
+
+                    AssumeType ->
+                        Debug.todo ""
+
+                    AssumeModule ->
+                        Parser.return Base.AssumeModule
+                            |> Parser.ooo (moduleVarIntro |> Parser.mapError ExpectedModuleIdentifierInInterfaceAssumption)
+                            |> Parser.o (symbol ":" |> Parser.mapError ExpectedTypingSymbolInInterfaceAssumption)
+                            |> Parser.ooo (interfaceLiteral |> Parser.mapError ExpectedInterfaceLiteralInInterfaceAssumption)
+
+                    AssumeFunctor ->
+                        Debug.todo ""
+            )
+
+
+runInterface : String -> Result (ParserError.Error ExpectedInterface) Interface
+runInterface input =
+    Parser.run interface {} (ParserState.return input)
         |> Result.map Tuple.second
