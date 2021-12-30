@@ -251,12 +251,12 @@ fail error =
     make <| \_ s -> Err (Error.make (State.getPosition s) error)
 
 
-failIfEmpty : Parser r State.ExpectedNonEmptyInput ()
+failIfEmpty : Parser r Error.ExpectedNonEmptyInput ()
 failIfEmpty =
     make <|
         \r s ->
             if String.isEmpty (State.getInput s) then
-                Err (Error.make (State.getPosition s) State.ExpectedNonEmptyInput)
+                Err (Error.make (State.getPosition s) Error.ExpectedNonEmptyInput)
 
             else
                 Ok ( s, () )
@@ -412,7 +412,7 @@ oneOf parsers =
 -- ===specifics===
 
 
-end : Parser r State.ExpectedEndOfInput ()
+end : Parser r Error.ExpectedEndOfInput ()
 end =
     make <|
         \_ s ->
@@ -429,7 +429,7 @@ discard parser =
     parser |> map (\_ -> ())
 
 
-anyChar : (Char -> Parser r e a) -> Parser r (Either State.ExpectedNonEmptyInput e) a
+anyChar : (Char -> Parser r e a) -> Parser r (Either Error.ExpectedNonEmptyInput e) a
 anyChar f =
     make <|
         \r s0 ->
@@ -442,14 +442,14 @@ anyChar f =
                     Err (error |> Error.mapMsg Either.Left)
 
 
-anyCharSatisfying : (Char -> Bool) -> Parser r State.CharFailedTest Char
+anyCharSatisfying : (Char -> Bool) -> Parser r Error.CharFailedTest Char
 anyCharSatisfying test =
     make <|
         \_ s0 ->
             State.consumeAnyCharSatisfying test s0
 
 
-string : String -> Parser r State.ExpectedString ()
+string : String -> Parser r Error.ExpectedString ()
 string strToBeMatched =
     make <|
         \_ s0 ->
@@ -457,14 +457,14 @@ string strToBeMatched =
                 |> Result.map (\s1 -> ( s1, () ))
 
 
-stringIn : List ( String, v ) -> Parser r State.ExpectedStringIn v
+stringIn : List ( String, v ) -> Parser r Error.ExpectedStringIn v
 stringIn forest =
     make <|
         \_ s0 ->
             State.consumeForest (Forest.fromStringList forest) s0
 
 
-naturalNumber : Parser r State.ExpectedDecimalNaturalNumber Int
+naturalNumber : Parser r Error.ExpectedDecimalNaturalNumber Int
 naturalNumber =
     -- This can only fail on empty input or on input that doesn't start with a digit
     let

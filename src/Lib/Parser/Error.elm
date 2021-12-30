@@ -1,5 +1,11 @@
 module Lib.Parser.Error exposing
-    ( Error
+    ( CharFailedTest
+    , Error
+    , ExpectedDecimalNaturalNumber
+    , ExpectedEndOfInput
+    , ExpectedNonEmptyInput
+    , ExpectedString
+    , ExpectedStringIn
     , getMsg
     , getPosition
     , make
@@ -12,6 +18,33 @@ import Lib.Parser.Position as Position exposing (Position)
 
 type alias Error e =
     { position : Position, msg : e }
+
+
+type alias ExpectedNonEmptyInput =
+    {}
+
+
+type alias CharFailedTest =
+    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
+    { failedAtChar : Maybe Char }
+
+
+type alias ExpectedString =
+    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
+    { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
+
+
+type alias ExpectedStringIn =
+    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
+    { consumedSuccessfully : String, failedAtChar : Maybe Char }
+
+
+type alias ExpectedDecimalNaturalNumber =
+    { failedAtChar : Maybe Char }
+
+
+type alias ExpectedEndOfInput =
+    {}
 
 
 make : Position -> e -> Error e

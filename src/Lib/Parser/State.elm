@@ -1,11 +1,5 @@
 module Lib.Parser.State exposing
-    ( CharFailedTest
-    , ExpectedDecimalNaturalNumber
-    , ExpectedEndOfInput
-    , ExpectedNonEmptyInput
-    , ExpectedString
-    , ExpectedStringIn
-    , State
+    ( State
     , consumeAnyChar
     , consumeAnyCharSatisfying
     , consumeForest
@@ -17,7 +11,16 @@ module Lib.Parser.State exposing
     , return
     )
 
-import Lib.Parser.Error exposing (Error)
+import Lib.Parser.Error
+    exposing
+        ( CharFailedTest
+        , Error
+        , ExpectedDecimalNaturalNumber
+        , ExpectedEndOfInput
+        , ExpectedNonEmptyInput
+        , ExpectedString
+        , ExpectedStringIn
+        )
 import Lib.Parser.Forest as Forest exposing (Forest)
 import Lib.Parser.Position exposing (Position)
 
@@ -41,33 +44,6 @@ getPosition state =
 throw : e -> State -> Error e
 throw msg s =
     { position = s.position, msg = msg }
-
-
-type alias ExpectedNonEmptyInput =
-    {}
-
-
-type alias CharFailedTest =
-    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-    { failedAtChar : Maybe Char }
-
-
-type alias ExpectedString =
-    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-    { expected : String, consumedSuccessfully : String, failedAtChar : Maybe Char }
-
-
-type alias ExpectedStringIn =
-    -- `failedAtChar == Nothing` means that the input was empty while we expected to match non-empty string
-    { consumedSuccessfully : String, failedAtChar : Maybe Char }
-
-
-type alias ExpectedDecimalNaturalNumber =
-    { failedAtChar : Maybe Char }
-
-
-type alias ExpectedEndOfInput =
-    {}
 
 
 

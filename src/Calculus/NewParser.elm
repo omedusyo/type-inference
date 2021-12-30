@@ -29,10 +29,10 @@ import Calculus.Base as Base
         )
 import Dict exposing (Dict)
 import Either exposing (Either)
-import Lib.Parser.Error as PError
+import Lib.Parser.Error as ParserError
 import Lib.Parser.Parser as Parser
 import Lib.Parser.Position as PPosition
-import Lib.Parser.State as PState
+import Lib.Parser.State as ParserState
 import Set exposing (Set)
 
 
@@ -88,19 +88,19 @@ spaces =
         |> Parser.discard
 
 
-symbol : String -> Parser PState.ExpectedString ()
+symbol : String -> Parser ParserError.ExpectedString ()
 symbol symbol0 =
     Parser.unit
         |> Parser.o (Parser.string symbol0)
         |> Parser.o spaces
 
 
-defEquals : Parser PState.ExpectedString ()
+defEquals : Parser ParserError.ExpectedString ()
 defEquals =
     symbol "="
 
 
-semicolon : Parser PState.ExpectedString ()
+semicolon : Parser ParserError.ExpectedString ()
 semicolon =
     symbol ";"
 
@@ -124,7 +124,7 @@ keywordGap =
         |> Parser.o spaces
 
 
-keyword : String -> Parser (Either PState.ExpectedString ExpectedKeywordGapCharacter) ()
+keyword : String -> Parser (Either ParserError.ExpectedString ExpectedKeywordGapCharacter) ()
 keyword string0 =
     Parser.unit
         |> Parser.o (Parser.string string0 |> Parser.mapError Either.Left)
@@ -154,7 +154,7 @@ zeroOrMoreOpenParens =
 atleastOneOpenParens : Parser ExpectedParens Int
 atleastOneOpenParens =
     let
-        handleFirstOpenParen : PState.ExpectedString -> ExpectedParens
+        handleFirstOpenParen : ParserError.ExpectedString -> ExpectedParens
         handleFirstOpenParen { expected, consumedSuccessfully, failedAtChar } =
             ExpectedOpenParens { failedAtChar = failedAtChar }
     in
@@ -168,7 +168,7 @@ atleastOneOpenParens =
 closingParens : Int -> Parser ExpectedParens ()
 closingParens numOfExpectedClosingParens =
     let
-        handleFirstClosingParen : PState.ExpectedString -> ExpectedParens
+        handleFirstClosingParen : ParserError.ExpectedString -> ExpectedParens
         handleFirstClosingParen { expected, consumedSuccessfully, failedAtChar } =
             ExpectedClosingParens { failedAtChar = failedAtChar }
     in
@@ -276,7 +276,7 @@ identifier =
 
 
 type ExpectedIdentifierIntroduction
-    = ExpectedIdentifierCharacters PState.CharFailedTest
+    = ExpectedIdentifierCharacters ParserError.CharFailedTest
     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
 
 
@@ -372,16 +372,16 @@ expectedIdentifierIntroductionToString identifierKind msg =
 
 
 type ExpectedOperatorKeyword a
-    = ExpectedOperatorKeyword PState.ExpectedStringIn
+    = ExpectedOperatorKeyword ParserError.ExpectedStringIn
     | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : Char }
 
 
 type ExpectedBindingTerm
-    = ExpectedOpenBraces PState.ExpectedString
-    | ExpectedDot PState.ExpectedString
-    | ExpectedClosingBraces PState.ExpectedString
-    | ExpectedDefEquals PState.ExpectedString
-    | ExpectedSemicolon PState.ExpectedString
+    = ExpectedOpenBraces ParserError.ExpectedString
+    | ExpectedDot ParserError.ExpectedString
+    | ExpectedClosingBraces ParserError.ExpectedString
+    | ExpectedDefEquals ParserError.ExpectedString
+    | ExpectedSemicolon ParserError.ExpectedString
 
 
 type ExpectedPattern
@@ -397,10 +397,10 @@ type ExpectedTerm
     | ExpectedPattern ExpectedPattern
     | ExpectedAtleastTwoArgumentsToApplication { got : Int }
     | ExpectedAtleastOneParameterToAbstraction { got : Int }
-    | ExpectedNatConstant PState.ExpectedDecimalNaturalNumber
-    | ExpectedClosingOfApplication PState.ExpectedString
+    | ExpectedNatConstant ParserError.ExpectedDecimalNaturalNumber
+    | ExpectedClosingOfApplication ParserError.ExpectedString
     | ExpectedModuleTermInModuleAccess ExpectedModuleTerm
-    | ExpectedModuleAccessSymbol PState.ExpectedString
+    | ExpectedModuleAccessSymbol ParserError.ExpectedString
 
 
 expectedOperatorKeywordToString : ExpectedOperatorKeyword TermOperatorKeyword -> String
@@ -588,16 +588,16 @@ expectedTermToString msg =
             String.concat [ "Expected module access symbol `.` (", failedAtMaybeCharToString msg0, ")" ]
 
 
-termErrorToString : PError.Error ExpectedTerm -> String
+termErrorToString : ParserError.Error ExpectedTerm -> String
 termErrorToString error =
     let
         position : PPosition.Position
         position =
-            PError.getPosition error
+            ParserError.getPosition error
 
         msg : ExpectedTerm
         msg =
-            PError.getMsg error
+            ParserError.getMsg error
     in
     String.concat
         [ expectedTermToString msg
@@ -798,7 +798,7 @@ defEqualsTerm =
 term : Parser ExpectedTerm Term
 term =
     let
-        handlePatternError : TermOperatorKeyword -> Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
+        handlePatternError : TermOperatorKeyword -> Either ParserError.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
         handlePatternError patternKeyword msg =
             case msg of
                 Either.Left { expected, consumedSuccessfully, failedAtChar } ->
@@ -1080,9 +1080,9 @@ term =
             )
 
 
-runTerm : String -> Result (PError.Error ExpectedTerm) Term
+runTerm : String -> Result (ParserError.Error ExpectedTerm) Term
 runTerm input =
-    Parser.run term {} (PState.return input)
+    Parser.run term {} (ParserState.return input)
         |> Result.map Tuple.second
 
 
@@ -1095,8 +1095,8 @@ runTerm input =
 
 
 type ExpectedType
-    = ExpectedTypeIdentifier PState.ExpectedDecimalNaturalNumber
-    | ExpectedTypeVarUseToStartWithQuote PState.ExpectedString
+    = ExpectedTypeIdentifier ParserError.ExpectedDecimalNaturalNumber
+    | ExpectedTypeVarUseToStartWithQuote ParserError.ExpectedString
     | ExpectedTypeOperator (ExpectedOperatorKeyword TypeOperatorKeyword)
     | ExpectedTypeParens ExpectedParens
 
@@ -1246,23 +1246,23 @@ typeTerm =
 
 type ExpectedModuleTerm
     = -- Module Operator Keyword
-      ExpectedModuleOperator PState.ExpectedStringIn
+      ExpectedModuleOperator ParserError.ExpectedStringIn
     | ExpectedGapAfterModuleOperator { operatorKeyword : ModuleOperatorKeyword, failedAtChar : Char }
       -- Module Var Use
     | ExpectedModuleIdentifier ExpectedIdentifierIntroduction
       -- Module Literal
     | ExpectedModuleKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
     | ExpectedGapAfterModuleKeyword { failedAtChar : Char }
-    | ExpectedModuleOpenBraces PState.ExpectedString
+    | ExpectedModuleOpenBraces ParserError.ExpectedString
     | ExpectedModuleLetBinding ExpectedModuleLetBinding
-    | ExpectedSemicolonAfterModuleLetBinding PState.ExpectedString
-    | ExpectedModuleClosingBraces PState.ExpectedString
+    | ExpectedSemicolonAfterModuleLetBinding ParserError.ExpectedString
+    | ExpectedModuleClosingBraces ParserError.ExpectedString
 
 
 type ExpectedModuleLetBinding
-    = ExpectedModuleLetBindingKeyword PState.ExpectedStringIn
+    = ExpectedModuleLetBindingKeyword ParserError.ExpectedStringIn
     | ExpectedGapAfterModuleLetBindingKeyword { failedAtChar : Char }
-    | ExpectedEqualsInModuleLetBinding PState.ExpectedString
+    | ExpectedEqualsInModuleLetBinding ParserError.ExpectedString
       -- term
     | ExpectedTermIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
     | ExpectedTermInModuleLetBinding ExpectedTerm
@@ -1372,16 +1372,16 @@ expectedModuleLetBindingToString msg =
             expectedModuleTermToString expectedModuleTerm
 
 
-moduleTermErrorToString : PError.Error ExpectedModuleTerm -> String
+moduleTermErrorToString : ParserError.Error ExpectedModuleTerm -> String
 moduleTermErrorToString error =
     let
         position : PPosition.Position
         position =
-            PError.getPosition error
+            ParserError.getPosition error
 
         msg : ExpectedModuleTerm
         msg =
-            PError.getMsg error
+            ParserError.getMsg error
     in
     String.concat
         [ expectedModuleTermToString msg
@@ -1561,7 +1561,7 @@ moduleLetBinding =
             )
 
 
-runModuleTerm : String -> Result (PError.Error ExpectedModuleTerm) ModuleTerm
+runModuleTerm : String -> Result (ParserError.Error ExpectedModuleTerm) ModuleTerm
 runModuleTerm input =
-    Parser.run moduleTerm {} (PState.return input)
+    Parser.run moduleTerm {} (ParserState.return input)
         |> Result.map Tuple.second
