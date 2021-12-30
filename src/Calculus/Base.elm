@@ -168,6 +168,8 @@ type alias ModuleVarName =
 type ModuleTerm
     = ModuleLiteralTerm ModuleLiteral
     | ModuleVarUse ModuleVarName
+      -- TODO: What about nested modules?
+      -- | NestedModuleAccess ModuleTerm ModuleLiteral
     | FunctorApplication FunctorTerm (List ModuleTerm)
 
 

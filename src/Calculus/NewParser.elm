@@ -1,16 +1,14 @@
 module Calculus.NewParser exposing
     ( ExpectedModuleTerm(..)
     , ExpectedTerm(..)
-    , moduleLetBinding
-    , moduleLetBindingKeyword
-    , moduleLiteral
     , moduleTerm
     , moduleTermErrorToString
     , runModuleTerm
     , runTerm
     , term
-    , termErrorToString
-    , typeTerm
+    ,  termErrorToString
+       -- , typeTerm
+
     )
 
 import Calculus.Base as Base
@@ -413,6 +411,8 @@ type ExpectedTerm
     | ExpectedAtleastOneParameterToAbstraction { got : Int }
     | ExpectedNatConstant { failedAtChar : Maybe Char }
     | ExpectedClosingOfApplication { failedAtChar : Maybe Char }
+    | ExpectedModuleTermInModuleAccess ExpectedModuleTerm
+    | ExpectedModuleAccessSymbol { failedAtChar : Maybe Char }
 
 
 expectedOperatorKeywordToString : ExpectedOperatorKeyword TermOperatorKeyword -> String
@@ -558,6 +558,10 @@ operatorKeywordToString op =
         Force ->
             "force"
 
+        -- Module Access
+        ModuleAccess ->
+            "@"
+
 
 expectedTermToString : ExpectedTerm -> String
 expectedTermToString msg =
@@ -588,6 +592,12 @@ expectedTermToString msg =
 
         ExpectedClosingOfApplication msg0 ->
             String.concat [ "Expected closing of application (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedModuleTermInModuleAccess err ->
+            expectedModuleTermToString err
+
+        ExpectedModuleAccessSymbol msg0 ->
+            String.concat [ "Expected module access symbol `.` (", failedAtMaybeCharToString msg0, ")" ]
 
 
 termErrorToString : PError.Error ExpectedTerm -> String
@@ -694,6 +704,8 @@ type TermOperatorKeyword
       -- Freeze
     | Delay
     | Force
+      -- Module Access
+    | ModuleAccess
 
 
 handleKeywordError : PState.ExpectedStringIn -> ExpectedOperatorKeyword a
@@ -751,6 +763,9 @@ operatorKeyword =
         -- Freeze
         , ( "delay", Delay )
         , ( "force", Force )
+
+        -- Module Access
+        , ( "/", ModuleAccess )
         ]
         --  TODO: Should I worry about optional parenthesization here?
         |> Parser.mapError handleKeywordError
@@ -919,6 +934,12 @@ term =
             Parser.identity
                 |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
                 |> Parser.ooo varSeq2
+
+        handleModuleAccessSymbol : PState.ExpectedString -> ExpectedTerm
+        handleModuleAccessSymbol msg =
+            case msg of
+                PState.ExpectedString { failedAtChar } ->
+                    ExpectedModuleAccessSymbol { failedAtChar = failedAtChar }
     in
     operatorKeyword
         |> Parser.mapError ExpectedOperator
@@ -1115,6 +1136,17 @@ term =
 
                     Force ->
                         operator1 Base.Force
+
+                    -- Module Access
+                    ModuleAccess ->
+                        -- /($Nat multiply)
+                        -- /([$F $Nat] foo)
+                        mandatoryTermParens
+                            (Parser.return Base.ModuleAccess
+                                -- TODO: this will generate module-access error without telling the user that this is in the context of a module access
+                                |> Parser.ooo (moduleTerm |> Parser.mapError ExpectedModuleTermInModuleAccess)
+                                |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifier)
+                            )
             )
 
 
@@ -1295,7 +1327,13 @@ typeTerm =
 
 
 type ExpectedModuleTerm
-    = ExpectedModuleKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    = -- Module Operator Keyword
+      ExpectedModuleOperator { consumedSuccessfully : String, failedAtChar : Maybe Char }
+    | ExpectedGapAfterModuleOperator { operatorKeyword : ModuleOperatorKeyword, failedAtChar : Char }
+      -- Module Var Use
+    | ExpectedModuleIdentifier ExpectedIdentifierIntroduction
+      -- Module Literal
+    | ExpectedModuleKeyword { consumedSuccessfully : String, failedAtChar : Maybe Char }
     | ExpectedGapAfterModuleKeyword { failedAtChar : Char }
     | ExpectedModuleOpenBraces { failedAtChar : Maybe Char }
     | ExpectedModuleLetBinding ExpectedModuleLetBinding
@@ -1318,6 +1356,30 @@ type ExpectedModuleLetBinding
 expectedModuleTermToString : ExpectedModuleTerm -> String
 expectedModuleTermToString msg =
     case msg of
+        -- Module Keyword
+        ExpectedModuleOperator err ->
+            String.concat
+                [ "Expected module operator keyword ("
+                , consumedSuccessfullyToString err
+                , ", "
+                , failedAtMaybeCharToString err
+                , ")"
+                ]
+
+        ExpectedGapAfterModuleOperator err ->
+            String.concat
+                [ "Succesfully parsed module operator keyword `"
+                , moduleOperatorKeywordToString err.operatorKeyword
+                , "`, but failed to see a gap following it ("
+                , failedAtCharToString err
+                , ")"
+                ]
+
+        -- Module Var Use
+        ExpectedModuleIdentifier err ->
+            expectedIdentifierIntroductionToString "module" err
+
+        -- Module Literal
         ExpectedModuleKeyword failedAtCharError ->
             String.concat
                 [ "Expected the keyword `module` "
@@ -1417,6 +1479,62 @@ moduleTermErrorToString error =
 -- =Terms=
 
 
+type ModuleOperatorKeyword
+    = ModuleVarUse
+    | ModuleLiteralTerm
+    | FunctorApplication
+
+
+allModuleOperatorKeywords : List ModuleOperatorKeyword
+allModuleOperatorKeywords =
+    [ ModuleVarUse, ModuleLiteralTerm, FunctorApplication ]
+
+
+moduleOperatorKeywordToString : ModuleOperatorKeyword -> String
+moduleOperatorKeywordToString keyword0 =
+    case keyword0 of
+        ModuleVarUse ->
+            "$"
+
+        ModuleLiteralTerm ->
+            "module"
+
+        FunctorApplication ->
+            "["
+
+
+moduleOperatorKeyword : Parser ExpectedModuleTerm ModuleOperatorKeyword
+moduleOperatorKeyword =
+    let
+        handleKeyword msg =
+            case msg of
+                PState.ExpectedStringIn { consumedSuccessfully, failedAtChar } ->
+                    ExpectedModuleOperator { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
+
+        handleGap keyword0 msg =
+            case msg of
+                ExpectedKeywordGapCharacter { failedAtChar } ->
+                    ExpectedGapAfterModuleOperator { operatorKeyword = keyword0, failedAtChar = failedAtChar }
+    in
+    Parser.stringIn
+        [ ( "$", ModuleVarUse )
+        , ( "module", ModuleLiteralTerm )
+        , ( "[", FunctorApplication )
+        ]
+        |> Parser.mapError handleKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    ModuleVarUse ->
+                        Parser.return ModuleVarUse
+
+                    _ ->
+                        Parser.return keyword0
+                            |> Parser.o (keywordGap |> Parser.mapError (handleGap keyword0))
+            )
+        |> Parser.o spaces
+
+
 moduleVarIntro : Parser ExpectedIdentifierIntroduction ModuleVarName
 moduleVarIntro =
     identifier
@@ -1424,27 +1542,26 @@ moduleVarIntro =
 
 moduleTerm : Parser ExpectedModuleTerm ModuleTerm
 moduleTerm =
-    -- Either a module literal or a functor application
-    -- TODO: add functor application/module var use
-    moduleLiteral |> Parser.map Base.ModuleLiteralTerm
+    moduleOperatorKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    ModuleVarUse ->
+                        moduleVarIntro
+                            |> Parser.mapError ExpectedModuleIdentifier
+                            |> Parser.map Base.ModuleVarUse
+
+                    ModuleLiteralTerm ->
+                        moduleLiteral |> Parser.map Base.ModuleLiteralTerm
+
+                    FunctorApplication ->
+                        Debug.todo ""
+            )
 
 
 moduleLiteral : Parser ExpectedModuleTerm ModuleLiteral
 moduleLiteral =
     let
-        handleModuleKeyword : Either PState.ExpectedString ExpectedKeywordGapCharacter -> ExpectedModuleTerm
-        handleModuleKeyword err =
-            case err of
-                Either.Left expectedStringMsg ->
-                    case expectedStringMsg of
-                        PState.ExpectedString { expected, consumedSuccessfully, failedAtChar } ->
-                            ExpectedModuleKeyword { consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar }
-
-                Either.Right expectedKeywordGapCharacter ->
-                    case expectedKeywordGapCharacter of
-                        ExpectedKeywordGapCharacter { failedAtChar } ->
-                            ExpectedGapAfterModuleKeyword { failedAtChar = failedAtChar }
-
         handleOpenBraces : PState.ExpectedString -> ExpectedModuleTerm
         handleOpenBraces msg =
             case msg of
@@ -1463,7 +1580,7 @@ moduleLiteral =
                     ExpectedSemicolonAfterModuleLetBinding { failedAtChar = failedAtChar }
     in
     Parser.return (\bindings -> { bindings = bindings })
-        |> Parser.o (keyword "module" |> Parser.mapError handleModuleKeyword)
+        -- TODO: move the parsing of "module" keyword to `moduleTerm`
         |> Parser.o (symbol "{" |> Parser.mapError handleOpenBraces)
         |> Parser.ooo
             (Parser.repeatUntil

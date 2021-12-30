@@ -63,7 +63,7 @@ type alias ModuleModel =
     , env : Value.Environment
     , -- ===REPL===
       replInput : String
-    , parsedTerm : Maybe (Result L.TermParsingError Term)
+    , parsedTerm : Maybe (Result (PError.Error NewLambdaParser.ExpectedTerm) Term)
     , evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     }
 
@@ -123,58 +123,6 @@ openModule model =
 initModuleModel : ModuleModel
 initModuleModel =
     let
-        input0 =
-            """(module
-    (let-module Nat (module
-        (let-term plus (fn { x y .
-                 (nat-loop $x $y { state .
-                    (succ $state)
-                 })
-        })) 
-   
-        (let-term multiply (fn { x y .
-                 (nat-loop $x 0n0 { state .
-                     (@ $plus $y $state)
-                 })
-        }))
-   
-       (let-term exp (fn { x y .
-                (nat-loop $y 0n1 { state .
-                      (@ $multiply $x $state)
-                })
-       }))
-   ))
-
-   (let-module List (module
-       (let-term map (fn { f xs .
-                (list-loop $xs empty-list { x ys .
-                      (cons (@ $f $x) $ys)
-                })
-       }))
-
-       (let-term concat (fn { xs ys .
-               (list-loop $xs $ys { x state .
-                     (cons $x $state)
-               })
-       }))
-
-      (let-term singleton (fn { x .
-               (cons $x empty-list)
-      }))
-
-      (let-term and-then (fn { f xs .
-               (list-loop $xs empty-list { x state .
-                     (@ $concat (@ $f $x) $state)
-               }) 
-      }))
-
-   ))
-            
-
-   (let-term square (fn { x . (@ (-> $Nat multiply) $x $x) }))
-)
-"""
-
         input1 =
             """module {
 
@@ -221,7 +169,7 @@ initModuleModel =
     };
   };
 
-  let-term identity = \\{ x . $x };
+  let-term square = \\{ x . [/($Nat multiply) $x $x] };
 }
 """
 
@@ -527,7 +475,7 @@ updateModuleModel msg model =
         ReplInputChanged input ->
             let
                 parsedTerm =
-                    Just (L.parseTerm input)
+                    Just (NewLambdaParser.runTerm input)
             in
             { model
                 | replInput = input
@@ -833,7 +781,7 @@ viewModule moduleModel =
                                                         E.text ""
 
                                             Err err ->
-                                                E.text "Parsing Error"
+                                                E.text (NewLambdaParser.termErrorToString err)
 
                                     Nothing ->
                                         E.text ""
