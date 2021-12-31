@@ -15,11 +15,11 @@ module Lib.State.Reader exposing
     , map5
     , mapState
     , pair
+    , push
     , read
     , return
     , run
     , sequence
-    , withState
     )
 
 
@@ -38,8 +38,8 @@ read f =
         f readOnlyState readOnlyState
 
 
-withState : r -> Reader r a -> Reader r a
-withState newState reader_a =
+push : r -> Reader r a -> Reader r a
+push newState reader_a =
     \_ ->
         reader_a newState
 

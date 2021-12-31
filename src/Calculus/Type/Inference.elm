@@ -298,7 +298,7 @@ infer term =
                 (infer fst)
                 (infer snd)
 
-        Base.MatchProduct { arg, var0, var1, body } ->
+        Base.MatchPair arg { var0, var1, body } ->
             -- argType0 := infer arg
             -- varType0 := generateFreshVar
             -- varType1 := generateFreshVar
@@ -340,7 +340,7 @@ infer term =
                 generateFreshVar
                 generateFreshVar
 
-        Base.Abstraction var body ->
+        Base.Abstraction { var, body } ->
             -- typeVar := generateFreshVar;
             -- updateContext (\context -> context |> pushVarToContext var typeVar);
             -- typeBody := infer body;
@@ -399,7 +399,7 @@ infer term =
                 generateFreshVar
                 (infer rightTerm)
 
-        Base.Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+        Base.MatchSum arg { leftBranch, rightBranch } ->
             -- typeArg := infer arg;
             -- leftTypeVar := generateFreshVar;
             -- rightTypeVar := generateFreshVar;
@@ -429,14 +429,14 @@ infer term =
                                                 unify typeLeftBody typeRightBody
                                             )
                                             (State.mid
-                                                (updateContext0 (\context -> context |> pushVarToContext leftVar leftType))
-                                                (infer leftBody)
-                                                (updateContext0 (\context -> context |> popVarFromContext leftVar))
+                                                (updateContext0 (\context -> context |> pushVarToContext leftBranch.var leftType))
+                                                (infer leftBranch.body)
+                                                (updateContext0 (\context -> context |> popVarFromContext leftBranch.var))
                                             )
                                             (State.mid
-                                                (updateContext0 (\context -> context |> pushVarToContext rightVar rightType))
-                                                (infer rightBody)
-                                                (updateContext0 (\context -> context |> popVarFromContext rightVar))
+                                                (updateContext0 (\context -> context |> pushVarToContext rightBranch.var rightType))
+                                                (infer rightBranch.body)
+                                                (updateContext0 (\context -> context |> popVarFromContext rightBranch.var))
                                             )
 
                                     _ ->
@@ -453,7 +453,7 @@ infer term =
         Base.ConstFalse ->
             State.return Base.ConstBool
 
-        Base.IfThenElse arg leftBody rightBody ->
+        Base.MatchBool arg { trueBranch, falseBranch } ->
             -- argType := infer arg;
             -- unify argType LambdaBool;
             -- typeLeftBody := infer leftBody;
@@ -467,8 +467,8 @@ infer term =
                         )
                 )
                 (State.andThen2 unify
-                    (infer leftBody)
-                    (infer rightBody)
+                    (infer trueBranch.body)
+                    (infer falseBranch.body)
                 )
 
         Base.ConstZero ->
@@ -483,24 +483,22 @@ infer term =
                         unify type1 Base.ConstNat
                     )
 
-        Base.NatLoop { base, loop, arg } ->
+        Base.FoldNat arg { zeroBranch, succBranch } ->
             -- argType := infer arg;
             -- unify argType LambdaNat
             --
-            -- baseType := infer base;
+            -- baseType := infer zeroBranch.body;
             --
             -- updateContext
             --   (\context ->
             --       context
-            --           |> pushVarToContext loop.indexVar LambdaNat
-            --           |> pushVarToContext loop.stateVar baseType
+            --           |> pushVarToContext succBranch.var baseType
             --   );
-            -- loopBodyType := infer loop.body;
+            -- loopBodyType := infer succBranch.var;
             -- updateContext
             --   (\context ->
             --       context
-            --           |> popVarFromContext loop.stateVar
-            --           |> popVarFromContext loop.indexVar
+            --           |> popVarFromContext succBranch.var
             --   );
             --
             -- unify loopBodyType baseType;
@@ -514,7 +512,7 @@ infer term =
             in
             State.second
                 argInference
-                (infer base
+                (infer zeroBranch.body
                     |> State.andThen
                         (\baseType ->
                             let
@@ -523,16 +521,14 @@ infer term =
                                         (updateContext0
                                             (\context ->
                                                 context
-                                                    |> pushVarToContext loop.indexVar Base.ConstNat
-                                                    |> pushVarToContext loop.stateVar baseType
+                                                    |> pushVarToContext succBranch.var baseType
                                             )
                                         )
-                                        (infer loop.body)
+                                        (infer succBranch.body)
                                         (updateContext0
                                             (\context ->
                                                 context
-                                                    |> popVarFromContext loop.stateVar
-                                                    |> popVarFromContext loop.indexVar
+                                                    |> popVarFromContext succBranch.var
                                             )
                                         )
                             in
@@ -559,8 +555,8 @@ infer term =
                 (infer headTerm)
                 (infer tailTerm)
 
-        Base.ListLoop { initState, loop, arg } ->
-            -- stateType0 := infer initState;
+        Base.FoldList arg { emptyBranch, consBranch } ->
+            -- stateType0 := infer emptyBranch;
             -- argType0 := infer arg;
             -- innerListVar := generateFreshVar;
             -- argType1 := unify (LambdaList innerListVar) argType0;
@@ -574,15 +570,15 @@ infer term =
             --     updateContext
             --       (\context ->
             --           context
-            --               |> pushVarToContext loop.listElementVar innerType1
-            --               |> pushVarToContext loop.stateVar stateType1
+            --               |> pushVarToContext succBranch.var0 innerType1
+            --               |> pushVarToContext succBranch.var1 stateType1
             --       );
-            --     loopBodyType := infer loop.body
+            --     loopBodyType := infer succBranch.body
             --     updateContext
             --       (\context ->
             --           context
-            --               |> popVarToContext loop.listElementVar
-            --               |> popVarToContext loop.stateVar
+            --               |> popVarToContext succBranch.var1
+            --               |> popVarToContext succBranch.var0
             --       );
             --
             --     unify loopBodyType stateType1
@@ -605,16 +601,16 @@ infer term =
                                                                 (updateContext0
                                                                     (\context ->
                                                                         context
-                                                                            |> pushVarToContext loop.listElementVar innerType1
-                                                                            |> pushVarToContext loop.stateVar stateType1
+                                                                            |> pushVarToContext consBranch.var0 innerType1
+                                                                            |> pushVarToContext consBranch.var1 stateType1
                                                                     )
                                                                 )
-                                                                (infer loop.body)
+                                                                (infer consBranch.body)
                                                                 (updateContext0
                                                                     (\context ->
                                                                         context
-                                                                            |> popVarFromContext loop.listElementVar
-                                                                            |> popVarFromContext loop.stateVar
+                                                                            |> popVarFromContext consBranch.var1
+                                                                            |> popVarFromContext consBranch.var0
                                                                     )
                                                                 )
                                                                 |> State.andThen
@@ -630,13 +626,13 @@ infer term =
                                         )
                             )
                 )
-                (infer initState)
+                (infer emptyBranch.body)
                 (infer arg)
                 generateFreshVar
                 generateFreshVar
 
         -- ===Freeze===
-        Base.Delay body ->
+        Base.Delay { body } ->
             infer body
                 |> State.map Base.Frozen
 
@@ -658,7 +654,7 @@ infer term =
                 generateFreshVar
 
         -- ===Let===
-        Base.Let var exp body ->
+        Base.LetBe exp { var, body } ->
             inferAndClose exp
                 |> State.andThen
                     (\closedExpType ->

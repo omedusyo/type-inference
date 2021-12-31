@@ -4,6 +4,10 @@ import Calculus.Base as Base exposing (Interface, ModuleLiteral)
 import Calculus.Type.Inference as TypeInference
 
 
+abs var body =
+    Base.Abstraction { var = var, body = body }
+
+
 
 -- examples
 
@@ -72,7 +76,7 @@ pair1Type =
 
 
 matchProduct0 =
-    Base.MatchProduct { arg = Base.Pair n0 n1, var0 = "x", var1 = "y", body = Base.VarUse "x" }
+    Base.MatchPair (Base.Pair n0 n1) { var0 = "x", var1 = "y", body = Base.VarUse "x" }
 
 
 matchProduct0Type =
@@ -81,7 +85,7 @@ matchProduct0Type =
 
 id =
     -- \x -> x
-    Base.Abstraction "x" (Base.VarUse "x")
+    abs "x" (Base.VarUse "x")
 
 
 idType =
@@ -91,7 +95,7 @@ idType =
 
 dup =
     -- \x -> (x, x)
-    Base.Abstraction "x" (Base.Pair (Base.VarUse "x") (Base.VarUse "x"))
+    abs "x" (Base.Pair (Base.VarUse "x") (Base.VarUse "x"))
 
 
 dupType =
@@ -101,11 +105,11 @@ dupType =
 
 twist =
     -- \p -> (match-pair p { (pair x y) . (pair y x) })
-    Base.Abstraction
+    abs
         "p"
-        (Base.MatchProduct
-            { arg = Base.VarUse "p"
-            , var0 = "x"
+        (Base.MatchPair
+            (Base.VarUse "p")
+            { var0 = "x"
             , var1 = "y"
             , body = Base.Pair (Base.VarUse "y") (Base.VarUse "x")
             }
@@ -119,8 +123,8 @@ twistType =
 
 apply =
     --  \f x -> f x
-    Base.Abstraction "f"
-        (Base.Abstraction "x"
+    abs "f"
+        (abs "x"
             (Base.Application (Base.VarUse "f") (Base.VarUse "x"))
         )
 
@@ -132,8 +136,8 @@ applyType =
 
 pairing =
     -- \x y -> (x, y)
-    Base.Abstraction "x"
-        (Base.Abstraction "y"
+    abs "x"
+        (abs "y"
             (Base.Pair (Base.VarUse "x") (Base.VarUse "y"))
         )
 
@@ -145,9 +149,9 @@ pairingType =
 
 curry =
     -- \f x y -> f (x, y)
-    Base.Abstraction "f"
-        (Base.Abstraction "x"
-            (Base.Abstraction "y"
+    abs "f"
+        (abs "x"
+            (abs "y"
                 (Base.Application
                     (Base.VarUse "f")
                     (Base.Pair (Base.VarUse "x") (Base.VarUse "y"))
@@ -163,11 +167,11 @@ curryType =
 
 uncurry =
     -- (fn { f p . (match-pair p { x y . (@ f x y) }) })
-    Base.Abstraction "f"
-        (Base.Abstraction "p"
-            (Base.MatchProduct
-                { arg = Base.VarUse "p"
-                , var0 = "x"
+    abs "f"
+        (abs "p"
+            (Base.MatchPair
+                (Base.VarUse "p")
+                { var0 = "x"
                 , var1 = "y"
                 , body = Base.Application (Base.Application (Base.VarUse "f") (Base.VarUse "x")) (Base.VarUse "y")
                 }
@@ -191,7 +195,7 @@ apply0Type =
 
 evalAt0 =
     -- \f -> f 0
-    Base.Abstraction "f" (Base.Application (Base.VarUse "f") n0)
+    abs "f" (Base.Application (Base.VarUse "f") n0)
 
 
 evalAt0Type =
@@ -201,7 +205,7 @@ evalAt0Type =
 
 succ0 =
     -- \n -> S n
-    Base.Abstraction "n" (Base.Succ (Base.VarUse "n"))
+    abs "n" (Base.Succ (Base.VarUse "n"))
 
 
 succ0Type =
@@ -211,13 +215,11 @@ succ0Type =
 
 case0 =
     -- \z -> case z of Left x -> x + 1, Right y -> y
-    Base.Abstraction "z"
-        (Base.Case
-            { arg = Base.VarUse "z"
-            , leftVar = "x"
-            , leftBody = Base.Succ (Base.VarUse "x")
-            , rightVar = "y"
-            , rightBody = Base.VarUse "y"
+    abs "z"
+        (Base.MatchSum
+            (Base.VarUse "z")
+            { leftBranch = { var = "x", body = Base.Succ (Base.VarUse "x") }
+            , rightBranch = { var = "y", body = Base.VarUse "y" }
             }
         )
 
@@ -230,16 +232,15 @@ case0Type =
 add =
     -- Addition
     -- \x y -> x + y
-    Base.Abstraction "x"
-        (Base.Abstraction "y"
-            (Base.NatLoop
-                { base = Base.VarUse "x"
-                , loop =
-                    { indexVar = "i"
-                    , stateVar = "s"
+    abs "x"
+        (abs "y"
+            (Base.FoldNat
+                (Base.VarUse "y")
+                { zeroBranch = { body = Base.VarUse "x" }
+                , succBranch =
+                    { var = "s"
                     , body = Base.Succ (Base.VarUse "s")
                     }
-                , arg = Base.VarUse "y"
                 }
             )
         )
@@ -253,16 +254,15 @@ addType =
 mul =
     -- Multiplication
     -- \x y -> x * y
-    Base.Abstraction "x"
-        (Base.Abstraction "y"
-            (Base.NatLoop
-                { base = n0
-                , loop =
-                    { indexVar = "i"
-                    , stateVar = "s"
+    abs "x"
+        (abs "y"
+            (Base.FoldNat
+                (Base.VarUse "y")
+                { zeroBranch = { body = n0 }
+                , succBranch =
+                    { var = "s"
                     , body = Base.Application (Base.Application add (Base.VarUse "x")) (Base.VarUse "s")
                     }
-                , arg = Base.VarUse "y"
                 }
             )
         )
@@ -276,16 +276,15 @@ mulType =
 exp =
     -- Multiplication
     -- \x y -> x ^ y
-    Base.Abstraction "x"
-        (Base.Abstraction "y"
-            (Base.NatLoop
-                { base = n1
-                , loop =
-                    { indexVar = "i"
-                    , stateVar = "s"
+    abs "x"
+        (abs "y"
+            (Base.FoldNat
+                (Base.VarUse "y")
+                { zeroBranch = { body = n1 }
+                , succBranch =
+                    { var = "s"
                     , body = Base.Application (Base.Application mul (Base.VarUse "x")) (Base.VarUse "s")
                     }
-                , arg = Base.VarUse "y"
                 }
             )
         )
@@ -297,17 +296,17 @@ expType =
 
 
 sumTerm =
+    -- TODO: WRONG: There's no such thing as "j"
     -- Sum
     -- \N -> (N - 1) + ... + 2 + 3 + 1 + 0
-    Base.Abstraction "N"
-        (Base.NatLoop
-            { base = n0
-            , loop =
-                { indexVar = "j"
-                , stateVar = "sum"
+    abs "N"
+        (Base.FoldNat
+            (Base.VarUse "N")
+            { zeroBranch = { body = n0 }
+            , succBranch =
+                { var = "sum"
                 , body = Base.Application (Base.Application add (Base.VarUse "j")) (Base.VarUse "sum")
                 }
-            , arg = Base.VarUse "N"
             }
         )
 
@@ -319,7 +318,7 @@ sumTermType =
 
 selfApply =
     -- \f -> f f
-    Base.Abstraction "f" (Base.Application (Base.VarUse "f") (Base.VarUse "f"))
+    abs "f" (Base.Application (Base.VarUse "f") (Base.VarUse "f"))
 
 
 selfApplyType =
@@ -340,17 +339,16 @@ range4Type =
 
 
 constList =
-    Base.Abstraction "x"
-        (Base.Abstraction "n"
-            (Base.NatLoop
-                { base = Base.ConstEmpty
-                , loop =
-                    { indexVar = "i"
-                    , stateVar = "xs"
+    abs "x"
+        (abs "n"
+            (Base.FoldNat
+                (Base.VarUse "n")
+                { zeroBranch = { body = Base.ConstEmpty }
+                , succBranch =
+                    { var = "xs"
                     , body =
                         Base.Cons (Base.VarUse "x") (Base.VarUse "xs")
                     }
-                , arg = Base.VarUse "n"
                 }
             )
         )
@@ -365,16 +363,16 @@ constTrue =
 
 
 sumList =
-    Base.Abstraction "xs"
-        (Base.ListLoop
-            { initState = n0
-            , loop =
-                { listElementVar = "x"
-                , stateVar = "s"
+    abs "xs"
+        (Base.FoldList
+            (Base.VarUse "xs")
+            { emptyBranch = { body = n0 }
+            , consBranch =
+                { var0 = "x"
+                , var1 = "s"
                 , body =
                     Base.Application (Base.Application add (Base.VarUse "x")) (Base.VarUse "s")
                 }
-            , arg = Base.VarUse "xs"
             }
         )
 
@@ -392,17 +390,17 @@ sumRange4Type =
 
 
 listMap =
-    Base.Abstraction "f"
-        (Base.Abstraction "xs"
-            (Base.ListLoop
-                { initState = Base.ConstEmpty
-                , loop =
-                    { listElementVar = "x"
-                    , stateVar = "ys"
+    abs "f"
+        (abs "xs"
+            (Base.FoldList
+                (Base.VarUse "xs")
+                { emptyBranch = { body = Base.ConstEmpty }
+                , consBranch =
+                    { var0 = "x"
+                    , var1 = "ys"
                     , body =
                         Base.Cons (Base.Application (Base.VarUse "f") (Base.VarUse "x")) (Base.VarUse "ys")
                     }
-                , arg = Base.VarUse "xs"
                 }
             )
         )
@@ -413,17 +411,17 @@ listMapType =
 
 
 listConcat =
-    Base.Abstraction "xs"
-        (Base.Abstraction "ys"
-            (Base.ListLoop
-                { initState = Base.VarUse "ys"
-                , loop =
-                    { listElementVar = "x"
-                    , stateVar = "zs"
+    abs "xs"
+        (abs "ys"
+            (Base.FoldList
+                (Base.VarUse "xs")
+                { emptyBranch = { body = Base.VarUse "ys" }
+                , consBranch =
+                    { var0 = "x"
+                    , var1 = "zs"
                     , body =
                         Base.Cons (Base.VarUse "x") (Base.VarUse "zs")
                     }
-                , arg = Base.VarUse "xs"
                 }
             )
         )
@@ -434,13 +432,14 @@ listConcatType =
 
 
 listAndThen =
-    Base.Abstraction "f"
-        (Base.Abstraction "xs"
-            (Base.ListLoop
-                { initState = Base.ConstEmpty
-                , loop =
-                    { listElementVar = "x"
-                    , stateVar = "ys"
+    abs "f"
+        (abs "xs"
+            (Base.FoldList
+                (Base.VarUse "xs")
+                { emptyBranch = { body = Base.ConstEmpty }
+                , consBranch =
+                    { var0 = "x"
+                    , var1 = "ys"
                     , body =
                         Base.Application
                             (Base.Application listConcat
@@ -448,14 +447,13 @@ listAndThen =
                             )
                             (Base.VarUse "ys")
                     }
-                , arg = Base.VarUse "xs"
                 }
             )
         )
 
 
 listReturn =
-    Base.Abstraction "x" (Base.Cons (Base.VarUse "x") Base.ConstEmpty)
+    abs "x" (Base.Cons (Base.VarUse "x") Base.ConstEmpty)
 
 
 listReturnType =
@@ -470,7 +468,7 @@ module0 : ModuleLiteral
 module0 =
     { bindings =
         [ Base.LetTerm "n" Base.ConstZero
-        , Base.LetTerm "f" (Base.Abstraction "x" (Base.Pair (Base.VarUse "x") (Base.VarUse "n")))
+        , Base.LetTerm "f" (abs "x" (Base.Pair (Base.VarUse "x") (Base.VarUse "n")))
         ]
     }
 

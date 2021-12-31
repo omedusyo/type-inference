@@ -1,11 +1,11 @@
 module Main exposing (..)
 
 import Browser
-import Calculus.Base as L exposing (Term, Type)
+import Calculus.Base as L exposing (ModuleTerm, Term, Type)
 import Calculus.Evaluation.Evaluation as L exposing (ThunkContext)
 import Calculus.Evaluation.Value as Value exposing (Value)
 import Calculus.Example
-import Calculus.Parser as L
+import Calculus.Parser as LambdaParser
 import Calculus.Show as L
 import Calculus.Type.Inference as L
 import Calculus.Type.TypeVarContext as L
@@ -15,6 +15,8 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html as H exposing (Html)
+import Lib.Parser.Error as PError
+import Lib.Parser.Parser as NewParser
 import Lib.State.StatefulWithErr as State
 import List.Extra as List
 import Return exposing (Return)
@@ -55,12 +57,12 @@ type alias Model =
 type alias ModuleModel =
     { moduleInput : String
     , -- Nothing means haven't parsed anything yet
-      parsedModule : Maybe (Result L.TermParsingError L.ModuleTerm)
+      parsedModule : Maybe (Result (PError.Error LambdaParser.ExpectedModuleTerm) ModuleTerm)
     , evaledModule : Maybe (Result (List L.EvalError) Value.ModuleValue)
     , env : Value.Environment
     , -- ===REPL===
       replInput : String
-    , parsedTerm : Maybe (Result L.TermParsingError Term)
+    , parsedTerm : Maybe (Result (PError.Error LambdaParser.ExpectedTerm) Term)
     , evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     }
 
@@ -68,7 +70,7 @@ type alias ModuleModel =
 parseModule : ModuleModel -> ModuleModel
 parseModule model =
     { model
-        | parsedModule = Just (L.parseModuleTerm model.moduleInput)
+        | parsedModule = Just (LambdaParser.runModuleTerm model.moduleInput)
     }
 
 
@@ -120,62 +122,58 @@ openModule model =
 initModuleModel : ModuleModel
 initModuleModel =
     let
-        input =
-            """(module
-    (let-module Nat (module
-        (let-term plus (fn { x y .
-                 (nat-loop $x $y { i state .
-                    (succ $state)
-                 })
-        })) 
-   
-        (let-term multiply (fn { x y .
-                 (nat-loop $x 0n0 { i state .
-                     (@ $plus $y $state)
-                 })
-        }))
-   
-       (let-term exp (fn { x y .
-                (nat-loop $y 0n1 { i state .
-                      (@ $multiply $x $state)
-                })
-       }))
-   ))
+        input1 =
+            """module {
 
-   (let-module List (module
-       (let-term map (fn { f xs .
-                (list-loop $xs empty-list { x ys .
-                      (cons (@ $f $x) $ys)
-                })
-       }))
+  let-module Nat = module {
+    let-term plus = \\{ x y .
+      fold-nat $x
+        { zero . $y }
+        { succ(state) . succ($state) }
+    };
 
-       (let-term concat (fn { xs ys .
-               (list-loop $xs $ys { x state .
-                     (cons $x $state)
-               })
-       }))
+    let-term multiply = \\{ x y .
+      fold-nat $x
+        { zero . 00 }
+        { succ(state) . [$plus $y $state] }
+    };
 
-      (let-term singleton (fn { x .
-               (cons $x empty-list)
-      }))
+    let-term exp = \\{ base exponent .
+      fold-nat $exponent
+        { zero . 01 }
+        { succ(state) . [$multiply $base $state] }
+    };
 
-      (let-term and-then (fn { f xs .
-               (list-loop $xs empty-list { x state .
-                     (@ $concat (@ $f $x) $state)
-               }) 
-      }))
+  };
 
-   ))
-            
-       (let-term range-reverse (fn { n .
-                (nat-loop $n empty-list { i xs .
-                       (cons $i $xs)
-                })
-       }))
+  let-module List = module {
+    let-term map = \\{ f xs .
+      fold-list $xs
+        { empty . empty }
+        { cons(x state) . cons([$f $x] $state) }
+    };
 
-   (let-term square (fn { x . (@ (-> $Nat multiply) $x $x) }))
-)
+    let-term concat = \\{ xs ys .
+      fold-list $xs
+        { empty . $ys }
+        { cons(x state) . cons($x $state) }
+    };
+
+    let-term singleton = \\{ x . cons($x empty) };
+
+    let-term and-then = \\{ f xs .
+      fold-list $xs
+        { empty . empty }
+        { cons(x state) . [$concat [$f $x] $state] }
+    };
+  };
+
+  let-term square = \\{ x . [/($Nat multiply) $x $x] };
+}
 """
+
+        input =
+            input1
     in
     { moduleInput = input
     , parsedModule = Nothing
@@ -235,7 +233,7 @@ type alias Binding =
     { name : BindingName
     , input : String
     , -- Nothing means haven't parsed anything yet
-      parsedTerm : Maybe (Result L.TermParsingError Term)
+      parsedTerm : Maybe (Result (PError.Error LambdaParser.ExpectedTerm) Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
@@ -256,54 +254,59 @@ exampleBinding : Binding
 exampleBinding =
     let
         input0 =
-            """(let 
-    (fn { p .
-        (match-pair $p
-            { (pair x y) . (pair $y $x) }) })
-    { flip .
-       (pair
-           (@ $flip (pair 0n0 0n1) )
-           (@ $flip (pair true false) ) )
-    })"""
+            """let flip = \\{ p .
+    match-pair $p
+        { pair(x y) . pair($y $x) }
+};
+pair(
+    [$flip pair(00 01)],
+    [$flip pair(true false)]
+)
+"""
 
         input1 =
-            "(pair (if true { $a } { $b }) (pair (if true{0n0}{$a}) (if true{0n1}{$b}))  )"
+            """pair(
+    match-bool true { true . $a } { false . $b },
+    pair(
+        match-bool true { true . 00 } { false . $a },
+        match-bool true { true . 01 } { false . $b },
+    )
+)"""
 
         input2 =
-            "(pair (if true { $a } { $b }) (pair  (if true{0n1}{$b}) (if true{0n0}{$a}))  )"
-
-        input3 =
-            "(pair  (pair (if true{0n0}{$a}) (if true{0n1}{$b})) (if true { $a } { $b }) )"
+            """[ \\{x . succ($x)} 04 ]
+"""
 
         input4 =
-            "(fn { f p . (match-pair $p { (pair x y) . (@ $f $x $y) }) })"
+            -- { pair(x y) . [$f $x $y] }
+            """\\{ f p .
+    match-pair $p
+        { pair(x y) . [$f $x $y] }
+}
+"""
 
         input5 =
-            "(let (fn { x . $x }) { f . $f })"
+            -- "(let (fn { x . $x }) { f . $f })"
+            """let f = \\{ x . $x };
+$f"""
 
         input6 =
-            """(let
-        (fn {f x . (@ $f (@ $f $x) ) })
-        { twice .
-           (let
-              (fn { x . (succ $x) })
-              { plus-one .
-                 (let (fn { b .  (if $b { false } { true }) })
-                   { not .
-                      (pair $twice $plus-one )
-                   })
-              })
-        })
-        """
+            """let twice = \\{ f x .
+    [$f [$f $x]]
+};
+let plus-one = \\{ x . succ($x) };
+let not = \\{ b . match-bool $b { true . false } { false . true } };
+pair($twice $plus-one)
+"""
 
         input7 =
-            "(@ (fn {. 0n0}) )"
+            "delay {. 00}"
 
         input =
             input0
 
         termResult =
-            L.parseTerm input
+            LambdaParser.runTerm input
     in
     { name = "foo"
     , input = input
@@ -420,7 +423,7 @@ updateBinding msg model =
         InputChanged input ->
             { model
                 | input = input
-                , parsedTerm = Just (L.parseTerm input)
+                , parsedTerm = Just (LambdaParser.runTerm input)
                 , evaledTerm = Nothing
                 , inferedType = Nothing
             }
@@ -453,7 +456,7 @@ updateModuleModel msg model =
         ModuleInputChanged input ->
             { model
                 | moduleInput = input
-                , parsedModule = Just (L.parseModuleTerm input)
+                , parsedModule = Just (LambdaParser.runModuleTerm input)
                 , evaledTerm = Nothing
                 , env = Value.emptyEnvironment
             }
@@ -471,7 +474,7 @@ updateModuleModel msg model =
         ReplInputChanged input ->
             let
                 parsedTerm =
-                    Just (L.parseTerm input)
+                    Just (LambdaParser.runTerm input)
             in
             { model
                 | replInput = input
@@ -562,7 +565,8 @@ viewBinding binding =
                                             L.showTerm term
 
                                         Err err ->
-                                            "Parsing Error"
+                                            -- "Parsing Error"
+                                            LambdaParser.termErrorToString err
                             ]
                         )
                     , E.el []
@@ -722,7 +726,7 @@ viewModule moduleModel =
                 , label = E.text "Run"
                 }
             , Input.multiline
-                [ E.height (E.px 700)
+                [ E.height (E.px 500)
                 , E.width E.fill
                 ]
                 { onChange = ModuleInputChanged
@@ -776,14 +780,14 @@ viewModule moduleModel =
                                                         E.text ""
 
                                             Err err ->
-                                                E.text "Parsing error"
+                                                E.text (LambdaParser.termErrorToString err)
 
                                     Nothing ->
                                         E.text ""
                                 ]
 
-                        Err _ ->
-                            E.text "Parsing error"
+                        Err err ->
+                            E.text (LambdaParser.moduleTermErrorToString err)
 
                 Nothing ->
                     E.text ""
@@ -794,37 +798,49 @@ viewModule moduleModel =
 viewHelp : Element Msg
 viewHelp =
     E.column [ E.width E.fill ]
-        [ E.text "example: `(fn { p . (match-pair $p { (pair x y) . (pair $y $x) }) })`"
+        [ E.text ""
+        , E.text "example: `\\{ p . match-pair $p { pair(x y) . pair($y $x) } }`"
         , E.text "which in more standard lambda notation would be something like: `\\p. case p of (x, y) -> (y, x)`"
+        , E.text ""
         , E.text "SYNTAX"
+        , E.text ""
         , E.text "Constants"
         , E.text "  true, false"
-        , E.text "  0n0, 0n1, 0n2, 0n3, ..."
-        , E.text "  empty-list"
+        , E.text "  zero"
+        , E.text "  00, 01, 02, 03, ... // nat literals have to start with 0 digit (`zero` is the same as `00`)"
+        , E.text "  empty // empty list"
+        , E.text ""
         , E.text ""
         , E.text "Variable Use"
         , E.text "  $foo // when using a variable, you have to prepend a dollar sign to it"
         , E.text ""
+        , E.text ""
         , E.text "Simple Operators"
-        , E.text "  (pair e e')"
-        , E.text "  (@ f x) // this is function application"
-        , E.text "  (@ f x y)"
-        , E.text "  (left e)"
-        , E.text "  (right e)"
-        , E.text "  (succ n)      // this is the natural numbers successor function"
-        , E.text "  (cons x xs) // this is consing of an element to a list"
+        , E.text "  pair($e1 $e2)"
+        , E.text "  [$f $x] // function application"
+        , E.text "  [$f $x $y]"
+        , E.text "  left($e1)"
+        , E.text "  right($e2)"
+        , E.text "  succ($n)      // natural numbers successor function"
+        , E.text "  cons($x $xs) // consing of an element to a list"
+        , E.text ""
         , E.text ""
         , E.text "Bindings Operators"
-        , E.text "  (fn { x . body })"
-        , E.text "  (fn { x y . body })"
-        , E.text "  (match-pair pairExp { (pair x y) . body })"
-        , E.text "  (if e { e1 } { e2 })"
-        , E.text "  (sum-case e { (left x) . e1 } { (right y) . e2 })"
-        , E.text "  (nat-loop   n initState { i s . body })"
-        , E.text "  (list-loop xs initState { x s . body })"
-        , E.text "  (let exp { x . body }) // standard syntax `let x = exp in body`"
-        , E.text "  (fn {. body }) // freezes computation"
-        , E.text "  (@ thunk) // forces computation"
+        , E.text "  \\{ x . $body }"
+        , E.text "  \\{ x y . $body }"
+        , E.text ""
+        , E.text "  match-pair $pair-exp { pair(x y) . $body }"
+        , E.text "  match-bool $test-exp { true . $e1 } { false . $e2 } // if expression"
+        , E.text "  match-sum $sum-exp { left(x) . $e1 } { right(y) . $e2 }"
+        , E.text ""
+        , E.text "  fold-nat $n { zero . $init-state } { succ(prev-state) . $next-state } // for-loop over natural numbers"
+        , E.text "  fold-list $xs { empty . $init-state } { cons(x prev-state) . $next-state } // for-loop over lists"
+        , E.text ""
+        , E.text "  let-be $exp { x . $body }) // standard syntax `let x = exp in body`"
+        , E.text "  let x = $exp; $body // syntactic sugar for `let-be`"
+        , E.text ""
+        , E.text "  delay {. $body } // freezes computation"
+        , E.text "  force($thunk) // forces computation"
         ]
 
 

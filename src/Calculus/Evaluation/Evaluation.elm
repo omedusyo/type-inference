@@ -277,7 +277,7 @@ eval term =
                 (eval fst)
                 (eval snd)
 
-        Base.MatchProduct { arg, var0, var1, body } ->
+        Base.MatchPair arg { var0, var1, body } ->
             eval arg
                 |> State.andThen
                     (\argEvaled ->
@@ -295,7 +295,7 @@ eval term =
                                 throwEvalError [ ExpectedPair ]
                     )
 
-        Base.Abstraction var body ->
+        Base.Abstraction { var, body } ->
             State.get0
                 (\env _ ->
                     -- Note that this captures both term and module environments
@@ -330,18 +330,18 @@ eval term =
             eval term1
                 |> State.map Value.Right
 
-        Base.Case { arg, leftVar, leftBody, rightVar, rightBody } ->
+        Base.MatchSum arg { leftBranch, rightBranch } ->
             eval arg
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             Value.Left val ->
-                                State.withReadOnly (\env _ -> env |> Value.extendTermEnvironment leftVar val)
-                                    (eval leftBody)
+                                State.withReadOnly (\env _ -> env |> Value.extendTermEnvironment leftBranch.var val)
+                                    (eval leftBranch.body)
 
                             Value.Right val ->
-                                State.withReadOnly (\env _ -> env |> Value.extendTermEnvironment rightVar val)
-                                    (eval rightBody)
+                                State.withReadOnly (\env _ -> env |> Value.extendTermEnvironment rightBranch.var val)
+                                    (eval rightBranch.body)
 
                             _ ->
                                 throwEvalError [ ExpectedLeftRight ]
@@ -353,16 +353,16 @@ eval term =
         Base.ConstFalse ->
             State.return Value.ConstFalse
 
-        Base.IfThenElse arg leftBody rightBody ->
+        Base.MatchBool arg { trueBranch, falseBranch } ->
             eval arg
                 |> State.andThen
                     (\argEvaled ->
                         case argEvaled of
                             Value.ConstTrue ->
-                                eval leftBody
+                                eval trueBranch.body
 
                             Value.ConstFalse ->
-                                eval rightBody
+                                eval falseBranch.body
 
                             _ ->
                                 throwEvalError [ ExpectedBoolean ]
@@ -383,8 +383,7 @@ eval term =
                                 throwEvalError [ ExpectedNat ]
                     )
 
-        Base.NatLoop { base, loop, arg } ->
-            -- TODO: error on same var name? loop.indexVar, loop.stateVar
+        Base.FoldNat arg { zeroBranch, succBranch } ->
             eval arg
                 |> State.andThen
                     (\argEvaled ->
@@ -394,7 +393,7 @@ eval term =
                                     evalNatLoop natVal0 =
                                         case natVal0 of
                                             Value.ConstZero ->
-                                                eval base
+                                                eval zeroBranch.body
 
                                             Value.Succ natVal1 ->
                                                 evalNatLoop natVal1
@@ -403,10 +402,9 @@ eval term =
                                                             State.withReadOnly
                                                                 (\env _ ->
                                                                     env
-                                                                        |> Value.extendTermEnvironment loop.indexVar (Value.NatValue natVal1)
-                                                                        |> Value.extendTermEnvironment loop.stateVar prevVal
+                                                                        |> Value.extendTermEnvironment succBranch.var prevVal
                                                                 )
-                                                                (eval loop.body)
+                                                                (eval succBranch.body)
                                                         )
                                 in
                                 evalNatLoop natVal
@@ -427,7 +425,7 @@ eval term =
                                 (\tailValue -> Value.ListValue (Value.Cons headValue tailValue))
                     )
 
-        Base.ListLoop { initState, loop, arg } ->
+        Base.FoldList arg { emptyBranch, consBranch } ->
             eval arg
                 |> State.andThen
                     (\argValue ->
@@ -437,7 +435,7 @@ eval term =
                                     evalListLoop listValue0 =
                                         case listValue0 of
                                             Value.ConstEmpty ->
-                                                eval initState
+                                                eval emptyBranch.body
 
                                             Value.Cons headValue restValue ->
                                                 case restValue of
@@ -448,10 +446,10 @@ eval term =
                                                                     State.withReadOnly
                                                                         (\env _ ->
                                                                             env
-                                                                                |> Value.extendTermEnvironment loop.listElementVar headValue
-                                                                                |> Value.extendTermEnvironment loop.stateVar prevVal
+                                                                                |> Value.extendTermEnvironment consBranch.var0 headValue
+                                                                                |> Value.extendTermEnvironment consBranch.var1 prevVal
                                                                         )
-                                                                        (eval loop.body)
+                                                                        (eval consBranch.body)
                                                                 )
 
                                                     _ ->
@@ -463,7 +461,7 @@ eval term =
                                 throwEvalError [ ExpectedList ]
                     )
 
-        Base.Delay body ->
+        Base.Delay { body } ->
             State.get0
                 (\env _ ->
                     storeNewThunk env body
@@ -483,7 +481,7 @@ eval term =
                                 throwEvalError [ ExpectedThunkClosure ]
                     )
 
-        Base.Let var arg body ->
+        Base.LetBe arg { var, body } ->
             eval arg
                 |> State.andThen
                     (\argVal ->

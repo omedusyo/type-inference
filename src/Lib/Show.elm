@@ -1,4 +1,12 @@
-module Lib.Show exposing (Show, commaList, implement, show)
+module Lib.Show exposing
+    ( Show
+    , char
+    , commaList
+    , implement
+    , int
+    , show
+    , string
+    )
 
 -- Note that I don't expose the record
 
@@ -27,3 +35,18 @@ commaList implementation =
                 |> List.map (show implementation)
                 |> String.join ", "
         )
+
+
+string : Show String
+string =
+    implement identity
+
+
+char : Show Char
+char =
+    implement (\c -> String.fromList [ c ])
+
+
+int : Show Int
+int =
+    implement String.fromInt
