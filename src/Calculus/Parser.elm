@@ -1,4 +1,18 @@
-module Calculus.Parser exposing (..)
+module Calculus.Parser exposing
+    ( ExpectedModuleTerm(..)
+    , ExpectedTerm(..)
+    , functorTerm
+    , interface
+    , moduleTerm
+    , moduleTermErrorToString
+    , runFunctorTerm
+    , runInterface
+    , runModuleTerm
+    , runTerm
+    , term
+    , termErrorToString
+    , typeTerm
+    )
 
 import Calculus.Base as Base
     exposing
@@ -16,826 +30,1930 @@ import Calculus.Base as Base
         , Type
         , TypeVarName
         )
-import Calculus.NewParser as TODONEWPARSER
-import Lib.NatParser as NatParser
-import Lib.Parser.Parser as TODOPARSER
-import Parser exposing ((|.), (|=), DeadEnd, Parser)
+import Dict exposing (Dict)
+import Either exposing (Either)
+import Lib.Parser.Error as ParserError
+import Lib.Parser.Parser as Parser
+import Lib.Parser.Position as PPosition
+import Lib.Parser.State as ParserState
 import Set exposing (Set)
 
 
 
--- Constants/vars:
---   true, false
---   0n0, 0n1, 0n2, 0n3, ...
---   empty
---   $foo
--- Simple Operators
---   (pair e e')
---   (@ f x)
---   (left e)
---   (right e)
---   (succ e)
---   (cons e1 e2)
---   (@ e) -- force
--- Bindings Operators
---   (fn { x . body })
---   (match-pair pairExp { (pair x y) . body })
---   (match-bool e { true . e1 } { false . e2 })
---   (match-sum e { (left x) . e1 } { (right y) . e2 })
---   (fold-nat n { zero . initState } { (succ s) . body })
---   (fold-list xs { empty initState { x s . body })
---   (fn { e }) -- delay
---   (let exp { x . body })
-
-
-type alias TermParsingError =
-    List DeadEnd
-
-
-parsingErrorToString : TermParsingError -> String
-parsingErrorToString =
-    Parser.deadEndsToString
+-- ===Whitesepace/Gaps===
 
 
 whitespaceChars : Set Char
 whitespaceChars =
     -- \u{000D} === \r
-    Set.fromList [ ' ', '\n', '\u{000D}', '\t' ]
+    Set.fromList [ ' ', '\n', '\u{000D}', '\t', ',' ]
 
 
-spaces : Parser ()
-spaces =
-    Parser.chompWhile (\c -> Set.member c whitespaceChars)
+isWhitespaceChar : Char -> Bool
+isWhitespaceChar c =
+    Set.member c whitespaceChars
 
 
-keyword : String -> Parser ()
-keyword str =
-    Parser.keyword str
-        |. spaces
 
+-- the set of characters that's used to check for gaps after the keyword
 
-symbol : String -> Parser ()
-symbol str =
-    Parser.symbol str
-        |. spaces
 
+gapChars : Set Char
+gapChars =
+    -- TODO: maybe I should consider characters like `@` or `\\`? Or will I allow
+    -- TODO: This should actually be strings because I want to include "<-" and "->". Right now use symbols `>` and `<`. Damn it... but I want `<` and `>` for record angle parens.
+    --         gapSymbols...
+    --       But I also want to have dashes in variable names...
+    Set.union whitespaceChars (Set.fromList [ '(', ')', '{', '}', '.', '$', '\'', '"', '%', '/', '=', ';', '\\', '[', ']' ])
 
-paren : Parser a -> Parser a
-paren p =
-    Parser.succeed (\x -> x)
-        |. symbol "("
-        |= p
-        |. symbol ")"
 
-
-binding : Parser a -> Parser b -> Parser ( a, b )
-binding varsParser bodyParser =
-    Parser.succeed (\vars body -> ( vars, body ))
-        |. symbol "{"
-        |= varsParser
-        |. symbol "."
-        |= bodyParser
-        |. symbol "}"
-
-
-optionalBinding : Parser a -> Parser a
-optionalBinding bodyParser =
-    Parser.succeed (\x -> x)
-        |. symbol "{"
-        |. Parser.oneOf [ symbol ".", Parser.succeed () ]
-        |= bodyParser
-        |. symbol "}"
-
-
-seq : Parser a -> Parser (List a)
-seq p =
-    Parser.loop []
-        (\xs ->
-            Parser.oneOf
-                [ Parser.succeed (\x -> Parser.Loop (x :: xs))
-                    |= p
-                , Parser.succeed (Parser.Done (List.reverse xs))
-                ]
-        )
-
-
-
--- ===TERM===
-
-
-parseTerm : String -> Result TermParsingError Term
-parseTerm input =
-    Parser.run term input
-
-
-term : Parser Term
-term =
-    Parser.oneOf
-        [ -- literals/variables
-          varUse
-        , emptyList
-        , bool
-        , natConstant -- TODO: this has to be last constant? why? Does it chomp stuff?
-
-        -- operatorTerm has to be at the end
-        , operatorTerm
-        ]
-
-
-operatorTerm : Parser Term
-operatorTerm =
-    paren
-        (Parser.oneOf
-            [ abstraction
-            , application
-            , ifThenElse
-            , pair
-            , matchProduct
-            , left
-            , right
-            , matchSum
-            , natSucc
-            , foldNat
-            , cons
-            , foldList
-            , letExpression
-            , moduleAccess
-            ]
-        )
-
-
-
--- ===VAR===
-
-
-varIntro : Parser TermVarName
-varIntro =
-    let
-        excludedChars =
-            Set.union
-                (Set.fromList [ '$', '.', '(', ')', '{', '}', '\'', '"' ])
-                whitespaceChars
-
-        isPrintable charCode =
-            32 <= charCode && charCode <= 126
-    in
-    Parser.variable
-        { start =
-            -- TODO: first attempt
-            \c ->
-                let
-                    charCode =
-                        Char.toCode c
-                in
-                not (Set.member c excludedChars)
-                    && isPrintable charCode
-                    && not (Char.isDigit c)
-
-        -- TODO also filter-out the non-printable characters and whitespace
-        , inner =
-            \c ->
-                -- TODO: the only difference from start is can actually be a digit
-                let
-                    charCode =
-                        Char.toCode c
-                in
-                not (Set.member c excludedChars)
-                    && isPrintable charCode
-        , reserved =
-            -- TODO
-            Set.empty
-        }
-        |. spaces
-
-
-
--- Parses a nonemptysequence of vars
--- "foo  bar quux" ~> ["foo", "bar", "quux"]
--- "foo  bar quux   " ~> failure cause of the trailing whitespace
--- "   foo  bar quux" ~> failure cause you cant start with spaces
-
-
-varsIntro : Parser (List TermVarName)
-varsIntro =
-    seq varIntro
-
-
-terms : Parser (List Term)
-terms =
-    seq term
-
-
-varUse : Parser Term
-varUse =
-    Parser.succeed Base.VarUse
-        -- WARNING: It's very important that this uses `Parser.symbol` and not `symbol` because here we don't actually want to consume trailing whitespace after `$`
-        |. Parser.symbol "$"
-        |= varIntro
-
-
-
--- ===Bool===
-
-
-trueKeyword : String
-trueKeyword =
-    "true"
-
-
-true : Parser Term
-true =
-    Parser.succeed Base.ConstTrue
-        |. keyword trueKeyword
-
-
-truePattern : Parser ()
-truePattern =
-    keyword trueKeyword
-
-
-falseKeyword : String
-falseKeyword =
-    "false"
-
-
-false : Parser Term
-false =
-    Parser.succeed Base.ConstFalse
-        |. keyword falseKeyword
-
-
-falsePattern : Parser ()
-falsePattern =
-    keyword falseKeyword
-
-
-bool : Parser Term
-bool =
-    Parser.oneOf [ true, false ]
-
-
-
--- (if e { e1 } { e2 })
--- TODO: also allow pattern matching syntax `(if e { true . e1 } { false . e2 })`
-
-
-ifThenElse : Parser Term
-ifThenElse =
-    Parser.succeed (\arg trueBody falseBody -> Base.MatchBool arg { trueBranch = { body = trueBody }, falseBranch = { body = falseBody } })
-        |. keyword "if"
-        -- test expression
-        |= Parser.lazy (\() -> term)
-        -- left branch
-        |= optionalBinding
-            (Parser.lazy (\() -> term))
-        -- right branch
-        |= optionalBinding
-            (Parser.lazy (\() -> term))
-
-
-
--- ==Cartesian Product==
--- (pair e e')
-
-
-pairKeyword : String
-pairKeyword =
-    "pair"
-
-
-pair : Parser Term
-pair =
-    Parser.succeed Base.Pair
-        |. keyword pairKeyword
-        |= Parser.lazy (\() -> term)
-        |= Parser.lazy (\() -> term)
-
-
-pairPattern : Parser ( TermVarName, TermVarName )
-pairPattern =
-    Parser.succeed (\x y -> ( x, y ))
-        |. keyword pairKeyword
-        |= varIntro
-        |= varIntro
-
-
-
---   (match-pair pairExp { (pair x y) . body })
-
-
-matchProduct : Parser Term
-matchProduct =
-    Parser.succeed
-        (\arg ( ( var0, var1 ), body ) ->
-            Base.MatchPair
-                arg
-                { var0 = var0
-                , var1 = var1
-                , body = body
-                }
-        )
-        |. keyword "match-pair"
-        -- arg
-        |= Parser.lazy (\() -> term)
-        -- body
-        |= binding
-            (paren pairPattern)
-            (Parser.lazy (\() -> term))
-
-
-
--- ==Function Space/Frozen type==
---   (fn {x . body})
---   (fn { x y z . body }) ~> (fn {x . (fn {y . (fn {z . body}) }) })
--- TODO
---   (fn { body }) ~> delay expression
---  but now you have to write
---   (fn {. body })
---  make the dot optional somehow
-
-
-abstraction : Parser Term
-abstraction =
-    let
-        abstractionWithListOfVars : List TermVarName -> Term -> Term
-        abstractionWithListOfVars vars0 body =
-            case vars0 of
-                [] ->
-                    Base.Delay { body = body }
-
-                [ var ] ->
-                    Base.Abstraction { var = var, body = body }
-
-                var :: vars1 ->
-                    Base.Abstraction { var = var, body = abstractionWithListOfVars vars1 body }
-    in
-    Parser.succeed (\( vars0, body ) -> abstractionWithListOfVars vars0 body)
-        |. keyword "fn"
-        -- Parameters
-        |= binding
-            -- Note that this parser multiple vars and not just one
-            varsIntro
-            (Parser.lazy (\() -> term))
-
-
-
--- (@ f x)
--- (@ f e1 e2) ~> (@ (@ f e1) e2)
---
--- How can we interpret
---   (@ f) ?
--- Suppose f is a frozen computation e.g. the result of something like `(fn {. body })`
--- Then the application could be interpreted as the "thawing" of the frozen computation.
-
-
-application : Parser Term
-application =
-    let
-        applicationWithListOfArgs : Term -> List Term -> Term
-        applicationWithListOfArgs fn args0 =
-            case args0 of
-                [] ->
-                    Base.Force fn
-
-                [ arg ] ->
-                    Base.Application fn arg
-
-                arg :: args1 ->
-                    applicationWithListOfArgs (Base.Application fn arg) args1
-    in
-    Parser.succeed applicationWithListOfArgs
-        |. keyword "@"
-        |= Parser.lazy (\() -> term)
-        |= Parser.lazy (\() -> terms)
-
-
-
--- ==Coproduct==
-
-
-leftKeyword : String
-leftKeyword =
-    "left"
-
-
-left : Parser Term
-left =
-    Parser.succeed Base.Left
-        |. keyword leftKeyword
-        |= Parser.lazy (\() -> term)
-
-
-leftPattern : Parser TermVarName
-leftPattern =
-    Parser.succeed (\x -> x)
-        |. keyword leftKeyword
-        |= varIntro
-
-
-rightKeyword : String
-rightKeyword =
-    "right"
-
-
-right : Parser Term
-right =
-    Parser.succeed Base.Right
-        |. keyword rightKeyword
-        |= Parser.lazy (\() -> term)
-
-
-rightPattern : Parser TermVarName
-rightPattern =
-    Parser.succeed (\x -> x)
-        |. keyword rightKeyword
-        |= varIntro
-
-
-
--- (sum-case e {(left x) . e1} {(right y) . e2})
-
-
-matchSum : Parser Term
-matchSum =
-    -- TODO: we allow
-    --          (sum-case e {(left x) . e1} {(right y) . e2})
-    --       but we don't allow
-    --          (sum-case e {(right y) . e2} {(left x) . e1} )
-    --       Order shouldn't matter.
-    Parser.succeed
-        (\arg ( leftVar, leftBody ) ( rightVar, rightBody ) ->
-            Base.MatchSum
-                arg
-                { leftBranch = { var = leftVar, body = leftBody }
-                , rightBranch = { var = rightVar, body = rightBody }
-                }
-        )
-        |. keyword "match-sum"
-        -- arg
-        |= Parser.lazy (\() -> term)
-        -- left
-        |= binding
-            (paren leftPattern)
-            (Parser.lazy (\() -> term))
-        -- right
-        |= binding
-            (paren rightPattern)
-            (Parser.lazy (\() -> term))
-
-
-
--- ===Nat===
--- TODO: nat patterns
-
-
-natConstant : Parser Term
-natConstant =
-    Parser.succeed Base.intToNatTerm
-        -- WARNING: It's very important that this uses `Parser.symbol` and not `symbol` because here we don't actually want to consume trailing whitespace after `0n`
-        |. Parser.symbol "0n"
-        |= Parser.int
-        |. spaces
-
-
-natSucc : Parser Term
-natSucc =
-    Parser.succeed Base.Succ
-        |. keyword "succ"
-        |= Parser.lazy (\() -> term)
-
-
-
--- (nat-loop n initState { i s . body })
-
-
-foldNat : Parser Term
-foldNat =
-    Parser.succeed
-        (\arg zeroBody ( succVar, body ) ->
-            Base.FoldNat
-                arg
-                { zeroBranch = { body = zeroBody }
-                , succBranch =
-                    { var = succVar
-                    , body = body
-                    }
-                }
-        )
-        |. keyword "nat-loop"
-        -- loop argument (the natural number bound)
-        |= Parser.lazy (\() -> term)
-        -- the initial state of the loop
-        |= Parser.lazy (\() -> term)
-        |= binding
-            -- TODO: indexVar is useless here
-            (Parser.succeed (\stateVar -> stateVar) |= varIntro)
-            (Parser.lazy (\() -> term))
-
-
-
--- ===Lists===
-
-
-emptyList : Parser Term
-emptyList =
-    Parser.succeed Base.ConstEmpty
-        |. keyword "empty-list"
-
-
-cons : Parser Term
-cons =
-    Parser.succeed Base.Cons
-        |. keyword "cons"
-        |= Parser.lazy (\() -> term)
-        |= Parser.lazy (\() -> term)
-
-
-
--- (list-loop xs initState { x s . body })
-
-
-foldList : Parser Term
-foldList =
-    Parser.succeed
-        (\arg emptyBody ( ( listElementVar, stateVar ), body ) ->
-            Base.FoldList
-                arg
-                { emptyBranch = { body = emptyBody }
-                , consBranch =
-                    { var0 = listElementVar
-                    , var1 = stateVar
-                    , body = body
-                    }
-                }
-        )
-        |. keyword "list-loop"
-        -- loop argument (the list)
-        |= Parser.lazy (\() -> term)
-        -- the initial state of the loop
-        |= Parser.lazy (\() -> term)
-        |= binding
-            (Parser.succeed (\listElementVar stateVar -> ( listElementVar, stateVar )) |= varIntro |= varIntro)
-            (Parser.lazy (\() -> term))
-
-
-
--- ===LET===
--- (let exp { x . body })
-
-
-letExpression : Parser Term
-letExpression =
-    Parser.succeed (\arg ( var, body ) -> Base.LetBe arg { var = var, body = body })
-        |. keyword "let"
-        |= Parser.lazy (\() -> term)
-        |= binding
-            varIntro
-            (Parser.lazy (\() -> term))
+isGapChar : Char -> Bool
+isGapChar c =
+    Set.member c gapChars
 
 
 
 -- ===Types===
 
 
-typeVarIntro : Parser TypeVarName
+type alias Parser e a =
+    Parser.Parser {} e a
+
+
+
+-- ===nat===
+-- ===Basics===
+
+
+spaces : Parser e ()
+spaces =
+    Parser.allWhileTrue isWhitespaceChar
+        |> Parser.discard
+
+
+symbol : String -> Parser ParserError.ExpectedString ()
+symbol symbol0 =
+    Parser.unit
+        |> Parser.o (Parser.string symbol0)
+        |> Parser.o spaces
+
+
+defEquals : Parser ParserError.ExpectedString ()
+defEquals =
+    symbol "="
+
+
+semicolon : Parser ParserError.ExpectedString ()
+semicolon =
+    symbol ";"
+
+
+
+-- Doesn't consume anything, but may fail
+
+
+keywordGap : Parser ExpectedKeywordGapCharacter ()
+keywordGap =
+    Parser.check (Parser.anyCharSatisfying isGapChar)
+        |> Parser.ifError
+            (\failedAtCharErr ->
+                case failedAtCharErr.failedAtChar of
+                    Just c ->
+                        Parser.fail { failedAtChar = c }
+
+                    Nothing ->
+                        Parser.unit
+            )
+        |> Parser.o spaces
+
+
+keyword : String -> Parser (Either ParserError.ExpectedString ExpectedKeywordGapCharacter) ()
+keyword string0 =
+    Parser.unit
+        |> Parser.o (Parser.string string0 |> Parser.mapError Either.Left)
+        |> Parser.o (keywordGap |> Parser.mapError Either.Right)
+
+
+
+-- ===Parentheses===
+
+
+zeroOrMoreOpenParens : Parser e Int
+zeroOrMoreOpenParens =
+    Parser.loopChars 0
+        (\c numOfOpenParens ->
+            if isWhitespaceChar c then
+                Parser.NextChar numOfOpenParens
+
+            else if c == '(' then
+                Parser.NextChar (numOfOpenParens + 1)
+
+            else
+                Parser.DoneAndRevertChar numOfOpenParens
+        )
+        Ok
+
+
+atleastOneOpenParens : Parser ExpectedParens Int
+atleastOneOpenParens =
+    let
+        handleFirstOpenParen : ParserError.ExpectedString -> ExpectedParens
+        handleFirstOpenParen { expected, consumedSuccessfully, failedAtChar } =
+            ExpectedOpenParens { failedAtChar = failedAtChar }
+    in
+    Parser.identity
+        |> Parser.o (Parser.string "(" |> Parser.mapError handleFirstOpenParen)
+        |> Parser.o spaces
+        |> Parser.ooo zeroOrMoreOpenParens
+        |> Parser.map (\numOfOpenParens -> numOfOpenParens + 1)
+
+
+closingParens : Int -> Parser ExpectedParens ()
+closingParens numOfExpectedClosingParens =
+    let
+        handleFirstClosingParen : ParserError.ExpectedString -> ExpectedParens
+        handleFirstClosingParen { expected, consumedSuccessfully, failedAtChar } =
+            ExpectedClosingParens { failedAtChar = failedAtChar }
+    in
+    if numOfExpectedClosingParens == 0 then
+        spaces
+
+    else
+        -- We are starting with a single ")" because we want to fail on strings that start with whitespace e.g. "  )))"
+        (Parser.string ")" |> Parser.mapError handleFirstClosingParen)
+            |> Parser.o
+                (Parser.loopChars 1
+                    (\c numOfClosingParens ->
+                        if numOfClosingParens >= numOfExpectedClosingParens then
+                            Parser.DoneAndRevertChar numOfExpectedClosingParens
+
+                        else if isWhitespaceChar c then
+                            Parser.NextChar numOfClosingParens
+
+                        else if c == ')' then
+                            Parser.NextChar (numOfClosingParens + 1)
+
+                        else
+                            -- Note that here `numOfClosingParens < numOfExpectedClosingParens)
+                            Parser.Fail (ExpectedClosingParens { failedAtChar = Just c })
+                    )
+                    (\numOfClosingParens ->
+                        if numOfClosingParens >= numOfExpectedClosingParens then
+                            Ok numOfClosingParens
+
+                        else
+                            Err (ExpectedClosingParens { failedAtChar = Nothing })
+                    )
+                )
+            |> Parser.o spaces
+
+
+optionalParens : Parser e a -> Parser (Either ExpectedParens e) a
+optionalParens parser =
+    zeroOrMoreOpenParens
+        |> Parser.andThen
+            (\numOfOpenParens ->
+                parser
+                    |> Parser.mapError Either.Right
+                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError Either.Left)
+            )
+
+
+mandatoryParens : Parser e a -> Parser (Either ExpectedParens e) a
+mandatoryParens parser =
+    (atleastOneOpenParens |> Parser.mapError Either.Left)
+        |> Parser.andThen
+            (\numOfOpenParens ->
+                parser
+                    |> Parser.mapError Either.Right
+                    |> Parser.o (closingParens numOfOpenParens |> Parser.mapError Either.Left)
+            )
+
+
+
+-- ===Identifier===
+
+
+identifier : Parser ExpectedIdentifierIntroduction String
+identifier =
+    -- TODO: You can make the error messages better
+    let
+        excludedChars : Set Char
+        excludedChars =
+            Set.union
+                (Set.fromList [ '$', '.', '(', ')', '{', '}', '\'', '"', '/', '%', '=', ';', '[', ']' ])
+                whitespaceChars
+
+        isExcludedChar : Char -> Bool
+        isExcludedChar c =
+            Set.member c excludedChars
+
+        isPrintableChar : Char -> Bool
+        isPrintableChar c =
+            let
+                charCode =
+                    Char.toCode c
+            in
+            32 <= charCode && charCode <= 126
+
+        isInnerVarChar : Char -> Bool
+        isInnerVarChar c =
+            not (isExcludedChar c) && isPrintableChar c
+    in
+    Parser.anyCharSatisfying isInnerVarChar
+        |> Parser.mapError ExpectedIdentifierCharacters
+        |> Parser.andThen
+            (\c ->
+                if Char.isDigit c then
+                    Parser.fail (ExpectedIdentifierToStartWithNonDigit { failedAtChar = c })
+
+                else
+                    Parser.allWhileTrue isInnerVarChar
+                        |> Parser.map (\str -> String.cons c str)
+            )
+        |> Parser.o spaces
+
+
+
+-- ===Generic Errors===
+
+
+type alias FailedAtCharOrEmpty =
+    { failedAtChar : ParserError.FailedAtCharOrEmpty }
+
+
+type alias FailedAtChar =
+    { failedAtChar : ParserError.FailedAtChar }
+
+
+type ExpectedIdentifierIntroduction
+    = ExpectedIdentifierCharacters ParserError.CharFailedTest
+    | ExpectedIdentifierToStartWithNonDigit FailedAtChar
+
+
+type alias ExpectedKeywordGapCharacter =
+    FailedAtChar
+
+
+type ExpectedParens
+    = ExpectedOpenParens FailedAtCharOrEmpty
+    | ExpectedClosingParens FailedAtCharOrEmpty
+
+
+failedAtCharToStringHelper : Char -> String
+failedAtCharToStringHelper c =
+    String.concat
+        [ "failed at char '"
+        , if c == '\n' then
+            "<new-line>"
+
+          else if c == ' ' then
+            "<space>"
+
+          else if c == '\t' then
+            "<tab>"
+
+          else
+            String.fromChar c
+        , "`"
+        ]
+
+
+failedAtMaybeCharToString : { e | failedAtChar : ParserError.FailedAtCharOrEmpty } -> String
+failedAtMaybeCharToString { failedAtChar } =
+    case failedAtChar of
+        Just c ->
+            failedAtCharToStringHelper c
+
+        Nothing ->
+            "failed at <empty-input>"
+
+
+failedAtCharToString : { e | failedAtChar : ParserError.FailedAtChar } -> String
+failedAtCharToString { failedAtChar } =
+    failedAtCharToStringHelper failedAtChar
+
+
+consumedSuccessfullyToString : { e | consumedSuccessfully : String } -> String
+consumedSuccessfullyToString { consumedSuccessfully } =
+    String.concat [ "consumed successfully: ", consumedSuccessfully ]
+
+
+expectedParensToString : ExpectedParens -> String
+expectedParensToString msg =
+    case msg of
+        ExpectedOpenParens msg0 ->
+            String.concat
+                [ "Expected open parentheses ("
+                , failedAtMaybeCharToString msg0
+                , ")"
+                ]
+
+        ExpectedClosingParens msg0 ->
+            String.concat
+                [ "Expected closing parentheses ("
+                , failedAtMaybeCharToString msg0
+                , ")"
+                ]
+
+
+expectedIdentifierIntroductionToString : String -> ExpectedIdentifierIntroduction -> String
+expectedIdentifierIntroductionToString identifierKind msg =
+    case msg of
+        ExpectedIdentifierCharacters expIden ->
+            String.concat
+                [ "Expected to see "
+                , identifierKind
+                , " identifier character but "
+                , failedAtMaybeCharToString expIden
+                ]
+
+        ExpectedIdentifierToStartWithNonDigit failedAtCharError ->
+            String.concat
+                [ "Expected "
+                , identifierKind
+                , " identifier to start with non-digit ("
+                , failedAtCharToString failedAtCharError
+                , ")"
+                ]
+
+
+
+-- ===Term Errors===
+
+
+type ExpectedOperatorKeyword a
+    = ExpectedOperatorKeyword ParserError.ExpectedStringIn
+    | ExpectedGapAfterOperatorKeyword { operatorKeyword : a, failedAtChar : ParserError.FailedAtChar }
+
+
+type ExpectedBindingTerm
+    = ExpectedOpenBraces ParserError.ExpectedString
+    | ExpectedDot ParserError.ExpectedString
+    | ExpectedClosingBraces ParserError.ExpectedString
+    | ExpectedDefEquals ParserError.ExpectedString
+    | ExpectedSemicolon ParserError.ExpectedString
+
+
+type ExpectedPattern
+    = ExpectedPatternKeyword { patternKeyword : TermOperatorKeyword, consumedSuccessfully : String, failedAtChar : ParserError.FailedAtCharOrEmpty }
+    | ExpectedGapAfterPatternKeyword { patternKeyword : TermOperatorKeyword, failedAtChar : ParserError.FailedAtChar }
+
+
+type ExpectedTerm
+    = ExpectedOperator (ExpectedOperatorKeyword TermOperatorKeyword)
+    | ExpectedTermIdentifier ExpectedIdentifierIntroduction
+    | ExpectedParens ExpectedParens
+    | ExpectedBindingTerm ExpectedBindingTerm
+    | ExpectedPattern ExpectedPattern
+    | ExpectedAtleastTwoArgumentsToApplication { got : Int }
+    | ExpectedAtleastOneParameterToAbstraction { got : Int }
+    | ExpectedNatConstant ParserError.ExpectedDecimalNaturalNumber
+    | ExpectedClosingOfApplication ParserError.ExpectedString
+    | ExpectedModuleTermInModuleAccess ExpectedModuleTerm
+    | ExpectedModuleAccessSymbol ParserError.ExpectedString
+
+
+expectedOperatorKeywordToString : ExpectedOperatorKeyword TermOperatorKeyword -> String
+expectedOperatorKeywordToString msg =
+    case msg of
+        ExpectedOperatorKeyword opKeyword ->
+            String.concat
+                [ "Expected operator keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterOperatorKeyword gapAfter ->
+            String.concat
+                [ "Succesfully parsed operator keyword `"
+                , operatorKeywordToString gapAfter.operatorKeyword
+                , "`, but failed to see a gap following it ("
+                , failedAtCharToString { failedAtChar = gapAfter.failedAtChar }
+                , ")"
+                ]
+
+
+expectedBindingTermToString : ExpectedBindingTerm -> String
+expectedBindingTermToString msg =
+    case msg of
+        ExpectedOpenBraces failedAtChar ->
+            String.concat [ "Expected open braces (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedDot failedAtChar ->
+            String.concat [ "Expected dot (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedClosingBraces failedAtChar ->
+            String.concat [ "Expected closing braces (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedDefEquals failedAtChar ->
+            String.concat [ "Expected def. equals symbol in let binding (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedSemicolon failedAtChar ->
+            String.concat [ "Expected semicolon after let binding (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+
+expectedPatternToString : ExpectedPattern -> String
+expectedPatternToString msg =
+    case msg of
+        ExpectedPatternKeyword msg0 ->
+            String.concat
+                [ "Expected the pattern keyword `"
+                , operatorKeywordToString msg0.patternKeyword
+                , "` ("
+                , consumedSuccessfullyToString msg0
+                , ", "
+                , failedAtMaybeCharToString msg0
+                , ")"
+                ]
+
+        ExpectedGapAfterPatternKeyword msg0 ->
+            String.concat
+                [ "Expected a gap after the pattern keyword `"
+                , operatorKeywordToString msg0.patternKeyword
+                , "` ("
+                , failedAtMaybeCharToString { failedAtChar = Just msg0.failedAtChar }
+                , ")"
+                ]
+
+
+operatorKeywordToString : TermOperatorKeyword -> String
+operatorKeywordToString op =
+    case op of
+        -- Var Intro
+        VarUse ->
+            "$"
+
+        -- Bool
+        ConstTrue ->
+            "true"
+
+        ConstFalse ->
+            "false"
+
+        MatchBool ->
+            "match-bool"
+
+        -- Pair
+        Pair ->
+            "pair"
+
+        MatchPair ->
+            "match-pair"
+
+        -- Sum ->
+        Left ->
+            "left"
+
+        Right ->
+            "right"
+
+        MatchSum ->
+            "match-sum"
+
+        -- Function
+        Application ->
+            "["
+
+        Abstraction ->
+            "\\"
+
+        -- Nat
+        ConstZero ->
+            "zero"
+
+        NatLiteral ->
+            "0nat-literal"
+
+        Succ ->
+            "succ"
+
+        FoldNat ->
+            "fold-nat"
+
+        -- List
+        ConstEmpty ->
+            "empty"
+
+        Cons ->
+            "cons"
+
+        FoldList ->
+            "fold-list"
+
+        -- Let binding
+        LetBe ->
+            "let-be"
+
+        Let ->
+            "let"
+
+        -- Freeze
+        Delay ->
+            "delay"
+
+        Force ->
+            "force"
+
+        -- Module Access
+        ModuleAccess ->
+            "@"
+
+
+expectedTermToString : ExpectedTerm -> String
+expectedTermToString msg =
+    case msg of
+        ExpectedOperator expectedOperatorKeyword ->
+            expectedOperatorKeywordToString expectedOperatorKeyword
+
+        ExpectedTermIdentifier expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "term" expectedIdentifierIntroduction
+
+        ExpectedParens expectedParens ->
+            expectedParensToString expectedParens
+
+        ExpectedBindingTerm expectedBindingTerm ->
+            expectedBindingTermToString expectedBindingTerm
+
+        ExpectedPattern expectedPattern ->
+            expectedPatternToString expectedPattern
+
+        ExpectedAtleastTwoArgumentsToApplication { got } ->
+            String.concat [ "Expected atleast two arguments to application, instead got ", String.fromInt got ]
+
+        ExpectedAtleastOneParameterToAbstraction { got } ->
+            String.concat [ "Expected atleast one parameter to abstraction, instead got ", String.fromInt got ]
+
+        ExpectedNatConstant msg0 ->
+            String.concat [ "Expected natural number literal (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedClosingOfApplication msg0 ->
+            String.concat [ "Expected closing of application (", failedAtMaybeCharToString msg0, ")" ]
+
+        ExpectedModuleTermInModuleAccess err ->
+            expectedModuleTermToString err
+
+        ExpectedModuleAccessSymbol msg0 ->
+            String.concat [ "Expected module access symbol `.` (", failedAtMaybeCharToString msg0, ")" ]
+
+
+termErrorToString : ParserError.Error ExpectedTerm -> String
+termErrorToString error =
+    let
+        position : PPosition.Position
+        position =
+            ParserError.getPosition error
+
+        msg : ExpectedTerm
+        msg =
+            ParserError.getMsg error
+    in
+    String.concat
+        [ expectedTermToString msg
+        , " at (line="
+        , String.fromInt position.line
+        , ", col="
+        , String.fromInt position.col
+        , ")"
+        ]
+
+
+
+-- ===Sequences===
+
+
+emptySequence : Parser e ()
+emptySequence =
+    spaces
+
+
+
+-- ===Binding===
+
+
+varIntro : Parser ExpectedIdentifierIntroduction TermVarName
+varIntro =
+    identifier
+
+
+binding : Parser ExpectedTerm a -> Parser ExpectedTerm b -> Parser ExpectedTerm ( a, b )
+binding patternParser bodyParser =
+    Parser.return (\vars body -> ( vars, body ))
+        |> Parser.o (symbol "{" |> Parser.mapError (ExpectedBindingTerm << ExpectedOpenBraces))
+        |> Parser.ooo patternParser
+        |> Parser.o (symbol "." |> Parser.mapError (ExpectedBindingTerm << ExpectedDot))
+        |> Parser.ooo bodyParser
+        |> Parser.o (symbol "}" |> Parser.mapError (ExpectedBindingTerm << ExpectedClosingBraces))
+
+
+
+-- ===Operators===
+
+
+type TermOperatorKeyword
+    = -- Var Intro
+      VarUse
+      -- Bool
+    | ConstTrue
+    | ConstFalse
+    | MatchBool
+      -- Pair
+    | Pair
+    | MatchPair
+      -- Sum
+    | Left
+    | Right
+    | MatchSum
+      -- Function
+    | Application
+    | Abstraction
+      -- Nat
+    | ConstZero
+    | NatLiteral
+    | Succ
+    | FoldNat
+      -- List
+    | ConstEmpty
+    | Cons
+    | FoldList
+      -- Let binding
+    | LetBe
+    | Let
+      -- Freeze
+    | Delay
+    | Force
+      -- Module Access
+    | ModuleAccess
+
+
+handleKeywordGapError : a -> ExpectedKeywordGapCharacter -> ExpectedOperatorKeyword a
+handleKeywordGapError operatorKeyword0 gapError =
+    ExpectedGapAfterOperatorKeyword { operatorKeyword = operatorKeyword0, failedAtChar = gapError.failedAtChar }
+
+
+operatorKeyword : Parser (ExpectedOperatorKeyword TermOperatorKeyword) TermOperatorKeyword
+operatorKeyword =
+    Parser.stringIn
+        [ ( "$", VarUse )
+
+        -- Bool
+        , ( "true", ConstTrue )
+        , ( "false", ConstFalse )
+        , ( "match-bool", MatchBool )
+
+        -- Pair
+        , ( "pair", Pair )
+        , ( "match-pair", MatchPair )
+
+        -- Sum
+        , ( "left", Left )
+        , ( "right", Right )
+        , ( "match-sum", MatchSum )
+
+        -- Function
+        , ( "[", Application )
+        , ( "\\", Abstraction )
+
+        -- Nat
+        , ( "zero", ConstZero )
+        , ( "0", NatLiteral )
+        , ( "succ", Succ )
+        , ( "fold-nat", FoldNat )
+
+        -- List
+        , ( "empty", ConstEmpty )
+        , ( "cons", Cons )
+        , ( "fold-list", FoldList )
+
+        -- Let binding
+        , ( "let-be", LetBe )
+        , ( "let", Let )
+
+        -- Freeze
+        , ( "delay", Delay )
+        , ( "force", Force )
+
+        -- Module Access
+        , ( "/", ModuleAccess )
+        ]
+        --  TODO: Should I worry about optional parenthesization here?
+        |> Parser.mapError ExpectedOperatorKeyword
+        |> Parser.andThen
+            (\operatorKeyword0 ->
+                case operatorKeyword0 of
+                    VarUse ->
+                        -- Var use can't have keyword Gap
+                        Parser.return VarUse
+
+                    NatLiteral ->
+                        -- NatLiteral use can't have keyword Gap
+                        Parser.return NatLiteral
+
+                    Application ->
+                        Parser.return Application
+
+                    _ ->
+                        Parser.return operatorKeyword0
+                            |> Parser.o (keywordGap |> Parser.mapError (handleKeywordGapError operatorKeyword0))
+            )
+        |> Parser.o spaces
+
+
+
+-- helpers
+
+
+mandatoryTermParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
+mandatoryTermParens parser =
+    mandatoryParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+optionalTermParens : Parser ExpectedTerm a -> Parser ExpectedTerm a
+optionalTermParens parser =
+    optionalParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+semicolonTerm : Parser ExpectedTerm ()
+semicolonTerm =
+    semicolon |> Parser.mapError (ExpectedBindingTerm << ExpectedSemicolon)
+
+
+defEqualsTerm : Parser ExpectedTerm ()
+defEqualsTerm =
+    defEquals |> Parser.mapError (ExpectedBindingTerm << ExpectedDefEquals)
+
+
+
+-- ===Term===
+
+
+term : Parser ExpectedTerm Term
+term =
+    let
+        handlePatternError : TermOperatorKeyword -> Either ParserError.ExpectedString ExpectedKeywordGapCharacter -> ExpectedTerm
+        handlePatternError patternKeyword msg =
+            case msg of
+                Either.Left { expected, consumedSuccessfully, failedAtChar } ->
+                    ExpectedPattern (ExpectedPatternKeyword { patternKeyword = patternKeyword, consumedSuccessfully = consumedSuccessfully, failedAtChar = failedAtChar })
+
+                Either.Right gapError ->
+                    ExpectedPattern (ExpectedGapAfterPatternKeyword { patternKeyword = patternKeyword, failedAtChar = gapError.failedAtChar })
+
+        naturalNumberLiteral : Parser ExpectedTerm Term
+        naturalNumberLiteral =
+            Parser.naturalNumber
+                |> Parser.mapError ExpectedNatConstant
+                |> Parser.o spaces
+                |> Parser.map Base.intToNatTerm
+
+        constant : Term -> Parser ExpectedTerm Term
+        constant c =
+            optionalTermParens emptySequence
+                |> Parser.map (\() -> c)
+
+        operator1 : (Term -> Term) -> Parser ExpectedTerm Term
+        operator1 f =
+            mandatoryTermParens
+                (Parser.return f
+                    |> Parser.ooo term
+                )
+
+        operator2 : (Term -> Term -> Term) -> Parser ExpectedTerm Term
+        operator2 f =
+            mandatoryTermParens
+                (Parser.return f
+                    |> Parser.ooo term
+                    |> Parser.ooo term
+                )
+
+        varSeq0 : Parser ExpectedTerm ()
+        varSeq0 =
+            optionalTermParens emptySequence
+
+        varSeq1 : Parser ExpectedTerm TermVarName
+        varSeq1 =
+            mandatoryTermParens
+                (varIntro |> Parser.mapError ExpectedTermIdentifier)
+
+        varSeq2 : Parser ExpectedTerm ( TermVarName, TermVarName )
+        varSeq2 =
+            mandatoryTermParens
+                (Parser.pair
+                    (varIntro |> Parser.mapError ExpectedTermIdentifier)
+                    (varIntro |> Parser.mapError ExpectedTermIdentifier)
+                )
+
+        pattern0 : String -> TermOperatorKeyword -> Parser ExpectedTerm ()
+        pattern0 str op =
+            Parser.unit
+                |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
+                |> Parser.o varSeq0
+
+        pattern1 : String -> TermOperatorKeyword -> Parser ExpectedTerm TermVarName
+        pattern1 str op =
+            Parser.identity
+                |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
+                |> Parser.ooo varSeq1
+
+        pattern2 : String -> TermOperatorKeyword -> Parser ExpectedTerm ( TermVarName, TermVarName )
+        pattern2 str op =
+            Parser.identity
+                |> Parser.o (keyword str |> Parser.mapError (handlePatternError op))
+                |> Parser.ooo varSeq2
+    in
+    operatorKeyword
+        |> Parser.mapError ExpectedOperator
+        |> Parser.andThen
+            (\operatorkeyword0 ->
+                case operatorkeyword0 of
+                    -- Var
+                    VarUse ->
+                        varIntro
+                            |> Parser.mapError ExpectedTermIdentifier
+                            |> Parser.map Base.VarUse
+
+                    -- Bool
+                    ConstTrue ->
+                        constant Base.ConstTrue
+
+                    ConstFalse ->
+                        constant Base.ConstFalse
+
+                    MatchBool ->
+                        optionalTermParens
+                            (Parser.return
+                                (\arg ( (), branch0 ) ( (), branch1 ) ->
+                                    Base.MatchBool arg { trueBranch = { body = branch0 }, falseBranch = { body = branch1 } }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern0 "true" ConstTrue) term)
+                                |> Parser.ooo (binding (pattern0 "false" ConstFalse) term)
+                            )
+
+                    -- Pair
+                    Pair ->
+                        operator2 Base.Pair
+
+                    MatchPair ->
+                        optionalTermParens
+                            (Parser.return
+                                (\arg ( ( var0, var1 ), body ) ->
+                                    Base.MatchPair arg { var0 = var0, var1 = var1, body = body }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern2 "pair" Pair) term)
+                            )
+
+                    -- Sum
+                    Left ->
+                        operator1 Base.Left
+
+                    Right ->
+                        operator1 Base.Right
+
+                    MatchSum ->
+                        optionalTermParens
+                            (Parser.return
+                                (\arg ( leftVar, leftBody ) ( rightVar, rightBody ) ->
+                                    Base.MatchSum arg { leftBranch = { var = leftVar, body = leftBody }, rightBranch = { var = rightVar, body = rightBody } }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern1 "left" Left) term)
+                                |> Parser.ooo (binding (pattern1 "right" Right) term)
+                            )
+
+                    -- Function
+                    Application ->
+                        -- operator2 Base.Application
+                        Parser.repeat term
+                            |> Parser.andThen
+                                (\terms ->
+                                    case terms of
+                                        [] ->
+                                            Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 0 })
+
+                                        [ _ ] ->
+                                            Parser.fail (ExpectedAtleastTwoArgumentsToApplication { got = 1 })
+
+                                        fn0 :: arg0 :: args ->
+                                            let
+                                                applicationWithListOfArgs : Term -> List Term -> Term
+                                                applicationWithListOfArgs fn args0 =
+                                                    case args0 of
+                                                        [] ->
+                                                            fn
+
+                                                        arg :: args1 ->
+                                                            applicationWithListOfArgs (Base.Application fn arg) args1
+                                            in
+                                            Parser.return (applicationWithListOfArgs (Base.Application fn0 arg0) args)
+                                )
+                            |> Parser.o (symbol "]" |> Parser.mapError ExpectedClosingOfApplication)
+
+                    Abstraction ->
+                        let
+                            abstractionWithListOfVars : List TermVarName -> Term -> Term
+                            abstractionWithListOfVars vars0 body =
+                                case vars0 of
+                                    [] ->
+                                        body
+
+                                    var :: vars1 ->
+                                        Base.Abstraction { var = var, body = abstractionWithListOfVars vars1 body }
+                        in
+                        optionalTermParens
+                            (binding (Parser.repeat varIntro |> Parser.mapError ExpectedTermIdentifier) term
+                                |> Parser.andThen
+                                    (\( vars, body ) ->
+                                        case vars of
+                                            [] ->
+                                                Parser.fail (ExpectedAtleastOneParameterToAbstraction { got = 0 })
+
+                                            var0 :: vars1 ->
+                                                Parser.return (Base.Abstraction { var = var0, body = abstractionWithListOfVars vars1 body })
+                                    )
+                            )
+
+                    -- Nat
+                    ConstZero ->
+                        constant Base.ConstZero
+
+                    NatLiteral ->
+                        naturalNumberLiteral
+
+                    Succ ->
+                        operator1 Base.Succ
+
+                    FoldNat ->
+                        optionalTermParens
+                            (Parser.return
+                                (\arg ( (), zeroBody ) ( succVar, succBody ) ->
+                                    Base.FoldNat
+                                        arg
+                                        { zeroBranch = { body = zeroBody }
+                                        , succBranch = { var = succVar, body = succBody }
+                                        }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern0 "zero" FoldNat) term)
+                                |> Parser.ooo (binding (pattern1 "succ" Succ) term)
+                            )
+
+                    -- List
+                    ConstEmpty ->
+                        constant Base.ConstEmpty
+
+                    Cons ->
+                        operator2 Base.Cons
+
+                    FoldList ->
+                        optionalTermParens
+                            (Parser.return
+                                (\arg ( (), emptyBody ) ( ( consVar0, consVar1 ), consBody ) ->
+                                    Base.FoldList
+                                        arg
+                                        { emptyBranch = { body = emptyBody }
+                                        , consBranch =
+                                            { var0 = consVar0, var1 = consVar1, body = consBody }
+                                        }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (pattern0 "empty" ConstEmpty) term)
+                                |> Parser.ooo (binding (pattern2 "cons" Cons) term)
+                            )
+
+                    -- Let binding
+                    LetBe ->
+                        -- let-be(e { x . body })
+                        -- let-be e { x . body }
+                        optionalTermParens
+                            (Parser.return
+                                (\arg ( var, body ) ->
+                                    Base.LetBe arg { var = var, body = body }
+                                )
+                                |> Parser.ooo term
+                                |> Parser.ooo (binding (varIntro |> Parser.mapError ExpectedTermIdentifier) term)
+                            )
+
+                    Let ->
+                        -- let x < e; body
+                        Parser.return
+                            (\var arg body ->
+                                Base.LetBe arg { var = var, body = body }
+                            )
+                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifier)
+                            |> Parser.o defEqualsTerm
+                            |> Parser.ooo term
+                            |> Parser.o semicolonTerm
+                            |> Parser.ooo term
+
+                    -- Freeze
+                    Delay ->
+                        binding
+                            spaces
+                            term
+                            |> Parser.map (\( (), body ) -> Base.Delay { body = body })
+
+                    Force ->
+                        operator1 Base.Force
+
+                    -- Module Access
+                    ModuleAccess ->
+                        -- /($Nat multiply)
+                        -- /([$F $Nat] foo)
+                        mandatoryTermParens
+                            (Parser.return Base.ModuleAccess
+                                -- TODO: this will generate module-access error without telling the user that this is in the context of a module access
+                                |> Parser.ooo (moduleTerm |> Parser.mapError ExpectedModuleTermInModuleAccess)
+                                |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifier)
+                            )
+            )
+
+
+runTerm : String -> Result (ParserError.Error ExpectedTerm) Term
+runTerm input =
+    Parser.run term {} (ParserState.return input)
+        |> Result.map Tuple.second
+
+
+
+-- ===Types===
+-- ==Errors==
+-- type ExpectedTypeIdentifierIntroduction
+--     = ExpectedIdentifierCharacters { failedAtChar : Maybe Char }
+--     | ExpectedIdentifierToStartWithNonDigit { failedAtChar : Char }
+
+
+type ExpectedType
+    = ExpectedTypeIdentifier ParserError.ExpectedDecimalNaturalNumber
+    | ExpectedTypeVarUseToStartWithQuote ParserError.ExpectedString
+    | ExpectedTypeOperator (ExpectedOperatorKeyword TypeOperatorKeyword)
+    | ExpectedTypeParens ExpectedParens
+
+
+expectedTypeToString : ExpectedType -> String
+expectedTypeToString expectedType =
+    case expectedType of
+        ExpectedTypeIdentifier expectedDecimalNaturalNumber ->
+            Debug.todo ""
+
+        ExpectedTypeVarUseToStartWithQuote expectedString ->
+            Debug.todo ""
+
+        ExpectedTypeOperator opKeyword ->
+            Debug.todo ""
+
+        ExpectedTypeParens expectedParens ->
+            Debug.todo ""
+
+
+mandatoryTypeTermParens : Parser ExpectedType a -> Parser ExpectedType a
+mandatoryTypeTermParens parser =
+    mandatoryParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedTypeParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+optionalTypeTermParens : Parser ExpectedType a -> Parser ExpectedType a
+optionalTypeTermParens parser =
+    optionalParens parser
+        |> Parser.mapError
+            (\eitherMsg ->
+                case eitherMsg of
+                    Either.Left msg ->
+                        ExpectedTypeParens msg
+
+                    Either.Right msg ->
+                        msg
+            )
+
+
+typeVarIntro : Parser ExpectedType TypeVarName
 typeVarIntro =
     -- Why can't we just use `Parser.int`?
     -- Because it consumes spaces and dots in `123  .`. WTF?
-    NatParser.nat
-        |. spaces
+    Parser.naturalNumber
+        |> Parser.o spaces
+        |> Parser.mapError ExpectedTypeIdentifier
 
 
-typeVar : Parser Type
+typeVar : Parser ExpectedType Type
 typeVar =
-    Parser.succeed (\typeVarName -> Base.VarType typeVarName)
-        |. Parser.symbol "'"
-        |= typeVarIntro
+    Parser.return (\typeVarName -> Base.VarType typeVarName)
+        |> Parser.o (Parser.string "'" |> Parser.mapError ExpectedTypeVarUseToStartWithQuote)
+        |> Parser.ooo typeVarIntro
 
 
-typeConstant : Parser Type
-typeConstant =
+type TypeOperatorKeyword
+    = TypeVarUse
+    | Product
+    | Sum
+    | Arrow
+    | ConstBool
+    | ConstNat
+    | List
+      -- TODO: forall
+    | Frozen
+
+
+typeOperatorKeyword : Parser (ExpectedOperatorKeyword TypeOperatorKeyword) TypeOperatorKeyword
+typeOperatorKeyword =
+    Parser.stringIn
+        [ ( "'", TypeVarUse )
+        , ( "Product", Product )
+        , ( "Sum", Sum )
+        , ( "Arrow", Arrow )
+        , ( "Bool", ConstBool )
+        , ( "Nat", ConstNat )
+        , ( "List", List )
+        , ( "Frozen", Frozen )
+        ]
+        |> Parser.mapError ExpectedOperatorKeyword
+        |> Parser.andThen
+            (\typeOperatorKeyword0 ->
+                case typeOperatorKeyword0 of
+                    TypeVarUse ->
+                        -- Var use can't have keyword Gap
+                        Parser.return TypeVarUse
+
+                    _ ->
+                        Parser.return typeOperatorKeyword0
+                            |> Parser.o (keywordGap |> Parser.mapError (handleKeywordGapError typeOperatorKeyword0))
+            )
+        |> Parser.o spaces
+
+
+typeTerm : Parser ExpectedType Type
+typeTerm =
     let
-        p : String -> Type -> Parser Type
-        p typeConstantName type0 =
-            Parser.succeed (\() -> type0)
-                |= keyword typeConstantName
+        constant : Type -> Parser ExpectedType Type
+        constant c =
+            optionalTypeTermParens emptySequence
+                |> Parser.map (\() -> c)
+
+        operator1 : (Type -> Type) -> Parser ExpectedType Type
+        operator1 f =
+            mandatoryTypeTermParens
+                (Parser.return f
+                    |> Parser.ooo typeTerm
+                )
+
+        operator2 : (Type -> Type -> Type) -> Parser ExpectedType Type
+        operator2 f =
+            mandatoryTypeTermParens
+                (Parser.return f
+                    |> Parser.ooo typeTerm
+                    |> Parser.ooo typeTerm
+                )
     in
-    Parser.oneOf
-        [ p "Bool" Base.ConstBool
-        , p "Nat" Base.ConstNat
-        ]
+    typeOperatorKeyword
+        |> Parser.mapError ExpectedTypeOperator
+        |> Parser.andThen
+            (\typeOperatorKeyword0 ->
+                case typeOperatorKeyword0 of
+                    TypeVarUse ->
+                        typeVarIntro |> Parser.map Base.VarType
 
+                    Product ->
+                        operator2 Base.Product
 
-typeExpression : Parser Type
-typeExpression =
-    Parser.oneOf
-        [ typeVar
-        , typeConstant
-        , typeOperatorExpression
-        ]
+                    Sum ->
+                        operator2 Base.Sum
 
+                    Arrow ->
+                        operator2 Base.Arrow
 
-typeOperatorExpression : Parser Type
-typeOperatorExpression =
-    paren
-        (Parser.oneOf
-            [ Parser.succeed Base.Arrow
-                |. keyword "->"
-                |= Parser.lazy (\() -> typeExpression)
-                |= Parser.lazy (\() -> typeExpression)
-            , Parser.succeed Base.Product
-                |. keyword "*"
-                |= Parser.lazy (\() -> typeExpression)
-                |= Parser.lazy (\() -> typeExpression)
-            , Parser.succeed Base.Sum
-                |. keyword "+"
-                |= Parser.lazy (\() -> typeExpression)
-                |= Parser.lazy (\() -> typeExpression)
-            , Parser.succeed Base.List
-                |. keyword "List"
-                |= Parser.lazy (\() -> typeExpression)
-            , Parser.succeed Base.Frozen
-                |. keyword "Frozen"
-                |= Parser.lazy (\() -> typeExpression)
-            , Parser.succeed (\( typeVarName, type0 ) -> Base.ForAll typeVarName type0)
-                |. keyword "forall"
-                |= binding
-                    typeVarIntro
-                    (Parser.lazy (\() -> typeExpression))
-            ]
-        )
+                    ConstBool ->
+                        constant Base.ConstBool
+
+                    ConstNat ->
+                        constant Base.ConstNat
+
+                    List ->
+                        operator1 Base.List
+
+                    -- TODO: forall
+                    Frozen ->
+                        operator1 Base.Frozen
+            )
 
 
 
 -- ===Module===
+-- =Errors=
 
 
-moduleVarIntro : Parser ModuleVarName
-moduleVarIntro =
-    varIntro
+type ExpectedModuleTerm
+    = -- Module Operator Keyword
+      ExpectedModuleOperator ParserError.ExpectedStringIn
+    | ExpectedGapAfterModuleOperator { operatorKeyword : ModuleOperatorKeyword, failedAtChar : ParserError.FailedAtChar }
+      -- Module Var Use
+    | ExpectedModuleIdentifier ExpectedIdentifierIntroduction
+      -- Module Literal
+    | ExpectedGapAfterModuleKeyword { failedAtChar : ParserError.FailedAtChar }
+    | ExpectedModuleOpenBraces ParserError.ExpectedString
+    | ExpectedModuleLetBinding ExpectedModuleLetBinding
+    | ExpectedSemicolonAfterModuleLetBinding ParserError.ExpectedString
+    | ExpectedModuleClosingBraces ParserError.ExpectedString
+      -- Functor Application
+    | ExpectedFunctorTermInApplication ExpectedFunctorTerm
+    | ExpectedClosingBracketsInFunctorApplication ParserError.ExpectedString
 
 
-moduleVarUse : Parser ModuleTerm
-moduleVarUse =
-    Parser.succeed Base.ModuleVarUse
-        |. Parser.symbol "$"
-        |= moduleVarIntro
+type ExpectedModuleLetBinding
+    = ExpectedModuleLetBindingKeyword ParserError.ExpectedStringIn
+    | ExpectedGapAfterModuleLetBindingKeyword FailedAtChar
+    | ExpectedEqualsInModuleLetBinding ParserError.ExpectedString
+      -- term
+    | ExpectedTermIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
+    | ExpectedTermInModuleLetBinding ExpectedTerm
+      -- module
+    | ExpectedModuleIdentifierInModuleLetBinding ExpectedIdentifierIntroduction
+    | ExpectedModuleTermInModuleLetBinding ExpectedModuleTerm
 
 
-moduleLiteral : Parser ModuleLiteral
-moduleLiteral =
-    Parser.succeed (\bindings -> { bindings = bindings })
-        |. keyword "module"
-        |= seq moduleLetBinding
-
-
-moduleTerm : Parser ModuleTerm
-moduleTerm =
-    Parser.oneOf
-        [ moduleVarUse
-        , paren
-            (Parser.oneOf
-                [ moduleLiteral |> Parser.map Base.ModuleLiteralTerm
-                , Parser.lazy (\() -> functorApplication)
+expectedModuleTermToString : ExpectedModuleTerm -> String
+expectedModuleTermToString msg =
+    case msg of
+        -- Module Keyword
+        ExpectedModuleOperator err ->
+            String.concat
+                [ "Expected module operator keyword ("
+                , consumedSuccessfullyToString err
+                , ", "
+                , failedAtMaybeCharToString err
+                , ")"
                 ]
-            )
+
+        ExpectedGapAfterModuleOperator err ->
+            String.concat
+                [ "Succesfully parsed module operator keyword `"
+                , moduleOperatorKeywordToString err.operatorKeyword
+                , "`, but failed to see a gap following it ("
+                , failedAtCharToString err
+                , ")"
+                ]
+
+        -- Module Var Use
+        ExpectedModuleIdentifier err ->
+            expectedIdentifierIntroductionToString "module" err
+
+        -- Module Literal
+        ExpectedGapAfterModuleKeyword failedAtCharError ->
+            String.concat
+                [ "Expected a gap after the `module` keyword "
+                , String.concat [ "(", failedAtCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedModuleOpenBraces failedAtCharError ->
+            String.concat
+                [ "Expected an open brace `{` after the `module` keyword "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedModuleLetBinding expectedModuleLetBinding ->
+            expectedModuleLetBindingToString expectedModuleLetBinding
+
+        ExpectedSemicolonAfterModuleLetBinding failedAtCharError ->
+            String.concat
+                [ "Expected a semicolon `;` to separate the module let-bindings "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedModuleClosingBraces failedAtCharError ->
+            String.concat
+                [ "Expected a closing brace `}` to end the module expression "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+        -- Functor Application
+        ExpectedFunctorTermInApplication expectedFunctorTerm ->
+            expectedFunctorTermToString expectedFunctorTerm
+
+        ExpectedClosingBracketsInFunctorApplication failedAtCharError ->
+            String.concat
+                [ "Expected a closing bracket `]` to end the functor application "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+
+expectedModuleLetBindingToString : ExpectedModuleLetBinding -> String
+expectedModuleLetBindingToString msg =
+    case msg of
+        ExpectedModuleLetBindingKeyword err ->
+            -- TODO consumed succesfully?
+            String.concat
+                [ "Expected module let binding keyword "
+                , String.concat [ "(such as ", allModuleLetBindingKeywords |> List.map (\keyword0 -> String.concat [ "`", moduleLetBindingKeywordToString keyword0, "`" ]) |> String.join ", ", ")" ]
+                , " "
+                , String.concat [ "(", failedAtMaybeCharToString err, ")" ]
+                ]
+
+        ExpectedGapAfterModuleLetBindingKeyword failedAtCharError ->
+            String.concat
+                [ "Expected a gap after the let-binding keyword "
+                , String.concat [ "(", failedAtCharToString failedAtCharError, ")" ]
+                ]
+
+        ExpectedEqualsInModuleLetBinding err ->
+            -- TODO err.consumedSuccessfully?
+            String.concat
+                [ "Expected equals `=` symbol "
+                , String.concat [ "(", failedAtMaybeCharToString err, ")" ]
+                ]
+
+        -- term
+        ExpectedTermIdentifierInModuleLetBinding expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "term" expectedIdentifierIntroduction
+
+        ExpectedTermInModuleLetBinding expectedTerm ->
+            expectedTermToString expectedTerm
+
+        -- module
+        ExpectedModuleIdentifierInModuleLetBinding expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "module" expectedIdentifierIntroduction
+
+        ExpectedModuleTermInModuleLetBinding expectedModuleTerm ->
+            expectedModuleTermToString expectedModuleTerm
+
+
+moduleTermErrorToString : ParserError.Error ExpectedModuleTerm -> String
+moduleTermErrorToString error =
+    let
+        position : PPosition.Position
+        position =
+            ParserError.getPosition error
+
+        msg : ExpectedModuleTerm
+        msg =
+            ParserError.getMsg error
+    in
+    String.concat
+        [ expectedModuleTermToString msg
+        , " at (line="
+        , String.fromInt position.line
+        , ", col="
+        , String.fromInt position.col
+        , ")"
         ]
 
 
-moduleAccessKeyword : String
-moduleAccessKeyword =
-    "->"
+
+-- =Terms=
 
 
-moduleAccess : Parser Term
-moduleAccess =
-    Parser.succeed Base.ModuleAccess
-        |. keyword moduleAccessKeyword
-        |= Parser.lazy (\() -> moduleTerm)
-        |= varIntro
+type ModuleOperatorKeyword
+    = ModuleVarUse
+    | ModuleLiteralTerm
+    | FunctorApplication
 
 
-moduleLetBinding : Parser ModuleLetBinding
+allModuleOperatorKeywords : List ModuleOperatorKeyword
+allModuleOperatorKeywords =
+    [ ModuleVarUse, ModuleLiteralTerm, FunctorApplication ]
+
+
+moduleOperatorKeywordToString : ModuleOperatorKeyword -> String
+moduleOperatorKeywordToString keyword0 =
+    case keyword0 of
+        ModuleVarUse ->
+            "$"
+
+        ModuleLiteralTerm ->
+            "module"
+
+        FunctorApplication ->
+            "["
+
+
+moduleOperatorKeyword : Parser ExpectedModuleTerm ModuleOperatorKeyword
+moduleOperatorKeyword =
+    let
+        handleGap keyword0 gapError =
+            ExpectedGapAfterModuleOperator { operatorKeyword = keyword0, failedAtChar = gapError.failedAtChar }
+    in
+    Parser.stringIn
+        [ ( "$", ModuleVarUse )
+        , ( "module", ModuleLiteralTerm )
+        , ( "[", FunctorApplication )
+        ]
+        |> Parser.mapError ExpectedModuleOperator
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    ModuleVarUse ->
+                        Parser.return ModuleVarUse
+
+                    FunctorApplication ->
+                        Parser.return FunctorApplication
+
+                    _ ->
+                        Parser.return keyword0
+                            |> Parser.o (keywordGap |> Parser.mapError (handleGap keyword0))
+            )
+        |> Parser.o spaces
+
+
+moduleVarIntro : Parser ExpectedIdentifierIntroduction ModuleVarName
+moduleVarIntro =
+    identifier
+
+
+moduleTerm : Parser ExpectedModuleTerm ModuleTerm
+moduleTerm =
+    moduleOperatorKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    ModuleVarUse ->
+                        moduleVarIntro
+                            |> Parser.mapError ExpectedModuleIdentifier
+                            |> Parser.map Base.ModuleVarUse
+
+                    ModuleLiteralTerm ->
+                        moduleLiteral |> Parser.map Base.ModuleLiteralTerm
+
+                    FunctorApplication ->
+                        Parser.return Base.FunctorApplication
+                            |> Parser.ooo (functorTerm |> Parser.mapError ExpectedFunctorTermInApplication)
+                            |> Parser.ooo
+                                (Parser.repeatUntil
+                                    moduleTerm
+                                    (symbol "]" |> Parser.mapError ExpectedClosingBracketsInFunctorApplication)
+                                )
+            )
+
+
+moduleLiteral : Parser ExpectedModuleTerm ModuleLiteral
+moduleLiteral =
+    Parser.return ModuleLiteral
+        |> Parser.o (symbol "{" |> Parser.mapError ExpectedModuleOpenBraces)
+        |> Parser.ooo
+            (Parser.repeatUntil
+                ((moduleLetBinding |> Parser.mapError ExpectedModuleLetBinding)
+                    |> Parser.o (semicolon |> Parser.mapError ExpectedSemicolonAfterModuleLetBinding)
+                )
+                (symbol "}" |> Parser.mapError ExpectedModuleClosingBraces)
+            )
+
+
+type ModuleLetBindingKeyword
+    = LetTerm
+    | LetType
+    | LetModule
+    | LetFunctor
+
+
+allModuleLetBindingKeywords : List ModuleLetBindingKeyword
+allModuleLetBindingKeywords =
+    [ LetTerm, LetType, LetModule, LetFunctor ]
+
+
+moduleLetBindingKeywordToString : ModuleLetBindingKeyword -> String
+moduleLetBindingKeywordToString keyword0 =
+    case keyword0 of
+        LetTerm ->
+            "let-term"
+
+        LetType ->
+            "let-type"
+
+        LetModule ->
+            "let-module"
+
+        LetFunctor ->
+            "let-functor"
+
+
+moduleLetBindingKeyword : Parser ExpectedModuleLetBinding ModuleLetBindingKeyword
+moduleLetBindingKeyword =
+    Parser.stringIn
+        [ ( "let-term", LetTerm )
+        , ( "let-type", LetType )
+        , ( "let-module", LetModule )
+        , ( "let-functor", LetFunctor )
+        ]
+        |> Parser.mapError ExpectedModuleLetBindingKeyword
+        |> Parser.o (keywordGap |> Parser.mapError ExpectedGapAfterModuleLetBindingKeyword)
+        |> Parser.o spaces
+
+
+moduleLetBinding : Parser ExpectedModuleLetBinding ModuleLetBinding
 moduleLetBinding =
-    paren
-        (Parser.oneOf
-            [ Parser.succeed (\var term0 -> Base.LetTerm var term0)
-                |. keyword "let-term"
-                |= varIntro
-                |= term
-            , Parser.succeed (\var module0 -> Base.LetModule var module0)
-                |. keyword "let-module"
-                |= moduleVarIntro
-                |= Parser.lazy (\() -> moduleTerm)
-            , Parser.succeed (\typeVarName type0 -> Base.LetType typeVarName type0)
-                |. keyword "let-type"
-                |= typeVarIntro
-                |= Parser.lazy (\() -> typeExpression)
-            , Parser.succeed (\functorName functorLiteral0 -> Base.LetFunctor functorName functorLiteral0)
-                |. keyword "let-functor"
-                |= functorVarIntro
-                |= Parser.lazy (\() -> functorLiteral)
-            ]
-        )
+    moduleLetBindingKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    LetTerm ->
+                        Parser.return Base.LetTerm
+                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifierInModuleLetBinding)
+                            |> Parser.o (symbol "=" |> Parser.mapError ExpectedEqualsInModuleLetBinding)
+                            |> Parser.ooo (term |> Parser.mapError ExpectedTermInModuleLetBinding)
+
+                    LetType ->
+                        Debug.todo ""
+
+                    LetModule ->
+                        Parser.return Base.LetModule
+                            |> Parser.ooo (moduleVarIntro |> Parser.mapError ExpectedModuleIdentifierInModuleLetBinding)
+                            |> Parser.o (symbol "=" |> Parser.mapError ExpectedEqualsInModuleLetBinding)
+                            |> Parser.ooo (moduleTerm |> Parser.mapError ExpectedModuleTermInModuleLetBinding)
+
+                    LetFunctor ->
+                        Debug.todo ""
+            )
 
 
-parseModuleTerm : String -> Result TermParsingError ModuleTerm
-parseModuleTerm input =
-    Parser.run moduleTerm input
+runModuleTerm : String -> Result (ParserError.Error ExpectedModuleTerm) ModuleTerm
+runModuleTerm input =
+    Parser.run moduleTerm {} (ParserState.return input)
+        |> Result.map Tuple.second
 
 
 
 -- ===Interface===
 
 
-interfaceLiteral : Parser Interface
+type ExpectedInterface
+    = ExpectedInterfaceKeyword ParserError.ExpectedString
+    | ExpectedGapAfterInterfaceKeyword { failedAtChar : ParserError.FailedAtChar }
+    | ExpectedInterfaceOpenBraces ParserError.ExpectedString
+    | ExpectedInterfaceAssumption ExpectedInterfaceAssumption
+    | ExpectedSemicolonAfterInterfaceAssumption ParserError.ExpectedString
+    | ExpectedInterfaceClosingBraces ParserError.ExpectedString
+
+
+type ExpectedInterfaceAssumption
+    = ExpectedInterfaceAssumptionKeyword ParserError.ExpectedStringIn
+    | ExpectedGapAfterInterfaceAssumptionKeyword FailedAtChar
+    | ExpectedTypingSymbolInInterfaceAssumption ParserError.ExpectedString
+      -- term
+    | ExpectedTermIdentifierInInterfaceAssumption ExpectedIdentifierIntroduction
+    | ExpectedTypeInInterfaceAssumption ExpectedType
+      -- module
+    | ExpectedModuleIdentifierInInterfaceAssumption ExpectedIdentifierIntroduction
+    | ExpectedInterfaceLiteralInInterfaceAssumption ExpectedInterface
+
+
+expectedInterfaceToString : ExpectedInterface -> String
+expectedInterfaceToString msg =
+    case msg of
+        ExpectedInterfaceKeyword opKeyword ->
+            String.concat
+                [ "Expected interface keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterInterfaceKeyword failedAtChar ->
+            String.concat
+                [ "Succesfully parsed interface keyword `interface`, but failed to see a gap following it ("
+                , failedAtCharToString failedAtChar
+                , ")"
+                ]
+
+        ExpectedInterfaceOpenBraces failedAtChar ->
+            String.concat [ "Expected open brace `{` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedInterfaceAssumption expectedInterfaceAssumption ->
+            expectedInterfaceAssumptionToString expectedInterfaceAssumption
+
+        ExpectedSemicolonAfterInterfaceAssumption failedAtChar ->
+            String.concat [ "Expected semicolon after let binding (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedInterfaceClosingBraces failedAtChar ->
+            String.concat [ "Expected closing brace `}` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+
+expectedInterfaceAssumptionToString : ExpectedInterfaceAssumption -> String
+expectedInterfaceAssumptionToString msg =
+    case msg of
+        ExpectedInterfaceAssumptionKeyword opKeyword ->
+            String.concat
+                [ "Expected interface-assumption keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterInterfaceAssumptionKeyword failedAtChar ->
+            String.concat
+                [ "Failed to see a gap following it ("
+                , failedAtCharToString failedAtChar
+                , ")"
+                ]
+
+        ExpectedTypingSymbolInInterfaceAssumption failedAtChar ->
+            String.concat [ "Expected typing symbol `:` after the identifier (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        -- term
+        ExpectedTermIdentifierInInterfaceAssumption expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "term" expectedIdentifierIntroduction
+
+        ExpectedTypeInInterfaceAssumption expectedType ->
+            expectedTypeToString expectedType
+
+        -- module
+        ExpectedModuleIdentifierInInterfaceAssumption expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "module" expectedIdentifierIntroduction
+
+        ExpectedInterfaceLiteralInInterfaceAssumption expectedInterface ->
+            expectedInterfaceToString expectedInterface
+
+
+interface : Parser ExpectedInterface Interface
+interface =
+    let
+        handleKeyword msg =
+            case msg of
+                Either.Left expectedStringErr ->
+                    ExpectedInterfaceKeyword expectedStringErr
+
+                Either.Right gapErr ->
+                    ExpectedGapAfterInterfaceKeyword gapErr
+    in
+    Parser.identity
+        |> Parser.o (keyword "interface" |> Parser.mapError handleKeyword)
+        |> Parser.ooo interfaceLiteral
+
+
+interfaceLiteral : Parser ExpectedInterface Interface
 interfaceLiteral =
-    -- (interface interface-assumption0 interface-assumption1 ... )
-    paren
-        (Parser.succeed (\assumptions -> Base.Interface assumptions)
-            |. keyword "interface"
-            |= seq interfaceAssumption
-        )
+    Parser.return Base.Interface
+        |> Parser.o (symbol "{" |> Parser.mapError ExpectedInterfaceOpenBraces)
+        |> Parser.ooo
+            (Parser.repeatUntil
+                ((interfaceAssumption |> Parser.mapError ExpectedInterfaceAssumption)
+                    |> Parser.o (semicolon |> Parser.mapError ExpectedSemicolonAfterInterfaceAssumption)
+                )
+                (symbol "}" |> Parser.mapError ExpectedModuleClosingBraces)
+            )
 
 
-interfaceAssumption : Parser InterfaceAssumption
+type InterfaceAssumptionKeyword
+    = AssumeTerm
+    | AssumeType
+    | AssumeModule
+    | AssumeFunctor
+
+
+allInterfaceAssumptionKeywords : List InterfaceAssumptionKeyword
+allInterfaceAssumptionKeywords =
+    [ AssumeTerm, AssumeType, AssumeModule, AssumeFunctor ]
+
+
+interfaceAssumptionKeywordToString : InterfaceAssumptionKeyword -> String
+interfaceAssumptionKeywordToString keyword0 =
+    case keyword0 of
+        AssumeTerm ->
+            "assume-term"
+
+        AssumeType ->
+            "assume-type"
+
+        AssumeModule ->
+            "assume-module"
+
+        AssumeFunctor ->
+            "assume-functor"
+
+
+interfaceAssumptionKeyword : Parser ExpectedInterfaceAssumption InterfaceAssumptionKeyword
+interfaceAssumptionKeyword =
+    Parser.stringIn
+        [ ( "assume-term", AssumeTerm )
+        , ( "assume-type", AssumeType )
+        , ( "assume-module", AssumeModule )
+        , ( "assume-functor", AssumeFunctor )
+        ]
+        |> Parser.mapError ExpectedInterfaceAssumptionKeyword
+        |> Parser.o (keywordGap |> Parser.mapError ExpectedGapAfterInterfaceAssumptionKeyword)
+        |> Parser.o spaces
+
+
+interfaceAssumption : Parser ExpectedInterfaceAssumption InterfaceAssumption
 interfaceAssumption =
-    paren
-        (Parser.oneOf
-            [ Parser.succeed (\termName type0 -> Base.AssumeTerm termName type0)
-                |. keyword "assume-term"
-                |= varIntro
-                |= typeExpression
-            , Parser.succeed (\moduleName interface -> Base.AssumeModule moduleName interface)
-                |. keyword "assume-module"
-                |= moduleVarIntro
-                |= Parser.lazy (\() -> interfaceLiteral)
-            , Parser.succeed (\typeVarName -> Base.AssumeType typeVarName)
-                |. keyword "assume-type"
-                |= typeVarIntro
-            ]
-        )
+    interfaceAssumptionKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    AssumeTerm ->
+                        Parser.return Base.AssumeTerm
+                            |> Parser.ooo (varIntro |> Parser.mapError ExpectedTermIdentifierInInterfaceAssumption)
+                            |> Parser.o (symbol ":" |> Parser.mapError ExpectedTypingSymbolInInterfaceAssumption)
+                            |> Parser.ooo (typeTerm |> Parser.mapError ExpectedTypeInInterfaceAssumption)
+
+                    AssumeType ->
+                        Debug.todo ""
+
+                    AssumeModule ->
+                        Parser.return Base.AssumeModule
+                            |> Parser.ooo (moduleVarIntro |> Parser.mapError ExpectedModuleIdentifierInInterfaceAssumption)
+                            |> Parser.o (symbol ":" |> Parser.mapError ExpectedTypingSymbolInInterfaceAssumption)
+                            |> Parser.ooo (interfaceLiteral |> Parser.mapError ExpectedInterfaceLiteralInInterfaceAssumption)
+
+                    AssumeFunctor ->
+                        Debug.todo ""
+            )
+
+
+runInterface : String -> Result (ParserError.Error ExpectedInterface) Interface
+runInterface input =
+    Parser.run interface {} (ParserState.return input)
+        |> Result.map Tuple.second
 
 
 
 -- ===Functor===
--- (functor { (: M (interface (assume-term x Int) (assume-type T) (assume-module N (interface ...
 
 
-functorVarIntro : Parser FunctorVarName
+type ExpectedFunctorTerm
+    = ExpectedFunctorOperator ParserError.ExpectedStringIn
+    | ExpectedGapAfterFunctorOperator { operatorKeyword : FunctorOperatorKeyword, failedAtChar : ParserError.FailedAtChar }
+    | ExpectedFunctorIdentifier ExpectedIdentifierIntroduction
+    | ExpectedFunctorLiteral ExpectedFunctorLiteral
+
+
+type ExpectedFunctorLiteral
+    = ExpectedFunctorLiteralOpenBraces ParserError.ExpectedString
+      -- params
+    | ExpectedFunctorIdentifierInFunctorParameter ExpectedIdentifierIntroduction
+    | ExpectedTypingSymbolInFunctorParameter ParserError.ExpectedString
+    | ExpectedInterfaceInFunctorParameter ExpectedInterface
+    | ExpectedDotAfterFunctorParameters ParserError.ExpectedString
+      -- body
+    | ExpectedModuleTermInFunctorBody ExpectedModuleTerm
+    | ExpectedFunctorLiteralClosingBraces ParserError.ExpectedString
+
+
+expectedFunctorTermToString : ExpectedFunctorTerm -> String
+expectedFunctorTermToString msg =
+    case msg of
+        ExpectedFunctorOperator opKeyword ->
+            String.concat
+                [ "Expected functor operator keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterFunctorOperator gapAfter ->
+            String.concat
+                [ "Succesfully parsed functor operator keyword `"
+                , functorOperatorKeywordToString gapAfter.operatorKeyword
+                , "`, but failed to see a gap following it ("
+                , failedAtCharToString { failedAtChar = gapAfter.failedAtChar }
+                , ")"
+                ]
+
+        ExpectedFunctorIdentifier expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "functor" expectedIdentifierIntroduction
+
+        ExpectedFunctorLiteral expectedFunctorLiteral ->
+            expectedFunctorLiteralToString expectedFunctorLiteral
+
+
+expectedFunctorLiteralToString : ExpectedFunctorLiteral -> String
+expectedFunctorLiteralToString msg =
+    case msg of
+        ExpectedFunctorLiteralOpenBraces failedAtChar ->
+            String.concat [ "Expected open brace `{` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        -- params
+        ExpectedFunctorIdentifierInFunctorParameter expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "functor" expectedIdentifierIntroduction
+
+        ExpectedTypingSymbolInFunctorParameter failedAtChar ->
+            String.concat [ "Expected typing symbol `:` between functor variable and its interface (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedInterfaceInFunctorParameter expectedInterface ->
+            expectedInterfaceToString expectedInterface
+
+        ExpectedDotAfterFunctorParameters failedAtChar ->
+            String.concat [ "Expected a dot `.` after functor paramters (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        -- body
+        ExpectedModuleTermInFunctorBody expectedModuleTerm ->
+            expectedModuleTermToString expectedModuleTerm
+
+        ExpectedFunctorLiteralClosingBraces failedAtChar ->
+            String.concat [ "Expected closing brace `}` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+
+functorVarIntro : Parser ExpectedIdentifierIntroduction FunctorVarName
 functorVarIntro =
-    varIntro
+    identifier
 
 
-functorTerm : Parser FunctorTerm
-functorTerm =
-    Parser.oneOf
-        [ functorVarUse
-        , functorLiteral |> Parser.map Base.FunctorLiteralTerm
+type FunctorOperatorKeyword
+    = FunctorVarUse
+    | FunctorLiteral
+
+
+functorOperatorKeywordToString : FunctorOperatorKeyword -> String
+functorOperatorKeywordToString opKeyword =
+    case opKeyword of
+        FunctorVarUse ->
+            "$"
+
+        FunctorLiteral ->
+            "functor"
+
+
+functorOperatorKeyword : Parser ExpectedFunctorTerm FunctorOperatorKeyword
+functorOperatorKeyword =
+    let
+        handleGap keyword0 gapError =
+            ExpectedGapAfterFunctorOperator { operatorKeyword = keyword0, failedAtChar = gapError.failedAtChar }
+    in
+    Parser.stringIn
+        [ ( "$", FunctorVarUse )
+        , ( "functor", FunctorLiteral )
         ]
+        |> Parser.mapError ExpectedFunctorOperator
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    FunctorVarUse ->
+                        Parser.return FunctorVarUse
+
+                    _ ->
+                        Parser.return keyword0
+                            |> Parser.o (keywordGap |> Parser.mapError (handleGap keyword0))
+            )
+        |> Parser.o spaces
 
 
-functorLiteral : Parser FunctorLiteral
+functorTerm : Parser ExpectedFunctorTerm FunctorTerm
+functorTerm =
+    functorOperatorKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    FunctorVarUse ->
+                        functorVarIntro
+                            |> Parser.mapError ExpectedFunctorIdentifier
+                            |> Parser.map Base.FunctorVarUse
+
+                    FunctorLiteral ->
+                        functorLiteral |> Parser.mapError ExpectedFunctorLiteral |> Parser.map Base.FunctorLiteralTerm
+            )
+
+
+functorLiteral : Parser ExpectedFunctorLiteral FunctorLiteral
 functorLiteral =
-    -- (functor { (: M1 I1) (: M2 I2) .  module-term })
-    paren
-        (Parser.succeed (\( parameters, body ) -> Base.FunctorLiteral parameters body)
-            |. keyword "functor"
-            |= binding
-                functorParameters
-                moduleTerm
-        )
+    Parser.return Base.FunctorLiteral
+        |> Parser.o (symbol "{" |> Parser.mapError ExpectedFunctorLiteralOpenBraces)
+        |> Parser.ooo
+            (Parser.repeatUntil
+                functorParameter
+                (symbol "." |> Parser.mapError ExpectedDotAfterFunctorParameters)
+            )
+        |> Parser.ooo (moduleTerm |> Parser.mapError ExpectedModuleTermInFunctorBody)
+        |> Parser.o (symbol "}" |> Parser.mapError ExpectedFunctorLiteralClosingBraces)
 
 
-functorVarUse : Parser FunctorTerm
-functorVarUse =
-    -- $F
-    Parser.succeed Base.FunctorVarUse
-        |. Parser.symbol "$"
-        |= functorVarIntro
-
-
-
--- (@ $F $M1 $M2)
-
-
-functorApplication : Parser ModuleTerm
-functorApplication =
-    Parser.succeed (\arg parameters -> Base.FunctorApplication arg parameters)
-        |. keyword "@"
-        |= Parser.lazy (\() -> functorTerm)
-        |= seq moduleTerm
-
-
-functorParameters : Parser (List ( ModuleVarName, Interface ))
-functorParameters =
-    seq (paren functorParameter)
-
-
-functorParameter : Parser ( ModuleVarName, Interface )
+functorParameter : Parser ExpectedFunctorLiteral ( ModuleVarName, Interface )
 functorParameter =
-    -- (: ${moduleIntro} ${interfaceLiteral})
-    Parser.succeed (\moduleVar interface -> ( moduleVar, interface ))
-        |. keyword ":"
-        |= moduleVarIntro
-        |= interfaceLiteral
+    Parser.return Tuple.pair
+        |> Parser.ooo functorVarIntro
+        |> Parser.mapError ExpectedFunctorIdentifierInFunctorParameter
+        |> Parser.o (symbol ":" |> Parser.mapError ExpectedTypingSymbolInFunctorParameter)
+        |> Parser.ooo (interface |> Parser.mapError ExpectedInterfaceInFunctorParameter)
+
+
+runFunctorTerm : String -> Result (ParserError.Error ExpectedFunctorTerm) FunctorTerm
+runFunctorTerm input =
+    Parser.run functorTerm {} (ParserState.return input)
+        |> Result.map Tuple.second

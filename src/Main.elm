@@ -5,8 +5,7 @@ import Calculus.Base as L exposing (ModuleTerm, Term, Type)
 import Calculus.Evaluation.Evaluation as L exposing (ThunkContext)
 import Calculus.Evaluation.Value as Value exposing (Value)
 import Calculus.Example
-import Calculus.NewParser as NewLambdaParser
-import Calculus.Parser as L
+import Calculus.Parser as LambdaParser
 import Calculus.Show as L
 import Calculus.Type.Inference as L
 import Calculus.Type.TypeVarContext as L
@@ -58,12 +57,12 @@ type alias Model =
 type alias ModuleModel =
     { moduleInput : String
     , -- Nothing means haven't parsed anything yet
-      parsedModule : Maybe (Result (PError.Error NewLambdaParser.ExpectedModuleTerm) ModuleTerm)
+      parsedModule : Maybe (Result (PError.Error LambdaParser.ExpectedModuleTerm) ModuleTerm)
     , evaledModule : Maybe (Result (List L.EvalError) Value.ModuleValue)
     , env : Value.Environment
     , -- ===REPL===
       replInput : String
-    , parsedTerm : Maybe (Result (PError.Error NewLambdaParser.ExpectedTerm) Term)
+    , parsedTerm : Maybe (Result (PError.Error LambdaParser.ExpectedTerm) Term)
     , evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     }
 
@@ -71,7 +70,7 @@ type alias ModuleModel =
 parseModule : ModuleModel -> ModuleModel
 parseModule model =
     { model
-        | parsedModule = Just (NewLambdaParser.runModuleTerm model.moduleInput)
+        | parsedModule = Just (LambdaParser.runModuleTerm model.moduleInput)
     }
 
 
@@ -234,7 +233,7 @@ type alias Binding =
     { name : BindingName
     , input : String
     , -- Nothing means haven't parsed anything yet
-      parsedTerm : Maybe (Result (PError.Error NewLambdaParser.ExpectedTerm) Term)
+      parsedTerm : Maybe (Result (PError.Error LambdaParser.ExpectedTerm) Term)
     , -- Nothing means haven't evaled the term yet
       evaledTerm : Maybe (Result (List L.EvalError) ( ThunkContext, Value ))
     , inferedType : Maybe (Result (List L.TypeError) ( L.TermVarContext, L.TypeVarContext, Type ))
@@ -307,7 +306,7 @@ pair($twice $plus-one)
             input0
 
         termResult =
-            NewLambdaParser.runTerm input
+            LambdaParser.runTerm input
     in
     { name = "foo"
     , input = input
@@ -424,7 +423,7 @@ updateBinding msg model =
         InputChanged input ->
             { model
                 | input = input
-                , parsedTerm = Just (NewLambdaParser.runTerm input)
+                , parsedTerm = Just (LambdaParser.runTerm input)
                 , evaledTerm = Nothing
                 , inferedType = Nothing
             }
@@ -457,7 +456,7 @@ updateModuleModel msg model =
         ModuleInputChanged input ->
             { model
                 | moduleInput = input
-                , parsedModule = Just (NewLambdaParser.runModuleTerm input)
+                , parsedModule = Just (LambdaParser.runModuleTerm input)
                 , evaledTerm = Nothing
                 , env = Value.emptyEnvironment
             }
@@ -475,7 +474,7 @@ updateModuleModel msg model =
         ReplInputChanged input ->
             let
                 parsedTerm =
-                    Just (NewLambdaParser.runTerm input)
+                    Just (LambdaParser.runTerm input)
             in
             { model
                 | replInput = input
@@ -567,7 +566,7 @@ viewBinding binding =
 
                                         Err err ->
                                             -- "Parsing Error"
-                                            NewLambdaParser.termErrorToString err
+                                            LambdaParser.termErrorToString err
                             ]
                         )
                     , E.el []
@@ -781,14 +780,14 @@ viewModule moduleModel =
                                                         E.text ""
 
                                             Err err ->
-                                                E.text (NewLambdaParser.termErrorToString err)
+                                                E.text (LambdaParser.termErrorToString err)
 
                                     Nothing ->
                                         E.text ""
                                 ]
 
                         Err err ->
-                            E.text (NewLambdaParser.moduleTermErrorToString err)
+                            E.text (LambdaParser.moduleTermErrorToString err)
 
                 Nothing ->
                     E.text ""
