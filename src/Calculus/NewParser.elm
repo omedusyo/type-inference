@@ -1,16 +1,17 @@
 module Calculus.NewParser exposing
     ( ExpectedModuleTerm(..)
     , ExpectedTerm(..)
+    , functorTerm
     , interface
     , moduleTerm
     , moduleTermErrorToString
+    , runFunctorTerm
     , runInterface
     , runModuleTerm
     , runTerm
     , term
-    ,  termErrorToString
-       -- , typeTerm
-
+    , termErrorToString
+    , typeTerm
     )
 
 import Calculus.Base as Base
@@ -438,20 +439,20 @@ expectedOperatorKeywordToString msg =
 expectedBindingTermToString : ExpectedBindingTerm -> String
 expectedBindingTermToString msg =
     case msg of
-        ExpectedOpenBraces msg0 ->
-            String.concat [ "Expected open braces (", failedAtMaybeCharToString msg0, ")" ]
+        ExpectedOpenBraces failedAtChar ->
+            String.concat [ "Expected open braces (", failedAtMaybeCharToString failedAtChar, ")" ]
 
-        ExpectedDot msg0 ->
-            String.concat [ "Expected dot (", failedAtMaybeCharToString msg0, ")" ]
+        ExpectedDot failedAtChar ->
+            String.concat [ "Expected dot (", failedAtMaybeCharToString failedAtChar, ")" ]
 
-        ExpectedClosingBraces msg0 ->
-            String.concat [ "Expected closing braces (", failedAtMaybeCharToString msg0, ")" ]
+        ExpectedClosingBraces failedAtChar ->
+            String.concat [ "Expected closing braces (", failedAtMaybeCharToString failedAtChar, ")" ]
 
-        ExpectedDefEquals msg0 ->
-            String.concat [ "Expected def. equals symbol in let binding (", failedAtMaybeCharToString msg0, ")" ]
+        ExpectedDefEquals failedAtChar ->
+            String.concat [ "Expected def. equals symbol in let binding (", failedAtMaybeCharToString failedAtChar, ")" ]
 
-        ExpectedSemicolon msg0 ->
-            String.concat [ "Expected semicolon after let binding (", failedAtMaybeCharToString msg0, ")" ]
+        ExpectedSemicolon failedAtChar ->
+            String.concat [ "Expected semicolon after let binding (", failedAtMaybeCharToString failedAtChar, ")" ]
 
 
 expectedPatternToString : ExpectedPattern -> String
@@ -749,6 +750,9 @@ operatorKeyword =
                     NatLiteral ->
                         -- NatLiteral use can't have keyword Gap
                         Parser.return NatLiteral
+
+                    Application ->
+                        Parser.return Application
 
                     _ ->
                         Parser.return operatorKeyword0
@@ -1107,6 +1111,22 @@ type ExpectedType
     | ExpectedTypeParens ExpectedParens
 
 
+expectedTypeToString : ExpectedType -> String
+expectedTypeToString expectedType =
+    case expectedType of
+        ExpectedTypeIdentifier expectedDecimalNaturalNumber ->
+            Debug.todo ""
+
+        ExpectedTypeVarUseToStartWithQuote expectedString ->
+            Debug.todo ""
+
+        ExpectedTypeOperator opKeyword ->
+            Debug.todo ""
+
+        ExpectedTypeParens expectedParens ->
+            Debug.todo ""
+
+
 mandatoryTypeTermParens : Parser ExpectedType a -> Parser ExpectedType a
 mandatoryTypeTermParens parser =
     mandatoryParens parser
@@ -1262,6 +1282,9 @@ type ExpectedModuleTerm
     | ExpectedModuleLetBinding ExpectedModuleLetBinding
     | ExpectedSemicolonAfterModuleLetBinding ParserError.ExpectedString
     | ExpectedModuleClosingBraces ParserError.ExpectedString
+      -- Functor Application
+    | ExpectedFunctorTermInApplication ExpectedFunctorTerm
+    | ExpectedClosingBracketsInFunctorApplication ParserError.ExpectedString
 
 
 type ExpectedModuleLetBinding
@@ -1327,6 +1350,16 @@ expectedModuleTermToString msg =
         ExpectedModuleClosingBraces failedAtCharError ->
             String.concat
                 [ "Expected a closing brace `}` to end the module expression "
+                , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
+                ]
+
+        -- Functor Application
+        ExpectedFunctorTermInApplication expectedFunctorTerm ->
+            expectedFunctorTermToString expectedFunctorTerm
+
+        ExpectedClosingBracketsInFunctorApplication failedAtCharError ->
+            String.concat
+                [ "Expected a closing bracket `]` to end the functor application "
                 , String.concat [ "(", failedAtMaybeCharToString failedAtCharError, ")" ]
                 ]
 
@@ -1438,6 +1471,9 @@ moduleOperatorKeyword =
                     ModuleVarUse ->
                         Parser.return ModuleVarUse
 
+                    FunctorApplication ->
+                        Parser.return FunctorApplication
+
                     _ ->
                         Parser.return keyword0
                             |> Parser.o (keywordGap |> Parser.mapError (handleGap keyword0))
@@ -1465,7 +1501,13 @@ moduleTerm =
                         moduleLiteral |> Parser.map Base.ModuleLiteralTerm
 
                     FunctorApplication ->
-                        Debug.todo ""
+                        Parser.return Base.FunctorApplication
+                            |> Parser.ooo (functorTerm |> Parser.mapError ExpectedFunctorTermInApplication)
+                            |> Parser.ooo
+                                (Parser.repeatUntil
+                                    moduleTerm
+                                    (symbol "]" |> Parser.mapError ExpectedClosingBracketsInFunctorApplication)
+                                )
             )
 
 
@@ -1580,6 +1622,75 @@ type ExpectedInterfaceAssumption
     | ExpectedInterfaceLiteralInInterfaceAssumption ExpectedInterface
 
 
+expectedInterfaceToString : ExpectedInterface -> String
+expectedInterfaceToString msg =
+    case msg of
+        ExpectedInterfaceKeyword opKeyword ->
+            String.concat
+                [ "Expected interface keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterInterfaceKeyword failedAtChar ->
+            String.concat
+                [ "Succesfully parsed interface keyword `interface`, but failed to see a gap following it ("
+                , failedAtCharToString failedAtChar
+                , ")"
+                ]
+
+        ExpectedInterfaceOpenBraces failedAtChar ->
+            String.concat [ "Expected open brace `{` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedInterfaceAssumption expectedInterfaceAssumption ->
+            expectedInterfaceAssumptionToString expectedInterfaceAssumption
+
+        ExpectedSemicolonAfterInterfaceAssumption failedAtChar ->
+            String.concat [ "Expected semicolon after let binding (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedInterfaceClosingBraces failedAtChar ->
+            String.concat [ "Expected closing brace `}` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+
+expectedInterfaceAssumptionToString : ExpectedInterfaceAssumption -> String
+expectedInterfaceAssumptionToString msg =
+    case msg of
+        ExpectedInterfaceAssumptionKeyword opKeyword ->
+            String.concat
+                [ "Expected interface-assumption keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterInterfaceAssumptionKeyword failedAtChar ->
+            String.concat
+                [ "Failed to see a gap following it ("
+                , failedAtCharToString failedAtChar
+                , ")"
+                ]
+
+        ExpectedTypingSymbolInInterfaceAssumption failedAtChar ->
+            String.concat [ "Expected typing symbol `:` after the identifier (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        -- term
+        ExpectedTermIdentifierInInterfaceAssumption expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "term" expectedIdentifierIntroduction
+
+        ExpectedTypeInInterfaceAssumption expectedType ->
+            expectedTypeToString expectedType
+
+        -- module
+        ExpectedModuleIdentifierInInterfaceAssumption expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "module" expectedIdentifierIntroduction
+
+        ExpectedInterfaceLiteralInInterfaceAssumption expectedInterface ->
+            expectedInterfaceToString expectedInterface
+
+
 interface : Parser ExpectedInterface Interface
 interface =
     let
@@ -1679,4 +1790,170 @@ interfaceAssumption =
 runInterface : String -> Result (ParserError.Error ExpectedInterface) Interface
 runInterface input =
     Parser.run interface {} (ParserState.return input)
+        |> Result.map Tuple.second
+
+
+
+-- ===Functor===
+
+
+type ExpectedFunctorTerm
+    = ExpectedFunctorOperator ParserError.ExpectedStringIn
+    | ExpectedGapAfterFunctorOperator { operatorKeyword : FunctorOperatorKeyword, failedAtChar : ParserError.FailedAtChar }
+    | ExpectedFunctorIdentifier ExpectedIdentifierIntroduction
+    | ExpectedFunctorLiteral ExpectedFunctorLiteral
+
+
+type ExpectedFunctorLiteral
+    = ExpectedFunctorLiteralOpenBraces ParserError.ExpectedString
+      -- params
+    | ExpectedFunctorIdentifierInFunctorParameter ExpectedIdentifierIntroduction
+    | ExpectedTypingSymbolInFunctorParameter ParserError.ExpectedString
+    | ExpectedInterfaceInFunctorParameter ExpectedInterface
+    | ExpectedDotAfterFunctorParameters ParserError.ExpectedString
+      -- body
+    | ExpectedModuleTermInFunctorBody ExpectedModuleTerm
+    | ExpectedFunctorLiteralClosingBraces ParserError.ExpectedString
+
+
+expectedFunctorTermToString : ExpectedFunctorTerm -> String
+expectedFunctorTermToString msg =
+    case msg of
+        ExpectedFunctorOperator opKeyword ->
+            String.concat
+                [ "Expected functor operator keyword ("
+                , consumedSuccessfullyToString opKeyword
+                , ", "
+                , failedAtMaybeCharToString opKeyword
+                , ")"
+                ]
+
+        ExpectedGapAfterFunctorOperator gapAfter ->
+            String.concat
+                [ "Succesfully parsed functor operator keyword `"
+                , functorOperatorKeywordToString gapAfter.operatorKeyword
+                , "`, but failed to see a gap following it ("
+                , failedAtCharToString { failedAtChar = gapAfter.failedAtChar }
+                , ")"
+                ]
+
+        ExpectedFunctorIdentifier expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "functor" expectedIdentifierIntroduction
+
+        ExpectedFunctorLiteral expectedFunctorLiteral ->
+            expectedFunctorLiteralToString expectedFunctorLiteral
+
+
+expectedFunctorLiteralToString : ExpectedFunctorLiteral -> String
+expectedFunctorLiteralToString msg =
+    case msg of
+        ExpectedFunctorLiteralOpenBraces failedAtChar ->
+            String.concat [ "Expected open brace `{` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        -- params
+        ExpectedFunctorIdentifierInFunctorParameter expectedIdentifierIntroduction ->
+            expectedIdentifierIntroductionToString "functor" expectedIdentifierIntroduction
+
+        ExpectedTypingSymbolInFunctorParameter failedAtChar ->
+            String.concat [ "Expected typing symbol `:` between functor variable and its interface (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        ExpectedInterfaceInFunctorParameter expectedInterface ->
+            expectedInterfaceToString expectedInterface
+
+        ExpectedDotAfterFunctorParameters failedAtChar ->
+            String.concat [ "Expected a dot `.` after functor paramters (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+        -- body
+        ExpectedModuleTermInFunctorBody expectedModuleTerm ->
+            expectedModuleTermToString expectedModuleTerm
+
+        ExpectedFunctorLiteralClosingBraces failedAtChar ->
+            String.concat [ "Expected closing brace `}` (", failedAtMaybeCharToString failedAtChar, ")" ]
+
+
+functorVarIntro : Parser ExpectedIdentifierIntroduction FunctorVarName
+functorVarIntro =
+    identifier
+
+
+type FunctorOperatorKeyword
+    = FunctorVarUse
+    | FunctorLiteral
+
+
+functorOperatorKeywordToString : FunctorOperatorKeyword -> String
+functorOperatorKeywordToString opKeyword =
+    case opKeyword of
+        FunctorVarUse ->
+            "$"
+
+        FunctorLiteral ->
+            "functor"
+
+
+functorOperatorKeyword : Parser ExpectedFunctorTerm FunctorOperatorKeyword
+functorOperatorKeyword =
+    let
+        handleGap keyword0 gapError =
+            ExpectedGapAfterFunctorOperator { operatorKeyword = keyword0, failedAtChar = gapError.failedAtChar }
+    in
+    Parser.stringIn
+        [ ( "$", FunctorVarUse )
+        , ( "functor", FunctorLiteral )
+        ]
+        |> Parser.mapError ExpectedFunctorOperator
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    FunctorVarUse ->
+                        Parser.return FunctorVarUse
+
+                    _ ->
+                        Parser.return keyword0
+                            |> Parser.o (keywordGap |> Parser.mapError (handleGap keyword0))
+            )
+        |> Parser.o spaces
+
+
+functorTerm : Parser ExpectedFunctorTerm FunctorTerm
+functorTerm =
+    functorOperatorKeyword
+        |> Parser.andThen
+            (\keyword0 ->
+                case keyword0 of
+                    FunctorVarUse ->
+                        functorVarIntro
+                            |> Parser.mapError ExpectedFunctorIdentifier
+                            |> Parser.map Base.FunctorVarUse
+
+                    FunctorLiteral ->
+                        functorLiteral |> Parser.mapError ExpectedFunctorLiteral |> Parser.map Base.FunctorLiteralTerm
+            )
+
+
+functorLiteral : Parser ExpectedFunctorLiteral FunctorLiteral
+functorLiteral =
+    Parser.return Base.FunctorLiteral
+        |> Parser.o (symbol "{" |> Parser.mapError ExpectedFunctorLiteralOpenBraces)
+        |> Parser.ooo
+            (Parser.repeatUntil
+                functorParameter
+                (symbol "." |> Parser.mapError ExpectedDotAfterFunctorParameters)
+            )
+        |> Parser.ooo (moduleTerm |> Parser.mapError ExpectedModuleTermInFunctorBody)
+        |> Parser.o (symbol "}" |> Parser.mapError ExpectedFunctorLiteralClosingBraces)
+
+
+functorParameter : Parser ExpectedFunctorLiteral ( ModuleVarName, Interface )
+functorParameter =
+    Parser.return Tuple.pair
+        |> Parser.ooo functorVarIntro
+        |> Parser.mapError ExpectedFunctorIdentifierInFunctorParameter
+        |> Parser.o (symbol ":" |> Parser.mapError ExpectedTypingSymbolInFunctorParameter)
+        |> Parser.ooo (interface |> Parser.mapError ExpectedInterfaceInFunctorParameter)
+
+
+runFunctorTerm : String -> Result (ParserError.Error ExpectedFunctorTerm) FunctorTerm
+runFunctorTerm input =
+    Parser.run functorTerm {} (ParserState.return input)
         |> Result.map Tuple.second
