@@ -21,7 +21,7 @@ import Calculus.Base as Base
         )
 import Calculus.Type.TypeVarContext as TypeVarContext exposing (TypeError, TypeVarContext)
 import Dict exposing (Dict)
-import Lib.State.StatefulWithErr as State exposing (StatefulWithErr)
+import Lib.State.StatefulReaderWithErr as State exposing (StatefulReaderWithErr)
 import Set exposing (Set)
 
 
@@ -36,7 +36,8 @@ type alias State =
 
 
 type alias InferenceContext a =
-    StatefulWithErr (List TypeError) State a
+    -- TODO: reader
+    StatefulReaderWithErr (List TypeError) () State a
 
 
 type alias TermVarContext =
@@ -103,17 +104,17 @@ popVarFromContext varName context0 =
 
 getContext : (TermVarContext -> InferenceContext a) -> InferenceContext a
 getContext f =
-    State.get0 (\{ context } -> f context)
+    State.get0 (\_ { context } -> f context)
 
 
 updateContext : (TermVarContext -> TermVarContext) -> InferenceContext a -> InferenceContext a
 updateContext nextContext =
-    State.update (\({ context } as state) -> { state | context = nextContext context })
+    State.update (\_ ({ context } as state) -> { state | context = nextContext context })
 
 
 updateContext0 : (TermVarContext -> TermVarContext) -> InferenceContext ()
 updateContext0 nextContext =
-    State.update0 (\({ context } as state) -> { state | context = nextContext context })
+    State.update0 (\_ ({ context } as state) -> { state | context = nextContext context })
 
 
 
@@ -123,8 +124,8 @@ updateContext0 nextContext =
 liftUnification : TypeVarContext.UnificationStateful a -> InferenceContext a
 liftUnification unificationStateful =
     State.create
-        (\({ typeVarContext } as state) ->
-            State.run unificationStateful typeVarContext
+        (\readOnlyState ({ typeVarContext } as state) ->
+            State.run unificationStateful readOnlyState typeVarContext
                 |> Result.map
                     (\( typeVarContext1, a ) ->
                         ( { state | typeVarContext = typeVarContext1 }, a )
@@ -699,6 +700,8 @@ inferAndClose term =
 infer0 : Term -> Result (List TypeError) ( TermVarContext, TypeVarContext, Type )
 infer0 term =
     State.run (infer term)
+        -- TODO: init-reader
+        ()
         emptyState
         |> Result.map
             (\( state, type0 ) ->

@@ -17,7 +17,7 @@ import Element.Input as Input
 import Html as H exposing (Html)
 import Lib.Parser.Error as PError
 import Lib.Parser.Parser as NewParser
-import Lib.State.StatefulWithErr as State
+import Lib.State.StatefulReaderWithErr as State
 import List.Extra as List
 import Return exposing (Return)
 
@@ -643,7 +643,7 @@ viewBinding binding =
                                         , E.text
                                             (String.concat
                                                 [ "expanded-type = "
-                                                , case State.run (L.expandType type0) typeVarContext of
+                                                , case State.run (L.expandType type0) () typeVarContext of
                                                     Ok ( _, type1 ) ->
                                                         L.showType type1
 

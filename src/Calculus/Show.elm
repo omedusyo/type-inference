@@ -28,7 +28,7 @@ import Calculus.Type.Inference as TypeInference exposing (TermVarContext)
 import Calculus.Type.TypeVarContext as TypeVarContext exposing (Equations, TypeError, TypeVarContext, TypeVarStack)
 import Dict
 import Lib.StackedSet as StackedSet
-import Lib.State.StatefulWithErr as State
+import Lib.State.StatefulReaderWithErr as State
 
 
 
@@ -586,7 +586,7 @@ showFinalInfer term =
             TypeInference.infer0 term
                 |> Result.andThen
                     (\( termVarContext, typeVarContext, type1 ) ->
-                        State.run (TypeVarContext.expandType type1) typeVarContext
+                        State.run (TypeVarContext.expandType type1) () typeVarContext
                             |> Result.map
                                 (\( _, type2 ) ->
                                     showType type2

@@ -18,7 +18,7 @@ module Calculus.Type.TypeVarContext exposing
 import Calculus.Base as Base exposing (Type, TypeVarName)
 import Dict exposing (Dict)
 import Lib.StackedSet as StackedSet exposing (StackedSet)
-import Lib.State.StatefulWithErr as State exposing (StatefulWithErr)
+import Lib.State.StatefulReaderWithErr as State exposing (StatefulReaderWithErr)
 import Set exposing (Set)
 
 
@@ -38,7 +38,8 @@ type alias State =
 
 
 type alias UnificationStateful a =
-    StatefulWithErr (List TypeError) State a
+    -- TODO: read-only
+    StatefulReaderWithErr (List TypeError) () State a
 
 
 type alias TypeVarStack =
@@ -107,7 +108,7 @@ moveTypeVarStackFrame =
 pushTypeVarStackFrame0 : UnificationStateful ()
 pushTypeVarStackFrame0 =
     State.update0
-        (\({ typeVarStack } as state) ->
+        (\_ ({ typeVarStack } as state) ->
             { state | typeVarStack = StackedSet.pushFrame typeVarStack }
         )
 
@@ -115,7 +116,7 @@ pushTypeVarStackFrame0 =
 popTypeVarStackFrame : UnificationStateful (Set TypeVarName)
 popTypeVarStackFrame =
     State.create
-        (\({ typeVarStack } as state) ->
+        (\_ ({ typeVarStack } as state) ->
             case StackedSet.popFrame typeVarStack of
                 Just ( vars, newTypeVarStack ) ->
                     Ok ( { state | typeVarStack = newTypeVarStack }, vars )
@@ -150,7 +151,7 @@ newTypeVar n =
 generateFreshVar : UnificationStateful Type
 generateFreshVar =
     State.create
-        (\({ nextTypeVar, typeVarStack } as state0) ->
+        (\_ ({ nextTypeVar, typeVarStack } as state0) ->
             let
                 ( nextTypeVar1, type1 ) =
                     newTypeVar nextTypeVar
@@ -168,7 +169,7 @@ generateFreshVar =
 generateFreshVarName : UnificationStateful TypeVarName
 generateFreshVarName =
     State.create
-        (\({ nextTypeVar, typeVarStack } as state0) ->
+        (\_ ({ nextTypeVar, typeVarStack } as state0) ->
             let
                 ( nextTypeVar1, _ ) =
                     newTypeVar nextTypeVar
@@ -202,7 +203,7 @@ extendEquations typeVarName type0 =
     -- TODO: is it ok if we don't expand `type0` here? Seems to be ok... but that may become false in the future and generate an epic bug.
     --       Seems like this would be a better place to expand
     State.update0
-        (\({ equations, typeVarStack } as state) ->
+        (\_ ({ equations, typeVarStack } as state) ->
             { state
                 | equations = Dict.insert typeVarName type0 equations
                 , typeVarStack =
@@ -221,7 +222,7 @@ expandType_MAY_INFINITE_CYCLE type0 =
     case type0 of
         Base.TypeVarUse n ->
             State.get0
-                (\{ equations } ->
+                (\_ { equations } ->
                     case lookupEquations n equations of
                         Just type1 ->
                             expandType_MAY_INFINITE_CYCLE type1
@@ -272,7 +273,7 @@ expandType type0 =
 expandTypeAtTypeVarName : TypeVarName -> UnificationStateful (Maybe Type)
 expandTypeAtTypeVarName typeVarName =
     State.get0
-        (\state0 ->
+        (\_ state0 ->
             case lookupEquations typeVarName state0.equations of
                 Just type0 ->
                     expandType type0
@@ -281,7 +282,7 @@ expandTypeAtTypeVarName typeVarName =
                                 -- Just being paranoid about `equations` changing during `expandType`
                                 State.second
                                     (State.update0
-                                        (\state1 ->
+                                        (\_ state1 ->
                                             -- TODO: Would it be a good idea to use extendEquations here?
                                             { state1 | equations = Dict.insert typeVarName expandedType0 state1.equations }
                                         )
@@ -307,7 +308,7 @@ expandTypeWithCycleDetection type0 seenVars =
 
             else
                 State.get0
-                    (\{ equations } ->
+                    (\_ { equations } ->
                         case lookupEquations n equations of
                             Just type1 ->
                                 expandTypeWithCycleDetection type1 (Set.insert n seenVars)
