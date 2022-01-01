@@ -1105,7 +1105,7 @@ runTerm input =
 
 
 type ExpectedType
-    = ExpectedTypeIdentifier ParserError.ExpectedDecimalNaturalNumber
+    = ExpectedTypeIdentifier ExpectedIdentifierIntroduction
     | ExpectedTypeVarUseToStartWithQuote ParserError.ExpectedString
     | ExpectedTypeOperator (ExpectedOperatorKeyword TypeOperatorKeyword)
     | ExpectedTypeParens ExpectedParens
@@ -1157,18 +1157,7 @@ optionalTypeTermParens parser =
 
 typeVarIntro : Parser ExpectedType TypeVarName
 typeVarIntro =
-    -- Why can't we just use `Parser.int`?
-    -- Because it consumes spaces and dots in `123  .`. WTF?
-    Parser.naturalNumber
-        |> Parser.o spaces
-        |> Parser.mapError ExpectedTypeIdentifier
-
-
-typeVar : Parser ExpectedType Type
-typeVar =
-    Parser.return (\typeVarName -> Base.VarType typeVarName)
-        |> Parser.o (Parser.string "'" |> Parser.mapError ExpectedTypeVarUseToStartWithQuote)
-        |> Parser.ooo typeVarIntro
+    identifier |> Parser.mapError ExpectedTypeIdentifier
 
 
 type TypeOperatorKeyword
@@ -1186,7 +1175,7 @@ type TypeOperatorKeyword
 typeOperatorKeyword : Parser (ExpectedOperatorKeyword TypeOperatorKeyword) TypeOperatorKeyword
 typeOperatorKeyword =
     Parser.stringIn
-        [ ( "'", TypeVarUse )
+        [ ( "$", TypeVarUse )
         , ( "Product", Product )
         , ( "Sum", Sum )
         , ( "Arrow", Arrow )
@@ -1239,7 +1228,7 @@ typeTerm =
             (\typeOperatorKeyword0 ->
                 case typeOperatorKeyword0 of
                     TypeVarUse ->
-                        typeVarIntro |> Parser.map Base.VarType
+                        typeVarIntro |> Parser.map Base.TypeVarUse
 
                     Product ->
                         operator2 Base.Product

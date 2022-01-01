@@ -191,12 +191,12 @@ replaceTypeVarWithFreshVar var0 freshVar type0 =
     -- WARNING: We assume that `freshVar` is fresh for `var0, type0`
     -- TODO: fuck... I want more than freshness. I actually don't want any local bound variables in `type0` to have name `freshVar`
     case type0 of
-        Base.VarType var ->
+        Base.TypeVarUse var ->
             if var == var0 then
-                State.return (Base.VarType freshVar)
+                State.return (Base.TypeVarUse freshVar)
 
             else
-                State.return (Base.VarType var)
+                State.return (Base.TypeVarUse var)
 
         Base.Product type1 type2 ->
             State.map2 Base.Product

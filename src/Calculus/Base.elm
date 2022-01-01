@@ -99,11 +99,11 @@ type Term
 
 
 type alias TypeVarName =
-    Int
+    String
 
 
 type Type
-    = VarType TypeVarName
+    = TypeVarUse TypeVarName
       -- add unit type
     | Product Type Type
       -- add zero type
@@ -119,7 +119,7 @@ type Type
 getTypeVars : Type -> Set TypeVarName
 getTypeVars type0 =
     case type0 of
-        VarType var ->
+        TypeVarUse var ->
             Set.singleton var
 
         Product type1 type2 ->
