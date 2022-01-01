@@ -428,7 +428,7 @@ showThunks { thunks } =
 showType : Type -> String
 showType type0 =
     case type0 of
-        Base.VarType n ->
+        Base.TypeVarUse n ->
             String.concat [ "$", n ]
 
         Base.Product type1 type2 ->

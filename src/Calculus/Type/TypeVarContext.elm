@@ -144,7 +144,7 @@ popTypeVarStackFrameAndExpand type0 =
 
 newTypeVar : Int -> ( Int, Type )
 newTypeVar n =
-    ( n + 1, Base.VarType (String.fromInt n) )
+    ( n + 1, Base.TypeVarUse (String.fromInt n) )
 
 
 generateFreshVar : UnificationStateful Type
@@ -219,7 +219,7 @@ extendEquations typeVarName type0 =
 expandType_MAY_INFINITE_CYCLE : Type -> UnificationStateful Type
 expandType_MAY_INFINITE_CYCLE type0 =
     case type0 of
-        Base.VarType n ->
+        Base.TypeVarUse n ->
             State.get0
                 (\{ equations } ->
                     case lookupEquations n equations of
@@ -227,7 +227,7 @@ expandType_MAY_INFINITE_CYCLE type0 =
                             expandType_MAY_INFINITE_CYCLE type1
 
                         Nothing ->
-                            State.return (Base.VarType n)
+                            State.return (Base.TypeVarUse n)
                 )
 
         Base.Product type1 type2 ->
@@ -301,7 +301,7 @@ expandTypeAtTypeVarName typeVarName =
 expandTypeWithCycleDetection : Type -> Set TypeVarName -> UnificationStateful Type
 expandTypeWithCycleDetection type0 seenVars =
     case type0 of
-        Base.VarType n ->
+        Base.TypeVarUse n ->
             if Set.member n seenVars then
                 throwTypeError [ InfiniteType n ]
 
@@ -313,7 +313,7 @@ expandTypeWithCycleDetection type0 seenVars =
                                 expandTypeWithCycleDetection type1 (Set.insert n seenVars)
 
                             Nothing ->
-                                State.return (Base.VarType n)
+                                State.return (Base.TypeVarUse n)
                     )
 
         Base.Product type1 type2 ->
@@ -358,7 +358,7 @@ unification : Type -> Type -> UnificationStateful Type
 unification type0 type1 =
     case ( type0, type1 ) of
         -- ===TYPE VARS===
-        ( Base.VarType id0, Base.VarType id1 ) ->
+        ( Base.TypeVarUse id0, Base.TypeVarUse id1 ) ->
             State.map2
                 Tuple.pair
                 (expandTypeAtTypeVarName id0)
@@ -381,20 +381,20 @@ unification type0 type1 =
 
                             ( Nothing, Nothing ) ->
                                 if id0 == id1 then
-                                    State.return (Base.VarType id0)
+                                    State.return (Base.TypeVarUse id0)
 
                                 else if id0 < id1 then
                                     State.second
-                                        (extendEquations id0 (Base.VarType id1))
-                                        (State.return (Base.VarType id1))
+                                        (extendEquations id0 (Base.TypeVarUse id1))
+                                        (State.return (Base.TypeVarUse id1))
 
                                 else
                                     State.second
-                                        (extendEquations id1 (Base.VarType id0))
-                                        (State.return (Base.VarType id1))
+                                        (extendEquations id1 (Base.TypeVarUse id0))
+                                        (State.return (Base.TypeVarUse id1))
                     )
 
-        ( Base.VarType id0, _ ) ->
+        ( Base.TypeVarUse id0, _ ) ->
             expandTypeAtTypeVarName id0
                 |> State.andThen
                     (\maybeExpandedType0 ->
@@ -408,7 +408,7 @@ unification type0 type1 =
                                     (State.return type1)
                     )
 
-        ( _, Base.VarType id1 ) ->
+        ( _, Base.TypeVarUse id1 ) ->
             expandTypeAtTypeVarName id1
                 |> State.andThen
                     (\maybeExpandedType1 ->

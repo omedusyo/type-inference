@@ -477,6 +477,6 @@ interface0 : Interface
 interface0 =
     { assumptions =
         [ Base.AssumeTerm "n" Base.ConstNat
-        , Base.AssumeTerm "f" (Base.ForAll "0" (Base.Arrow (Base.VarType "0") (Base.Product (Base.VarType "0") Base.ConstNat)))
+        , Base.AssumeTerm "f" (Base.ForAll "0" (Base.Arrow (Base.TypeVarUse "0") (Base.Product (Base.TypeVarUse "0") Base.ConstNat)))
         ]
     }
