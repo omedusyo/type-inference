@@ -429,7 +429,7 @@ showType : Type -> String
 showType type0 =
     case type0 of
         Base.VarType n ->
-            String.concat [ "'", String.fromInt n ]
+            String.concat [ "$", n ]
 
         Base.Product type1 type2 ->
             String.concat
@@ -456,7 +456,7 @@ showType type0 =
             String.concat [ "Frozen(", showType type1, ")" ]
 
         Base.ForAll typeVar type1 ->
-            String.concat [ "Forall ", "'" ++ String.fromInt typeVar, " . ", showType type1 ]
+            String.concat [ "Forall {", typeVar, " . ", showType type1, "}" ]
 
 
 
@@ -517,7 +517,7 @@ showTypeError typeError =
             "Expected Frozen Type"
 
         TypeVarContext.InfiniteType typeVarName ->
-            "Infinite Type detected: the type var " ++ "'" ++ String.fromInt typeVarName
+            String.concat [ "Infinite Type detected: the type var ", "`", typeVarName, "`" ]
 
         TypeVarContext.CantPopEmptyTypeVarContext ->
             "Cant Pop Empty Type-Var-Context"
@@ -525,7 +525,7 @@ showTypeError typeError =
 
 showTypeVarStack : TypeVarStack -> String
 showTypeVarStack =
-    StackedSet.show String.fromInt
+    StackedSet.show identity
 
 
 showEquations : Equations -> String
@@ -535,7 +535,7 @@ showEquations equations =
         |> List.map
             (\( typeVarName, type0 ) ->
                 String.concat
-                    [ "'" ++ String.fromInt typeVarName
+                    [ "$" ++ typeVarName
                     , " := "
                     , showType type0
                     ]
@@ -551,7 +551,7 @@ showTypeVarContext { nextTypeVar, typeVarStack, equations } =
         , "'" ++ String.fromInt nextTypeVar
         , "; "
         , "stack := "
-        , StackedSet.show String.fromInt typeVarStack
+        , StackedSet.show identity typeVarStack
         , "; "
         , "eq := "
         , "{"
@@ -681,7 +681,7 @@ showInterfaceAssumption assumption =
         Base.AssumeType typeVarName ->
             String.concat
                 [ "(assume-type "
-                , String.fromInt typeVarName
+                , typeVarName
                 , ")"
                 ]
 

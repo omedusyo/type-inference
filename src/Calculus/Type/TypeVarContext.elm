@@ -31,7 +31,7 @@ type alias TypeVarContext =
 
 
 type alias State =
-    { nextTypeVar : TypeVarName
+    { nextTypeVar : Int
     , typeVarStack : TypeVarStack
     , equations : Equations
     }
@@ -60,7 +60,7 @@ type TypeError
     | ExpectedBaseUnifiesWithLoopBodyType
     | ExpectedListType
     | ExpectedFrozenType
-    | InfiniteType Int
+    | InfiniteType TypeVarName
     | CantPopEmptyTypeVarContext
 
 
@@ -94,9 +94,9 @@ emptyTypeVarStack =
     StackedSet.empty
 
 
-pushTypeVar : TypeVarName -> TypeVarStack -> TypeVarStack
-pushTypeVar =
-    StackedSet.pushElement
+pushTypeVar : Int -> TypeVarStack -> TypeVarStack
+pushTypeVar n stack =
+    StackedSet.pushElement (String.fromInt n) stack
 
 
 moveTypeVarStackFrame : TypeVarName -> Set TypeVarName -> TypeVarStack -> TypeVarStack
@@ -142,9 +142,9 @@ popTypeVarStackFrameAndExpand type0 =
 --===Fresh Type Vars===
 
 
-newTypeVar : TypeVarName -> ( TypeVarName, Type )
+newTypeVar : Int -> ( Int, Type )
 newTypeVar n =
-    ( n + 1, Base.VarType n )
+    ( n + 1, Base.VarType (String.fromInt n) )
 
 
 generateFreshVar : UnificationStateful Type
@@ -178,7 +178,7 @@ generateFreshVarName =
                     | nextTypeVar = nextTypeVar1
                     , typeVarStack = pushTypeVar nextTypeVar typeVarStack
                   }
-                , nextTypeVar
+                , String.fromInt nextTypeVar
                 )
         )
 

@@ -99,7 +99,7 @@ type Term
 
 
 type alias TypeVarName =
-    Int
+    String
 
 
 type Type

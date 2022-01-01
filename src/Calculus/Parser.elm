@@ -1105,7 +1105,7 @@ runTerm input =
 
 
 type ExpectedType
-    = ExpectedTypeIdentifier ParserError.ExpectedDecimalNaturalNumber
+    = ExpectedTypeIdentifier ExpectedIdentifierIntroduction
     | ExpectedTypeVarUseToStartWithQuote ParserError.ExpectedString
     | ExpectedTypeOperator (ExpectedOperatorKeyword TypeOperatorKeyword)
     | ExpectedTypeParens ExpectedParens
@@ -1159,9 +1159,10 @@ typeVarIntro : Parser ExpectedType TypeVarName
 typeVarIntro =
     -- Why can't we just use `Parser.int`?
     -- Because it consumes spaces and dots in `123  .`. WTF?
-    Parser.naturalNumber
-        |> Parser.o spaces
-        |> Parser.mapError ExpectedTypeIdentifier
+    -- Parser.naturalNumber
+    --     |> Parser.o spaces
+    --     |> Parser.mapError ExpectedTypeIdentifier
+    identifier |> Parser.mapError ExpectedTypeIdentifier
 
 
 typeVar : Parser ExpectedType Type
