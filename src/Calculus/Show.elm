@@ -535,7 +535,7 @@ showEquations equations =
         |> List.map
             (\( typeVarName, type0 ) ->
                 String.concat
-                    [ "$" ++ typeVarName
+                    [ typeVarName
                     , " := "
                     , showType type0
                     ]
