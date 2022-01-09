@@ -17,13 +17,8 @@ import Lib.Parser.Error as PError
 import Lib.State.StatefulWithErr as State
 
 
-type alias BindingName =
-    String
-
-
 type alias Binding =
-    { name : BindingName
-    , input : String
+    { input : String
     , -- Nothing means haven't parsed anything yet
       parsedTerm : Maybe (Result (PError.Error LambdaParser.ExpectedTerm) Term)
     , -- Nothing means haven't evaled the term yet
@@ -34,8 +29,7 @@ type alias Binding =
 
 initBinding : Binding
 initBinding =
-    { name = ""
-    , input = ""
+    { input = ""
     , parsedTerm = Nothing
     , evaledTerm = Nothing
     , inferedType = Nothing
@@ -120,8 +114,7 @@ pair($twice $plus-one)
         termResult =
             LambdaParser.runTerm input
     in
-    { name = "foo"
-    , input = input
+    { input = input
     , parsedTerm = Just termResult
     , evaledTerm =
         case termResult of
@@ -210,7 +203,6 @@ view config model =
                 , label = E.text "Infer"
                 }
             ]
-        , E.el [] (E.text model.name)
         , E.row [ E.width E.fill, E.paddingEach { top = 5, right = 0, bottom = 0, left = 0 } ]
             [ Input.multiline
                 [ E.height (E.px heightPx)
