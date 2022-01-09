@@ -28,13 +28,13 @@ type alias StatefulReader r s a =
 
 
 make : (r -> s -> ( s, a )) -> StatefulReader r s a
-make =
-    identity
+make f =
+    f
 
 
 run : StatefulReader r s a -> (r -> s -> ( s, a ))
-run =
-    identity
+run stateful_a =
+    stateful_a
 
 
 get : (r -> s -> StatefulReader r s b) -> StatefulReader r s a -> StatefulReader r s b
@@ -105,6 +105,11 @@ return : a -> StatefulReader r s a
 return a =
     make <|
         \r s -> ( s, a )
+
+
+identity : StatefulReader r s (a -> a)
+identity =
+    return (\x -> x)
 
 
 

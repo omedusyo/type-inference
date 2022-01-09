@@ -9,6 +9,9 @@ import Calculus.Parser as LambdaParser
 import Calculus.Show as L
 import Calculus.Type.Inference as L
 import Calculus.Type.TypeVarContext as L
+import Calculus.Ui.Control.Context as Context exposing (Context)
+import Calculus.Ui.Control.InitContext as InitContext exposing (InitContext)
+import Calculus.Ui.Main as LambdaUi
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -17,6 +20,7 @@ import Element.Input as Input
 import Html as H exposing (Html)
 import Lib.Parser.Error as PError
 import Lib.Parser.Parser as NewParser
+import Lib.State.StatefulReader as StatefulReader exposing (StatefulReader)
 import Lib.State.StatefulWithErr as State
 import List.Extra as List
 import Return exposing (Return)
@@ -24,6 +28,12 @@ import Return exposing (Return)
 
 blue =
     E.rgb255 142 207 245
+
+
+
+-- insertAfter 1 a [x, y, z]
+-- x :: insertAfter 0 a [y, z]
+-- x :: a :: y :: z :: []
 
 
 insertAfter : Int -> a -> List a -> List a
@@ -41,9 +51,6 @@ insertAfter n a xs0 =
 
 
 
--- insertAfter 1 a [x, y, z]
--- x :: insertAfter 0 a [y, z]
--- x :: a :: y :: z :: []
 -- ===MODEL===
 
 
@@ -51,7 +58,24 @@ type alias Model =
     { bindings : List Binding
     , moduleModel : ModuleModel
     , tab : Tab
+    , lambdaUiState : Context.State LambdaUi.Model
     }
+
+
+initModel : Return Msg Model
+initModel =
+    let
+        ( lambdaUiState, lambdaUiCmd ) =
+            LambdaUi.init Context.initConfig
+    in
+    { bindings = [ exampleBinding ]
+    , moduleModel = initModuleModel
+    , tab = initTab
+    , lambdaUiState =
+        lambdaUiState
+    }
+        |> Return.singleton
+        |> Return.command (lambdaUiCmd |> Cmd.map LambdaUiMsg)
 
 
 type alias ModuleModel =
@@ -217,14 +241,6 @@ tabToString tab =
             "Help"
 
 
-initModel : Model
-initModel =
-    { bindings = [ exampleBinding ]
-    , moduleModel = initModuleModel
-    , tab = initTab
-    }
-
-
 type alias BindingName =
     String
 
@@ -337,7 +353,8 @@ type alias BindingPosition =
 
 
 type Msg
-    = ChangeTab Tab
+    = LambdaUiMsg LambdaUi.Msg
+    | ChangeTab Tab
     | BindingMsg BindingPosition BindingMsg
     | ModuleMsg ModuleMsg
     | InsertBindingAtTheStart
@@ -380,6 +397,17 @@ isModuleParsedSuccesfully model =
 update : Msg -> Model -> Return Msg Model
 update msg model =
     case msg of
+        LambdaUiMsg lambdaUiMsg ->
+            let
+                ( lambdaUiState, cmd ) =
+                    StatefulReader.run (LambdaUi.update lambdaUiMsg) Context.initConfig model.lambdaUiState
+            in
+            { model
+                | lambdaUiState = lambdaUiState
+            }
+                |> Return.singleton
+                |> Return.command cmd
+
         ChangeTab tab ->
             { model | tab = tab }
                 |> Return.singleton
@@ -675,7 +703,8 @@ viewBinding binding =
 view : Model -> Element Msg
 view model =
     E.column [ E.width E.fill, E.padding 10 ]
-        [ E.row []
+        [ LambdaUi.view Context.initConfig model.lambdaUiState.model |> E.map LambdaUiMsg
+        , E.row []
             (tabs
                 |> List.map
                     (\tab ->
@@ -851,7 +880,7 @@ viewHelp =
 main : Program () Model Msg
 main =
     Browser.element
-        { init = \_ -> Return.singleton initModel
+        { init = \_ -> initModel
         , update = update
         , subscriptions = subscriptions
         , view = \model -> E.layout [] (view model)

@@ -5,6 +5,7 @@ module Calculus.Ui.Control.Context exposing
     , embed
     , embedModelIntoState
     , getConfig
+    , initConfig
     , mapCmd
     , none
     , performCmd
@@ -20,6 +21,11 @@ import Task
 
 
 type alias Config =
+    {}
+
+
+initConfig : Config
+initConfig =
     {}
 
 

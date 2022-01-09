@@ -1,5 +1,7 @@
 module Calculus.Ui.Control.InitContext exposing
     ( InitContext
+    , mapCmd
+    , ooo
     , setModelTo
     , setModelToWithAppShell
     , thenContext
@@ -56,18 +58,18 @@ mapCmd f initContext0 =
         ( initState, Cmd.map f initCmd )
 
 
-
--- TODO: CHECK THE FUNCTIONS BELOW
-
-
 mapModel : (model0 -> model1) -> InitContext model0 msg0 -> InitContext model1 msg0
 mapModel f initContext0 =
     \config ->
         let
-            ( initFullModel, initCmd ) =
+            ( initState, initCmd ) =
                 initContext0 config
         in
-        ( { model = f initFullModel.model, notifications = initFullModel.notifications }, initCmd )
+        ( { model = f initState.model, notifications = initState.notifications }, initCmd )
+
+
+
+-- TODO: CHECK THE FUNCTIONS BELOW
 
 
 tuple2 : InitContext model0 msg -> InitContext model1 msg -> InitContext ( model0, model1 ) msg
@@ -80,12 +82,17 @@ tuple2 initContext0 initContext1 =
             ( initState1, initCmd1 ) =
                 initContext1 config
         in
-        ( -- ( { notifications = Notification.append initModel0.notifications initModel1.notifications
-          --   , model = ( initState0.model, initState1.model )
-          --   }
-          Debug.todo ""
+        ( { notifications = {} -- TODO
+          , model = ( initState0.model, initState1.model )
+          }
         , Cmd.batch [ initCmd0, initCmd1 ]
         )
+
+
+ooo : InitContext model0 msg -> InitContext (model0 -> model1) msg -> InitContext model1 msg
+ooo initContext_a initContext_f =
+    tuple2 initContext_f initContext_a
+        |> mapModel (\( model_f, model_a ) -> model_f model_a)
 
 
 map2 :
