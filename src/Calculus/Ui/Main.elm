@@ -1,11 +1,11 @@
 module Calculus.Ui.Main exposing (Model, Msg, init, update, view)
 
-import Calculus.Ui.Button as Button
 import Calculus.Ui.Control.Context as Context exposing (Config, Context)
 import Calculus.Ui.Control.InitContext as InitContext exposing (InitContext)
-import Calculus.Ui.Help as Help
-import Calculus.Ui.Module as Module
-import Calculus.Ui.Program as Program
+import Calculus.Ui.Style.Button as Button
+import Calculus.Ui.Tab.Help as Help
+import Calculus.Ui.Tab.Module as Module
+import Calculus.Ui.Tab.Program as Program
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border

@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Browser
+import Calculus.Example
 import Calculus.Ui.Control.Context as Context exposing (Context)
 import Calculus.Ui.Main as LambdaUi
 import Element as E exposing (Element)
