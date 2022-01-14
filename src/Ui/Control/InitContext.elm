@@ -1,4 +1,4 @@
-module Calculus.Ui.Control.InitContext exposing
+module Ui.Control.InitContext exposing
     ( InitContext
     , mapCmd
     , ooo
@@ -7,9 +7,9 @@ module Calculus.Ui.Control.InitContext exposing
     , thenContext
     )
 
-import Calculus.Ui.Control.Context as Context exposing (Config, Context, State)
 import Lib.State.StatefulReader as Stateful exposing (StatefulReader)
 import Task
+import Ui.Control.Context as Context exposing (Config, Context, State)
 
 
 type alias InitContext model msg =

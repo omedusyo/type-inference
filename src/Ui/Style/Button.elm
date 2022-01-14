@@ -1,4 +1,4 @@
-module Calculus.Ui.Style.Button exposing (blue, buttonStyle)
+module Ui.Style.Button exposing (blue, buttonStyle)
 
 import Element as E exposing (Element)
 import Element.Background as Background

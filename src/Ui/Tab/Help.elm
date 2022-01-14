@@ -1,8 +1,8 @@
-module Calculus.Ui.Tab.Help exposing (Model, Msg, init, update, view)
+module Ui.Tab.Help exposing (Model, Msg, init, update, view)
 
-import Calculus.Ui.Control.Context as Context exposing (Config, Context)
-import Calculus.Ui.Control.InitContext as InitContext exposing (InitContext)
 import Element as E exposing (Element)
+import Ui.Control.Context as Context exposing (Config, Context)
+import Ui.Control.InitContext as InitContext exposing (InitContext)
 
 
 type alias Model =
