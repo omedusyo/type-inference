@@ -4,6 +4,7 @@ module RegisterMachine.Base exposing (..)
 
 import Array exposing (Array)
 import Dict exposing (Dict)
+import Lib.Result as Result
 import Set exposing (Set)
 
 
@@ -155,21 +156,152 @@ type alias Machine =
     }
 
 
-makeMachine : Controller -> Dict Register Int -> Dict Register Bool -> Result TranslationError Machine
-makeMachine controller initIntEnv initBoolEnv =
+makeMachine : Controller -> Dict Register Int -> Result TranslationError Machine
+makeMachine controller env =
     parse controller
         |> Result.map
             (\instructions ->
-                { env = initIntEnv
+                { env = env
                 , instructionPointer = 0
                 , instructions = instructions
                 }
             )
 
 
-updateMachine : Machine -> Machine
+getInstruction : Machine -> Maybe Instruction
+getInstruction machine =
+    Array.get machine.instructionPointer machine.instructions.instructions
+
+
+advanceInstructionPointer : Machine -> Machine
+advanceInstructionPointer machine =
+    { machine
+        | instructionPointer = machine.instructionPointer + 1
+    }
+
+
+getRegister : Register -> Machine -> Result RuntimeError Int
+getRegister register machine =
+    case Dict.get register machine.env of
+        Just val ->
+            Ok val
+
+        Nothing ->
+            Err (UndefinedRegister register)
+
+
+updateRegister : Register -> Int -> Machine -> Machine
+updateRegister register val machine =
+    { machine
+        | env = Dict.insert register val machine.env
+    }
+
+
+jump : Label -> Machine -> Machine
+jump label machine =
+    case Dict.get label machine.instructions.labelToPosition of
+        Just i ->
+            { machine
+                | instructionPointer = i
+            }
+
+        Nothing ->
+            machine
+
+
+halt : Machine -> { isFinished : Bool, machine : Machine }
+halt machine =
+    { isFinished = True, machine = machine }
+
+
+type RuntimeError
+    = UndefinedRegister Register
+
+
+updateMachine : Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
 updateMachine machine =
-    Debug.todo ""
+    case getInstruction machine of
+        Just instruction ->
+            case instruction of
+                Assign target source ->
+                    getRegister source machine
+                        |> Result.map
+                            (\val ->
+                                { isFinished = False
+                                , machine =
+                                    machine
+                                        |> updateRegister target val
+                                        |> advanceInstructionPointer
+                                }
+                            )
+
+                AssignOperation target operationApplication ->
+                    case operationApplication of
+                        Remainder reg_a reg_b ->
+                            Result.tuple2 (getRegister reg_a machine) (getRegister reg_b machine)
+                                |> Result.map
+                                    (\( a, b ) ->
+                                        { isFinished = False
+                                        , machine =
+                                            machine
+                                                |> updateRegister target (modBy b a)
+                                                |> advanceInstructionPointer
+                                        }
+                                    )
+
+                        IsZero reg_a ->
+                            getRegister reg_a machine
+                                |> Result.map
+                                    (\a ->
+                                        { isFinished = False
+                                        , machine =
+                                            machine
+                                                |> updateRegister target
+                                                    (if a == 0 then
+                                                        1
+
+                                                     else
+                                                        0
+                                                    )
+                                                |> advanceInstructionPointer
+                                        }
+                                    )
+
+                JumpIf source label ->
+                    getRegister source machine
+                        |> Result.map
+                            (\val ->
+                                { isFinished = False
+                                , machine =
+                                    if val == 1 then
+                                        jump label machine
+
+                                    else
+                                        advanceInstructionPointer machine
+                                }
+                            )
+
+                Jump label ->
+                    Ok { isFinished = False, machine = jump label machine }
+
+                Halt ->
+                    Ok (halt machine)
+
+        Nothing ->
+            Ok (halt machine)
+
+
+evolve : Int -> Machine -> Result RuntimeError Machine
+evolve n machine0 =
+    if n == 0 then
+        Ok machine0
+
+    else
+        updateMachine machine0
+            |> Result.andThen
+                (\{ machine } ->
+                    evolve (n - 1) machine
+                )
 
 
 controller0 : Controller
