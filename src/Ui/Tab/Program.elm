@@ -8,7 +8,6 @@ import Calculus.Show as L
 import Calculus.Type.Inference as L
 import Calculus.Type.TypeVarContext as L
 import Element as E exposing (Element)
-import Element.Font as Font
 import Element.Input as Input
 import Lib.Parser.Error as PError
 import Lib.State.StatefulWithErr as State
