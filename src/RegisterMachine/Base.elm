@@ -218,8 +218,8 @@ type RuntimeError
     = UndefinedRegister Register
 
 
-updateMachine : Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
-updateMachine machine =
+runOneStep : Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
+runOneStep machine =
     case getInstruction machine of
         Just instruction ->
             case instruction of
@@ -297,11 +297,24 @@ evolve n machine0 =
         Ok machine0
 
     else
-        updateMachine machine0
+        runOneStep machine0
             |> Result.andThen
                 (\{ machine } ->
                     evolve (n - 1) machine
                 )
+
+
+start : Machine -> Result RuntimeError Machine
+start machine0 =
+    runOneStep machine0
+        |> Result.andThen
+            (\{ isFinished, machine } ->
+                if isFinished then
+                    Ok machine
+
+                else
+                    start machine
+            )
 
 
 controller0 : Controller

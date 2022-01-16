@@ -1,33 +1,251 @@
 module Ui.Tab.RegisterMachine exposing (Model, Msg, init, update, view)
 
+import Dict exposing (Dict)
 import Element as E exposing (Element)
+import Element.Background as Background
+import Element.Font as Font
 import Element.Input as Input
+import RegisterMachine.Base as RegisterMachine exposing (Controller, Machine, RuntimeError, TranslationError)
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Style.Button as Button
 
 
 type alias Model =
-    {}
+    { controller : Controller
+    , parsedMachine : Result TranslationError Machine
+    , maybeRuntime : Maybe (Result RuntimeError Machine)
+    }
 
 
 init : InitContext Model Msg
 init =
+    let
+        controller : Controller
+        controller =
+            RegisterMachine.controller0
+
+        env =
+            -- TODO: derive this automatically from the controller
+            Dict.fromList [ ( "a", 3 * 5 * 7 ), ( "b", 3 * 5 * 5 ), ( "tmp", 0 ), ( "is-b-zero?", 0 ) ]
+
+        parsedMachine : Result TranslationError Machine
+        parsedMachine =
+            RegisterMachine.makeMachine controller env
+    in
     InitContext.setModelTo
-        {}
+        { controller = controller
+        , parsedMachine = parsedMachine
+        , maybeRuntime =
+            case parsedMachine of
+                Ok machine ->
+                    Just (Ok machine)
+
+                Err _ ->
+                    Nothing
+        }
+
+
+resetRuntime : Model -> Model
+resetRuntime model =
+    { model
+        | maybeRuntime =
+            case model.parsedMachine of
+                Ok machine ->
+                    Just (Ok machine)
+
+                Err _ ->
+                    Nothing
+    }
 
 
 type Msg
-    = TODO
+    = Reset
+    | Start
+    | RunOneStep
 
 
 update : Msg -> Context Model msg
 update msg =
     case msg of
-        TODO ->
-            Context.update (\model -> model)
+        Reset ->
+            Context.update resetRuntime
+
+        Start ->
+            Context.update
+                (\model ->
+                    { model
+                        | maybeRuntime =
+                            model.maybeRuntime
+                                |> Maybe.map (Result.andThen RegisterMachine.start)
+                    }
+                )
+
+        RunOneStep ->
+            Context.update
+                (\model ->
+                    { model
+                        | maybeRuntime =
+                            model.maybeRuntime
+                                |> Maybe.map
+                                    (\resultMachine ->
+                                        resultMachine
+                                            |> Result.andThen RegisterMachine.runOneStep
+                                            |> Result.map .machine
+                                    )
+                    }
+                )
 
 
 view : Config -> Model -> Element Msg
 view config model =
-    E.el []
-        (E.text "hello, register machine world!")
+    -- 1. I need to display all the registers
+    -- 2. I need to display the instruction block with labels
+    E.column [ E.width E.fill ]
+        [ E.row []
+            [ Input.button Button.buttonStyle
+                { onPress =
+                    Just Reset
+                , label = E.text "Reset"
+                }
+            , Input.button Button.buttonStyle
+                { onPress =
+                    Just Start
+                , label = E.text "Start"
+                }
+            , Input.button Button.buttonStyle
+                { onPress =
+                    Just RunOneStep
+                , label = E.text "Run one step"
+                }
+            ]
+        , E.row [ E.width E.fill ]
+            (case model.maybeRuntime of
+                Nothing ->
+                    []
+
+                Just (Err runtimeError) ->
+                    [ E.text "runtime error" ]
+
+                Just (Ok machine) ->
+                    [ viewRegisters (machine.env |> Dict.toList)
+                    , -- instructions
+                      viewInstructions machine.instructionPointer model.controller.instructions
+                    ]
+            )
+        ]
+
+
+type LabelOrInstruction
+    = Label RegisterMachine.Label
+    | Perform Int RegisterMachine.Instruction
+
+
+viewInstructions : Int -> RegisterMachine.InstructionBlock -> Element Msg
+viewInstructions instructionPointer instructionBlock =
+    let
+        convertInstructionBlock : RegisterMachine.InstructionBlock -> List LabelOrInstruction
+        convertInstructionBlock instructions =
+            let
+                update0 : RegisterMachine.LabelOrInstruction -> ( Int, List LabelOrInstruction ) -> ( Int, List LabelOrInstruction )
+                update0 labelOrInstruction ( position, newInstructions ) =
+                    case labelOrInstruction of
+                        RegisterMachine.Label label ->
+                            ( position, Label label :: newInstructions )
+
+                        RegisterMachine.Perform instruction ->
+                            ( position + 1, Perform position instruction :: newInstructions )
+            in
+            List.foldl update0 ( 0, [] ) instructions
+                |> Tuple.second
+                |> List.reverse
+
+        viewInstructionName name =
+            E.el [ Font.heavy ] (E.text name)
+
+        viewRegisterName name =
+            E.el [ Font.color (E.rgb255 0 56 186) ] (E.text name)
+
+        viewLabelUse label =
+            E.el [ Font.color (E.rgb255 239 151 0) ] (E.text label)
+
+        viewOperationUse name args =
+            E.row [] [ E.el [] (E.text name), E.text "(", E.row [] (List.intersperse (E.text ", ") args), E.text ")" ]
+
+        paddingLeft px =
+            E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }
+
+        viewLabel label =
+            E.row [ E.spacing 8 ] [ E.text "label ", E.row [] [ viewLabelUse label, E.text ":" ] ]
+
+        viewOperationApplication : RegisterMachine.OperationApplication -> Element Msg
+        viewOperationApplication operationApplication =
+            case operationApplication of
+                RegisterMachine.Remainder a b ->
+                    viewOperationUse "remainder" [ viewRegisterName a, viewRegisterName b ]
+
+                RegisterMachine.IsZero a ->
+                    viewOperationUse "is-zero?" [ viewRegisterName a ]
+
+        viewInstruction : Bool -> RegisterMachine.Instruction -> Element Msg
+        viewInstruction isFocused instruction =
+            E.row
+                (List.concat
+                    [ [ E.spacing 8, paddingLeft 20 ]
+                    , if isFocused then
+                        [ Background.color (E.rgb255 215 215 215) ]
+
+                      else
+                        []
+                    ]
+                )
+                (case instruction of
+                    RegisterMachine.Assign target source ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewRegisterName source ]
+
+                    RegisterMachine.AssignOperation target operationApplication ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication operationApplication ]
+
+                    RegisterMachine.JumpIf register label ->
+                        [ viewInstructionName "jump-if", viewRegisterName register, viewLabelUse label ]
+
+                    RegisterMachine.Jump label ->
+                        [ viewInstructionName "jump", viewLabelUse label ]
+
+                    RegisterMachine.Halt ->
+                        [ viewInstructionName "halt" ]
+                )
+    in
+    E.column [ E.width E.fill ]
+        (instructionBlock
+            |> convertInstructionBlock
+            |> List.map
+                (\labelOrInstruction ->
+                    case labelOrInstruction of
+                        Label label ->
+                            viewLabel label
+
+                        Perform position instruction ->
+                            viewInstruction (instructionPointer == position) instruction
+                )
+        )
+
+
+viewRegisters : List ( RegisterMachine.Register, Int ) -> Element Msg
+viewRegisters registers =
+    let
+        registerStyle =
+            [ Background.color (E.rgb255 240 0 245)
+            , E.padding 20
+            ]
+
+        viewRegister : RegisterMachine.Register -> Int -> Element Msg
+        viewRegister name val =
+            E.row [ E.spacing 10 ]
+                [ E.el [ E.width (E.px 100) ] (E.text name), E.text "<-", E.el registerStyle (E.text (String.fromInt val)) ]
+    in
+    -- registers
+    E.column [ E.width E.fill, E.spacing 5 ]
+        (registers
+            |> List.map (\( name, val ) -> viewRegister name val)
+        )
