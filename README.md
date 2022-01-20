@@ -5,9 +5,9 @@ What is implemented so far:
 * Product, Sum, Arrow, Nat, Bool types, List (List : Type -> Type), and their constructors/eliminator (folds)
 * Type inference (with let polymorphism, which so far was the hardest bit in all of this)
 * Rudimentary module system
-* Very basic UI (REPL)
+* Very basic UI (REPL) <https://omedusyo.github.io/type_inference/index.html>
 * Custom parsing combinator library for the syntax
-* Parser
+* Basic (pretty user hostile) syntax and a Parser for it
 * Evaluator
 
 In progress:
