@@ -5,6 +5,7 @@ What is implemented so far:
 * Product, Sum, Arrow, Nat, Bool types, List (List : Type -> Type), and their constructors/eliminator (folds)
 * Type inference (with let polymorphism, which so far was the hardest bit in all of this)
 * Rudimentary module system
+* Very basic UI (REPL)
 * Custom parsing combinator library for the syntax
 * Parser
 * Evaluator
