@@ -21,8 +21,18 @@ type OperationApplication
     | IsZero Register
 
 
-type Instruction
-    = Assign Register Register
+type
+    Instruction
+    -- b <- $a
+    -- b <- :foo
+    -- a <- op($x, $y)
+    -- if $a jump :foo
+    -- if $a jump $b // is a register that contains a labelb
+    -- jump :foo
+    -- jump $a
+    -- halt
+    = AssignRegister Register Register
+    | AssignLabel Register Label
     | AssignOperation Register OperationApplication
     | JumpIf Register Label
     | Jump Label
@@ -79,13 +89,20 @@ parse controller =
         checkRegisterUse : Instruction -> Result TranslationError ()
         checkRegisterUse instruction =
             case instruction of
-                Assign target source ->
+                AssignRegister target source ->
                     if Set.member target controller.registers then
                         if Set.member source controller.registers then
                             Ok ()
 
                         else
                             Err (UnknownRegister source)
+
+                    else
+                        Err (UnknownRegister target)
+
+                AssignLabel target _ ->
+                    if Set.member target controller.registers then
+                        Ok ()
 
                     else
                         Err (UnknownRegister target)
@@ -197,9 +214,14 @@ updateRegister register val machine =
     }
 
 
+getLabelPosition : Label -> Machine -> Maybe Int
+getLabelPosition label machine =
+    Dict.get label machine.instructions.labelToPosition
+
+
 jump : Label -> Machine -> Machine
 jump label machine =
-    case Dict.get label machine.instructions.labelToPosition of
+    case getLabelPosition label machine of
         Just i ->
             { machine
                 | instructionPointer = i
@@ -216,6 +238,7 @@ halt machine =
 
 type RuntimeError
     = UndefinedRegister Register
+    | LabelPointsToNothing Label
 
 
 runOneStep : Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
@@ -223,7 +246,7 @@ runOneStep machine =
     case getInstruction machine of
         Just instruction ->
             case instruction of
-                Assign target source ->
+                AssignRegister target source ->
                     getRegister source machine
                         |> Result.map
                             (\val ->
@@ -234,6 +257,21 @@ runOneStep machine =
                                         |> advanceInstructionPointer
                                 }
                             )
+
+                AssignLabel target label ->
+                    -- TODO: There could be an off-by-one error, where the label points to Nothing, but actually it is the halting label?
+                    case getLabelPosition label machine of
+                        Just i ->
+                            Ok
+                                { isFinished = False
+                                , machine =
+                                    machine
+                                        |> updateRegister target i
+                                        |> advanceInstructionPointer
+                                }
+
+                        Nothing ->
+                            Err (LabelPointsToNothing label)
 
                 AssignOperation target operationApplication ->
                     case operationApplication of
@@ -317,8 +355,8 @@ start machine0 =
             )
 
 
-controller0 : Controller
-controller0 =
+controller0_gcd : Controller
+controller0_gcd =
     -- registers: a : Int, b : Int, tmp : Int, is-zero-b? : Bool
     -- labels: loop, done
     --
@@ -338,26 +376,53 @@ controller0 =
     --   3: a <- b
     --   4: b <- tmp
     --   5: jump loop
+    --   6: halt
     --
-    { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?" ]
+    { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?", "label-test" ]
     , instructions =
         [ Label "loop"
         , Perform (AssignOperation "is-b-zero?" (IsZero "b"))
         , Perform (JumpIf "is-b-zero?" "done")
         , Perform (AssignOperation "tmp" (Remainder "a" "b"))
-        , Perform (Assign "a" "b")
-        , Perform (Assign "b" "tmp")
+        , Perform (AssignRegister "a" "b")
+        , Perform (AssignRegister "b" "tmp")
         , Perform (Jump "loop")
         , Label "done"
+        , Perform Halt
         ]
     }
+
+
+controller1_remainder : Controller
+controller1_remainder =
+    { registers = Set.fromList [ "a", "b", "label-place" ]
+    , instructions =
+        [ Perform (AssignLabel "label-place" "done")
+        , Perform (AssignRegister "a" "b")
+        , Label "done"
+        , Perform Halt
+        ]
+    }
+
+
+showLabel : Label -> String
+showLabel label =
+    ":" ++ label
+
+
+showAssignment : String -> String -> String
+showAssignment source target =
+    source ++ " <- " ++ target
 
 
 showInstruction : Instruction -> String
 showInstruction instruction =
     case instruction of
-        Assign target source ->
-            target ++ " <- " ++ source
+        AssignRegister target source ->
+            showAssignment target source
+
+        AssignLabel target label ->
+            showAssignment target (showLabel label)
 
         AssignOperation target operation ->
             String.concat
@@ -372,10 +437,10 @@ showInstruction instruction =
                 ]
 
         JumpIf source label ->
-            String.concat [ "jump-if ", source, " ", label ]
+            String.concat [ "if ", source, " jump ", showLabel label ]
 
         Jump label ->
-            String.concat [ "jump ", label ]
+            String.concat [ "jump ", showLabel label ]
 
         Halt ->
             "halt"
