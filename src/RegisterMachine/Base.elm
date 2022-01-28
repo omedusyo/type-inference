@@ -16,6 +16,10 @@ type alias Register =
     String
 
 
+type alias Value =
+    Int
+
+
 type alias Pointer =
     Int
 
@@ -36,10 +40,12 @@ type
     -- if $a jump :foo
     -- if $a jump $b // is a register that contains a labelb
     -- halt
-    = AssignRegister Register Register
+    = -- assignment
+      AssignRegister Register Register
     | AssignLabel Register Label
     | AssignOperation Register OperationApplication
-    | AssignConstant Register Int
+    | AssignConstant Register Value
+      -- jumping
     | JumpToLabel Label
     | JumpToLabelAtRegister Register
     | JumpToLabelIf Register Label
@@ -70,7 +76,7 @@ type alias Controller =
 
 type alias MachineInstructions =
     { labels : Set Label
-    , labelToPosition : Dict Label Int
+    , labelToPosition : Dict Label Pointer
     , instructions : Array Instruction
     }
 
@@ -160,7 +166,7 @@ parse controller =
                 Halt ->
                     Ok ()
 
-        initMachineInstructions : ( Int, MachineInstructions )
+        initMachineInstructions : ( Pointer, MachineInstructions )
         initMachineInstructions =
             ( 0
             , { labels = Set.empty
@@ -169,7 +175,7 @@ parse controller =
               }
             )
 
-        update : LabelOrInstruction -> ( Pointer, MachineInstructions ) -> Result TranslationError ( Int, MachineInstructions )
+        update : LabelOrInstruction -> ( Pointer, MachineInstructions ) -> Result TranslationError ( Pointer, MachineInstructions )
         update labelOrInstruction ( pointer, machineInstructions ) =
             case labelOrInstruction of
                 Label label ->
@@ -199,19 +205,53 @@ parse controller =
         |> Result.map Tuple.second
 
 
+
+-- === Stack ===
+
+
+type alias Stack =
+    List Value
+
+
+pushStack : Value -> Stack -> Stack
+pushStack val stack =
+    val :: stack
+
+
+popStack : Stack -> Maybe ( Value, Stack )
+popStack stack0 =
+    case stack0 of
+        [] ->
+            Nothing
+
+        val :: stack1 ->
+            Just ( val, stack1 )
+
+
+emptyStack : Stack
+emptyStack =
+    []
+
+
+
+-- === Machine ===
+
+
 type alias Machine =
-    { env : Dict Register Int
+    { env : Dict Register Value
+    , stack : Stack
     , instructionPointer : Pointer
     , instructions : MachineInstructions
     }
 
 
-makeMachine : Controller -> Dict Register Int -> Result TranslationError Machine
+makeMachine : Controller -> Dict Register Value -> Result TranslationError Machine
 makeMachine controller env =
     parse controller
         |> Result.map
             (\instructions ->
                 { env = env
+                , stack = emptyStack
                 , instructionPointer = 0
                 , instructions = instructions
                 }
@@ -230,7 +270,7 @@ advanceInstructionPointer machine =
     }
 
 
-getRegister : Register -> Machine -> Result RuntimeError Int
+getRegister : Register -> Machine -> Result RuntimeError Value
 getRegister register machine =
     case Dict.get register machine.env of
         Just val ->
@@ -240,7 +280,7 @@ getRegister register machine =
             Err (UndefinedRegister register)
 
 
-updateRegister : Register -> Int -> Machine -> Machine
+updateRegister : Register -> Value -> Machine -> Machine
 updateRegister register val machine =
     { machine
         | env = Dict.insert register val machine.env
@@ -274,9 +314,27 @@ halt machine =
     { isFinished = True, machine = machine }
 
 
+push : Value -> Machine -> Machine
+push val machine =
+    { machine
+        | stack = pushStack val machine.stack
+    }
+
+
+pop : Machine -> Result RuntimeError ( Value, Machine )
+pop machine =
+    case popStack machine.stack of
+        Just ( val, stack ) ->
+            Ok ( val, { machine | stack = stack } )
+
+        Nothing ->
+            Err PoppingEmptyStack
+
+
 type RuntimeError
     = UndefinedRegister Register
     | LabelPointsToNothing Label
+    | PoppingEmptyStack
 
 
 runOneStep : Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
