@@ -34,6 +34,7 @@ type
     = AssignRegister Register Register
     | AssignLabel Register Label
     | AssignOperation Register OperationApplication
+    | AssignConstant Register Int
     | JumpIf Register Label
     | Jump Label
     | Halt
@@ -108,6 +109,13 @@ parse controller =
                         Err (UnknownRegister target)
 
                 AssignOperation target _ ->
+                    if Set.member target controller.registers then
+                        Ok ()
+
+                    else
+                        Err (UnknownRegister target)
+
+                AssignConstant target _ ->
                     if Set.member target controller.registers then
                         Ok ()
 
@@ -305,6 +313,15 @@ runOneStep machine =
                                         }
                                     )
 
+                AssignConstant target x ->
+                    Ok
+                        { isFinished = False
+                        , machine =
+                            machine
+                                |> updateRegister target x
+                                |> advanceInstructionPointer
+                        }
+
                 JumpIf source label ->
                     getRegister source machine
                         |> Result.map
@@ -399,6 +416,7 @@ controller1_remainder =
     , instructions =
         [ Perform (AssignLabel "label-place" "done")
         , Perform (AssignRegister "a" "b")
+        , Perform (AssignConstant "b" 321)
         , Label "done"
         , Perform Halt
         ]
@@ -425,16 +443,18 @@ showInstruction instruction =
             showAssignment target (showLabel label)
 
         AssignOperation target operation ->
-            String.concat
-                [ target
-                , " <- "
-                , case operation of
+            showAssignment
+                target
+                (case operation of
                     Remainder a b ->
                         String.concat [ "remainder(", a, ",", b, ")" ]
 
                     IsZero a ->
                         String.concat [ "is-zero?(", a, ")" ]
-                ]
+                )
+
+        AssignConstant target x ->
+            showAssignment target (String.fromInt x)
 
         JumpIf source label ->
             String.concat [ "if ", source, " jump ", showLabel label ]

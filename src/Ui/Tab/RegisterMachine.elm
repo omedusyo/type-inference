@@ -180,11 +180,14 @@ viewInstructions instructionPointer instructionBlock =
         viewOperationUse name args =
             E.row [] [ E.el [] (E.text name), E.text "(", E.row [] (List.intersperse (E.text ", ") args), E.text ")" ]
 
-        paddingLeft px =
-            E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }
-
         viewLabelIntroduction label =
             E.row [ E.spacing 8 ] [ E.text "label ", E.row [] [ viewLabel label ] ]
+
+        viewConstant x =
+            E.row [] [ E.text (String.fromInt x) ]
+
+        paddingLeft px =
+            E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }
 
         viewOperationApplication : RegisterMachine.OperationApplication -> Element Msg
         viewOperationApplication operationApplication =
@@ -216,6 +219,9 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.AssignOperation target operationApplication ->
                         [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication operationApplication ]
+
+                    RegisterMachine.AssignConstant target x ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewConstant x ]
 
                     RegisterMachine.JumpIf register label ->
                         [ viewInstructionName "if", viewRegisterUse register, viewInstructionName "jump", viewLabelUse label ]
