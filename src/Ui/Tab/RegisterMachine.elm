@@ -184,7 +184,7 @@ viewInstructions instructionPointer instructionBlock =
         viewLabelIntroduction label =
             E.row [ E.spacing 8 ] [ E.text "label ", E.row [] [ viewLabel label ] ]
 
-        viewConstant x =
+        viewValue x =
             E.row [] [ E.text (String.fromInt x) ]
 
         paddingLeft px =
@@ -222,7 +222,7 @@ viewInstructions instructionPointer instructionBlock =
                         [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication operationApplication ]
 
                     RegisterMachine.AssignConstant target x ->
-                        [ viewRegisterName target, viewInstructionName "<-", viewConstant x ]
+                        [ viewRegisterName target, viewInstructionName "<-", viewValue x ]
 
                     RegisterMachine.JumpToLabel label ->
                         [ viewInstructionName "jump", viewLabelUse label ]
@@ -241,6 +241,12 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.PushRegister register ->
                         [ viewInstructionName "push", viewRegisterUse register ]
+
+                    RegisterMachine.PushConstant val ->
+                        [ viewInstructionName "push", viewValue val ]
+
+                    RegisterMachine.PushLabel label ->
+                        [ viewInstructionName "push", viewLabelUse label ]
 
                     RegisterMachine.Pop target ->
                         [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "stack" ]
@@ -286,6 +292,7 @@ viewStack stack =
     E.column [ E.width E.fill, E.spacing 5 ]
         (stack
             |> RegisterMachine.stackToList
+            |> List.reverse
             |> List.map
                 (\val ->
                     E.el [] (E.text (String.fromInt val))

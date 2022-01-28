@@ -55,6 +55,8 @@ type
     | Halt
       -- stack
     | PushRegister Register
+    | PushConstant Value
+    | PushLabel Label
     | Pop Register
 
 
@@ -148,6 +150,12 @@ parse controller =
 
                 PushRegister register ->
                     doesRegisterExist register controller
+
+                PushConstant _ ->
+                    Ok ()
+
+                PushLabel label ->
+                    Ok ()
 
                 Pop target ->
                     doesRegisterExist target controller
@@ -348,12 +356,12 @@ runOneStep machine =
                 AssignLabel target label ->
                     -- TODO: There could be an off-by-one error, where the label points to Nothing, but actually it is the halting label?
                     case getLabelPosition label machine of
-                        Just i ->
+                        Just pointer ->
                             Ok
                                 { isFinished = False
                                 , machine =
                                     machine
-                                        |> updateRegister target i
+                                        |> updateRegister target pointer
                                         |> advanceInstructionPointer
                                 }
 
@@ -462,6 +470,29 @@ runOneStep machine =
                                 }
                             )
 
+                PushConstant val ->
+                    Ok
+                        { isFinished = False
+                        , machine =
+                            machine
+                                |> push val
+                                |> advanceInstructionPointer
+                        }
+
+                PushLabel label ->
+                    case getLabelPosition label machine of
+                        Just pointer ->
+                            Ok
+                                { isFinished = False
+                                , machine =
+                                    machine
+                                        |> push pointer
+                                        |> advanceInstructionPointer
+                                }
+
+                        Nothing ->
+                            Err (LabelPointsToNothing label)
+
                 Pop target ->
                     pop machine
                         |> Result.map
@@ -549,7 +580,8 @@ controller1_remainder =
         [ Perform (AssignLabel "label-place" "done")
         , Perform (AssignConstant "a" 1)
         , Perform (PushRegister "a")
-        , Perform (PushRegister "a")
+        , Perform (PushLabel "done")
+        , Perform (PushConstant 21323)
         , Perform (Pop "b")
         , Perform (JumpToLabelAtRegisterIf "a" "label-place")
         , Perform (AssignConstant "b" 321)
@@ -557,6 +589,11 @@ controller1_remainder =
         , Perform Halt
         ]
     }
+
+
+showValue : Value -> String
+showValue val =
+    String.fromInt val
 
 
 showLabel : Label -> String
@@ -594,8 +631,8 @@ showInstruction instruction =
                         String.concat [ "is-zero?(", showRegisterUse a, ")" ]
                 )
 
-        AssignConstant target x ->
-            showAssignment target (String.fromInt x)
+        AssignConstant target val ->
+            showAssignment target (showValue val)
 
         JumpToLabel label ->
             String.concat [ "jump ", showLabel label ]
@@ -614,6 +651,12 @@ showInstruction instruction =
 
         PushRegister register ->
             String.concat [ "push ", showRegisterUse register ]
+
+        PushConstant val ->
+            String.concat [ "push ", showValue val ]
+
+        PushLabel label ->
+            String.concat [ "push ", showLabel label ]
 
         Pop target ->
             showAssignment target "stack"
