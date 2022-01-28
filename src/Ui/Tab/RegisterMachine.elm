@@ -199,6 +199,12 @@ viewInstructions instructionPointer instructionBlock =
                 RegisterMachine.IsZero a ->
                     viewOperationUse "is-zero?" [ viewRegisterUse a ]
 
+                RegisterMachine.LessThan a b ->
+                    viewOperationUse "less-than?" [ viewRegisterUse a, viewRegisterUse b ]
+
+                RegisterMachine.Sub a b ->
+                    viewOperationUse "sub" [ viewRegisterUse a, viewRegisterUse b ]
+
         viewInstruction : Bool -> RegisterMachine.Instruction -> Element Msg
         viewInstruction isFocused instruction =
             E.row

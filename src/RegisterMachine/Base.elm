@@ -27,6 +27,8 @@ type alias Pointer =
 type OperationApplication
     = Remainder Register Register
     | IsZero Register
+    | LessThan Register Register
+    | Sub Register Register
 
 
 type
@@ -369,36 +371,61 @@ runOneStep machine =
                             Err (LabelPointsToNothing label)
 
                 AssignOperation target operationApplication ->
-                    case operationApplication of
-                        Remainder reg_a reg_b ->
+                    let
+                        apply2 : Register -> Register -> (Int -> Int -> Int) -> Result RuntimeError { isFinished : Bool, machine : Machine }
+                        apply2 reg_a reg_b f =
                             Result.tuple2 (getRegister reg_a machine) (getRegister reg_b machine)
                                 |> Result.map
                                     (\( a, b ) ->
                                         { isFinished = False
                                         , machine =
                                             machine
-                                                |> updateRegister target (modBy b a)
+                                                |> updateRegister target (f a b)
                                                 |> advanceInstructionPointer
                                         }
                                     )
 
-                        IsZero reg_a ->
+                        apply1 : Register -> (Int -> Int) -> Result RuntimeError { isFinished : Bool, machine : Machine }
+                        apply1 reg_a f =
                             getRegister reg_a machine
                                 |> Result.map
                                     (\a ->
                                         { isFinished = False
                                         , machine =
                                             machine
-                                                |> updateRegister target
-                                                    (if a == 0 then
-                                                        1
-
-                                                     else
-                                                        0
-                                                    )
+                                                |> updateRegister target (f a)
                                                 |> advanceInstructionPointer
                                         }
                                     )
+                    in
+                    case operationApplication of
+                        Remainder reg_a reg_b ->
+                            apply2 reg_a reg_b (\a b -> modBy b a)
+
+                        IsZero reg_a ->
+                            apply1 reg_a
+                                (\a ->
+                                    if a == 0 then
+                                        1
+
+                                    else
+                                        0
+                                )
+
+                        LessThan reg_a reg_b ->
+                            apply2
+                                reg_a
+                                reg_b
+                                (\a b ->
+                                    if a < b then
+                                        1
+
+                                    else
+                                        0
+                                )
+
+                        Sub reg_a reg_b ->
+                            apply2 reg_a reg_b (\a b -> a - b)
 
                 AssignConstant target x ->
                     Ok
@@ -575,14 +602,22 @@ controller0_gcd =
 
 controller1_remainder : Controller
 controller1_remainder =
+    -- How do we compute remainder?
+    -- 16 3
+    -- 13 3
+    -- 10 3
+    -- 7  3
+    -- 4  3
+    -- 1  3
+    -- I need two basic operations
+    -- sub(a, b)
+    -- less-than(a, b)
     { registers = Set.fromList [ "a", "b", "label-place" ]
     , instructions =
         [ Perform (AssignLabel "label-place" "done")
-        , Perform (AssignConstant "a" 1)
-        , Perform (PushRegister "a")
-        , Perform (PushLabel "done")
-        , Perform (PushConstant 21323)
-        , Perform (Pop "b")
+        , Perform (AssignConstant "a" 2)
+        , Perform (AssignConstant "b" 3)
+        , Perform (AssignOperation "a" (LessThan "a" "b"))
         , Perform (JumpToLabelAtRegisterIf "a" "label-place")
         , Perform (AssignConstant "b" 321)
         , Label "done"
@@ -623,12 +658,27 @@ showInstruction instruction =
         AssignOperation target operation ->
             showAssignment
                 target
-                (case operation of
+                (let
+                    show1 : String -> Register -> String
+                    show1 opName a =
+                        String.concat [ opName, "(", showRegisterUse a, ")" ]
+
+                    show2 : String -> Register -> Register -> String
+                    show2 opName a b =
+                        String.concat [ opName, "(", showRegisterUse a, ",", showRegisterUse b, ")" ]
+                 in
+                 case operation of
                     Remainder a b ->
-                        String.concat [ "remainder(", showRegisterUse a, ",", showRegisterUse b, ")" ]
+                        show2 "remainder" a b
 
                     IsZero a ->
-                        String.concat [ "is-zero?(", showRegisterUse a, ")" ]
+                        show1 "is-zero?" a
+
+                    LessThan a b ->
+                        show2 "less-than?" a b
+
+                    Sub a b ->
+                        show2 "sub" a b
                 )
 
         AssignConstant target val ->
