@@ -223,11 +223,14 @@ viewInstructions instructionPointer instructionBlock =
                     RegisterMachine.AssignConstant target x ->
                         [ viewRegisterName target, viewInstructionName "<-", viewConstant x ]
 
+                    RegisterMachine.JumpToLabel label ->
+                        [ viewInstructionName "jump", viewLabelUse label ]
+
+                    RegisterMachine.JumpToLabelAtRegister target ->
+                        [ viewInstructionName "jump", viewRegisterUse target ]
+
                     RegisterMachine.JumpIf register label ->
                         [ viewInstructionName "if", viewRegisterUse register, viewInstructionName "jump", viewLabelUse label ]
-
-                    RegisterMachine.Jump label ->
-                        [ viewInstructionName "jump", viewLabelUse label ]
 
                     RegisterMachine.Halt ->
                         [ viewInstructionName "halt" ]

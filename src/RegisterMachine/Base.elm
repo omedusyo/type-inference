@@ -16,6 +16,10 @@ type alias Register =
     String
 
 
+type alias Pointer =
+    Int
+
+
 type OperationApplication
     = Remainder Register Register
     | IsZero Register
@@ -26,6 +30,7 @@ type
     -- b <- $a
     -- b <- :foo
     -- a <- op($x, $y)
+    -- a <- constant
     -- if $a jump :foo
     -- if $a jump $b // is a register that contains a labelb
     -- jump :foo
@@ -35,8 +40,9 @@ type
     | AssignLabel Register Label
     | AssignOperation Register OperationApplication
     | AssignConstant Register Int
+    | JumpToLabel Label
+    | JumpToLabelAtRegister Register
     | JumpIf Register Label
-    | Jump Label
     | Halt
 
 
@@ -122,15 +128,22 @@ parse controller =
                     else
                         Err (UnknownRegister target)
 
+                JumpToLabel label ->
+                    Ok ()
+
+                JumpToLabelAtRegister target ->
+                    if Set.member target controller.registers then
+                        Ok ()
+
+                    else
+                        Err (UnknownRegister target)
+
                 JumpIf source _ ->
                     if Set.member source controller.registers then
                         Ok ()
 
                     else
                         Err (UnknownRegister source)
-
-                Jump label ->
-                    Ok ()
 
                 Halt ->
                     Ok ()
@@ -144,8 +157,8 @@ parse controller =
               }
             )
 
-        update : LabelOrInstruction -> ( Int, MachineInstructions ) -> Result TranslationError ( Int, MachineInstructions )
-        update labelOrInstruction ( i, machineInstructions ) =
+        update : LabelOrInstruction -> ( Pointer, MachineInstructions ) -> Result TranslationError ( Int, MachineInstructions )
+        update labelOrInstruction ( pointer, machineInstructions ) =
             case labelOrInstruction of
                 Label label ->
                     if Set.member label machineInstructions.labels then
@@ -153,17 +166,17 @@ parse controller =
 
                     else
                         Ok
-                            ( i
+                            ( pointer
                             , { machineInstructions
                                 | labels = Set.insert label machineInstructions.labels
                                 , labelToPosition =
-                                    Dict.insert label i machineInstructions.labelToPosition
+                                    Dict.insert label pointer machineInstructions.labelToPosition
                               }
                             )
 
                 Perform instruction ->
                     Ok
-                        ( i + 1
+                        ( pointer + 1
                         , { machineInstructions
                             | instructions =
                                 Array.push instruction machineInstructions.instructions
@@ -176,7 +189,7 @@ parse controller =
 
 type alias Machine =
     { env : Dict Register Int
-    , instructionPointer : Int
+    , instructionPointer : Pointer
     , instructions : MachineInstructions
     }
 
@@ -222,7 +235,7 @@ updateRegister register val machine =
     }
 
 
-getLabelPosition : Label -> Machine -> Maybe Int
+getLabelPosition : Label -> Machine -> Maybe Pointer
 getLabelPosition label machine =
     Dict.get label machine.instructions.labelToPosition
 
@@ -230,13 +243,18 @@ getLabelPosition label machine =
 jump : Label -> Machine -> Machine
 jump label machine =
     case getLabelPosition label machine of
-        Just i ->
-            { machine
-                | instructionPointer = i
-            }
+        Just pointer ->
+            pointerJump pointer machine
 
         Nothing ->
             machine
+
+
+pointerJump : Pointer -> Machine -> Machine
+pointerJump pointer machine =
+    { machine
+        | instructionPointer = pointer
+    }
 
 
 halt : Machine -> { isFinished : Bool, machine : Machine }
@@ -322,6 +340,18 @@ runOneStep machine =
                                 |> advanceInstructionPointer
                         }
 
+                JumpToLabel label ->
+                    Ok { isFinished = False, machine = jump label machine }
+
+                JumpToLabelAtRegister register ->
+                    getRegister register machine
+                        |> Result.map
+                            (\pointer ->
+                                { isFinished = False
+                                , machine = pointerJump pointer machine
+                                }
+                            )
+
                 JumpIf source label ->
                     getRegister source machine
                         |> Result.map
@@ -335,9 +365,6 @@ runOneStep machine =
                                         advanceInstructionPointer machine
                                 }
                             )
-
-                Jump label ->
-                    Ok { isFinished = False, machine = jump label machine }
 
                 Halt ->
                     Ok (halt machine)
@@ -403,7 +430,7 @@ controller0_gcd =
         , Perform (AssignOperation "tmp" (Remainder "a" "b"))
         , Perform (AssignRegister "a" "b")
         , Perform (AssignRegister "b" "tmp")
-        , Perform (Jump "loop")
+        , Perform (JumpToLabel "loop")
         , Label "done"
         , Perform Halt
         ]
@@ -416,6 +443,7 @@ controller1_remainder =
     , instructions =
         [ Perform (AssignLabel "label-place" "done")
         , Perform (AssignRegister "a" "b")
+        , Perform (JumpToLabelAtRegister "label-place")
         , Perform (AssignConstant "b" 321)
         , Label "done"
         , Perform Halt
@@ -428,6 +456,11 @@ showLabel label =
     ":" ++ label
 
 
+showRegisterUse : Register -> String
+showRegisterUse register =
+    "$" ++ register
+
+
 showAssignment : String -> String -> String
 showAssignment source target =
     source ++ " <- " ++ target
@@ -437,7 +470,7 @@ showInstruction : Instruction -> String
 showInstruction instruction =
     case instruction of
         AssignRegister target source ->
-            showAssignment target source
+            showAssignment target (showRegisterUse source)
 
         AssignLabel target label ->
             showAssignment target (showLabel label)
@@ -447,20 +480,23 @@ showInstruction instruction =
                 target
                 (case operation of
                     Remainder a b ->
-                        String.concat [ "remainder(", a, ",", b, ")" ]
+                        String.concat [ "remainder(", showRegisterUse a, ",", showRegisterUse b, ")" ]
 
                     IsZero a ->
-                        String.concat [ "is-zero?(", a, ")" ]
+                        String.concat [ "is-zero?(", showRegisterUse a, ")" ]
                 )
 
         AssignConstant target x ->
             showAssignment target (String.fromInt x)
 
-        JumpIf source label ->
-            String.concat [ "if ", source, " jump ", showLabel label ]
-
-        Jump label ->
+        JumpToLabel label ->
             String.concat [ "jump ", showLabel label ]
+
+        JumpToLabelAtRegister target ->
+            String.concat [ "jump ", showRegisterUse target ]
+
+        JumpIf source label ->
+            String.concat [ "if ", showRegisterUse source, " jump ", showLabel label ]
 
         Halt ->
             "halt"
