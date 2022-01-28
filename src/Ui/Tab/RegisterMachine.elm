@@ -131,6 +131,7 @@ view config model =
 
                 Just (Ok machine) ->
                     [ viewRegisters (machine.env |> Dict.toList)
+                    , viewStack machine.stack
                     , -- instructions
                       viewInstructions machine.instructionPointer model.controller.instructions
                     ]
@@ -237,6 +238,9 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.Halt ->
                         [ viewInstructionName "halt" ]
+
+                    RegisterMachine.PushRegister register ->
+                        [ viewInstructionName "push", viewRegisterUse register ]
                 )
     in
     E.column [ E.width E.fill ]
@@ -271,4 +275,16 @@ viewRegisters registers =
     E.column [ E.width E.fill, E.spacing 5 ]
         (registers
             |> List.map (\( name, val ) -> viewRegister name val)
+        )
+
+
+viewStack : RegisterMachine.Stack -> Element Msg
+viewStack stack =
+    E.column [ E.width E.fill, E.spacing 5 ]
+        (stack
+            |> RegisterMachine.stackToList
+            |> List.map
+                (\val ->
+                    E.el [] (E.text (String.fromInt val))
+                )
         )

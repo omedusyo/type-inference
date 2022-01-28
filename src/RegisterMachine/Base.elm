@@ -51,6 +51,8 @@ type
     | JumpToLabelIf Register Label
     | JumpToLabelAtRegisterIf Register Register -- first register is the test register, second register is the register containing the label
     | Halt
+      -- stack
+    | PushRegister Register
 
 
 type LabelOrInstruction
@@ -166,6 +168,13 @@ parse controller =
                 Halt ->
                     Ok ()
 
+                PushRegister register ->
+                    if Set.member register controller.registers then
+                        Ok ()
+
+                    else
+                        Err (UnknownRegister register)
+
         initMachineInstructions : ( Pointer, MachineInstructions )
         initMachineInstructions =
             ( 0
@@ -213,6 +222,16 @@ type alias Stack =
     List Value
 
 
+emptyStack : Stack
+emptyStack =
+    []
+
+
+stackToList : Stack -> List Value
+stackToList stack =
+    stack
+
+
 pushStack : Value -> Stack -> Stack
 pushStack val stack =
     val :: stack
@@ -226,11 +245,6 @@ popStack stack0 =
 
         val :: stack1 ->
             Just ( val, stack1 )
-
-
-emptyStack : Stack
-emptyStack =
-    []
 
 
 
@@ -459,6 +473,18 @@ runOneStep machine =
                 Halt ->
                     Ok (halt machine)
 
+                PushRegister register ->
+                    getRegister register machine
+                        |> Result.map
+                            (\val ->
+                                { isFinished = False
+                                , machine =
+                                    machine
+                                        |> push val
+                                        |> advanceInstructionPointer
+                                }
+                            )
+
         Nothing ->
             Ok (halt machine)
 
@@ -533,6 +559,7 @@ controller1_remainder =
     , instructions =
         [ Perform (AssignLabel "label-place" "done")
         , Perform (AssignConstant "a" 1)
+        , Perform (PushRegister "a")
         , Perform (JumpToLabelAtRegisterIf "a" "label-place")
         , Perform (AssignConstant "b" 321)
         , Label "done"
@@ -593,6 +620,9 @@ showInstruction instruction =
 
         Halt ->
             "halt"
+
+        PushRegister register ->
+            String.concat [ "push ", showRegisterUse register ]
 
 
 showInstructions : List LabelOrInstruction -> String
