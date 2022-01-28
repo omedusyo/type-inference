@@ -40,6 +40,8 @@ type
     -- if $a jump :foo
     -- if $a jump $b // is a register that contains a labelb
     -- halt
+    -- push $a
+    -- $a <- stack
     = -- assignment
       AssignRegister Register Register
     | AssignLabel Register Label
@@ -53,6 +55,7 @@ type
     | Halt
       -- stack
     | PushRegister Register
+    | Pop Register
 
 
 type LabelOrInstruction
@@ -99,6 +102,15 @@ foldlMayFail update state actions0 =
                 |> Result.andThen (\newState -> foldlMayFail update newState actions1)
 
 
+doesRegisterExist : Register -> Controller -> Result TranslationError ()
+doesRegisterExist register controller =
+    if Set.member register controller.registers then
+        Ok ()
+
+    else
+        Err (UnknownRegister register)
+
+
 parse : Controller -> Result TranslationError MachineInstructions
 parse controller =
     let
@@ -106,74 +118,39 @@ parse controller =
         checkRegisterUse instruction =
             case instruction of
                 AssignRegister target source ->
-                    if Set.member target controller.registers then
-                        if Set.member source controller.registers then
-                            Ok ()
-
-                        else
-                            Err (UnknownRegister source)
-
-                    else
-                        Err (UnknownRegister target)
+                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist source controller)
+                        |> Result.map (\_ -> ())
 
                 AssignLabel target _ ->
-                    if Set.member target controller.registers then
-                        Ok ()
-
-                    else
-                        Err (UnknownRegister target)
+                    doesRegisterExist target controller
 
                 AssignOperation target _ ->
-                    if Set.member target controller.registers then
-                        Ok ()
-
-                    else
-                        Err (UnknownRegister target)
+                    doesRegisterExist target controller
 
                 AssignConstant target _ ->
-                    if Set.member target controller.registers then
-                        Ok ()
-
-                    else
-                        Err (UnknownRegister target)
+                    doesRegisterExist target controller
 
                 JumpToLabel label ->
                     Ok ()
 
                 JumpToLabelAtRegister target ->
-                    if Set.member target controller.registers then
-                        Ok ()
-
-                    else
-                        Err (UnknownRegister target)
+                    doesRegisterExist target controller
 
                 JumpToLabelIf testRegister _ ->
-                    if Set.member testRegister controller.registers then
-                        Ok ()
-
-                    else
-                        Err (UnknownRegister testRegister)
+                    doesRegisterExist testRegister controller
 
                 JumpToLabelAtRegisterIf testRegister target ->
-                    if Set.member testRegister controller.registers then
-                        if Set.member target controller.registers then
-                            Ok ()
-
-                        else
-                            Err (UnknownRegister target)
-
-                    else
-                        Err (UnknownRegister testRegister)
+                    Result.tuple2 (doesRegisterExist testRegister controller) (doesRegisterExist target controller)
+                        |> Result.map (\_ -> ())
 
                 Halt ->
                     Ok ()
 
                 PushRegister register ->
-                    if Set.member register controller.registers then
-                        Ok ()
+                    doesRegisterExist register controller
 
-                    else
-                        Err (UnknownRegister register)
+                Pop target ->
+                    doesRegisterExist target controller
 
         initMachineInstructions : ( Pointer, MachineInstructions )
         initMachineInstructions =
@@ -485,6 +462,18 @@ runOneStep machine =
                                 }
                             )
 
+                Pop target ->
+                    pop machine
+                        |> Result.map
+                            (\( val, newMachine ) ->
+                                { isFinished = False
+                                , machine =
+                                    newMachine
+                                        |> updateRegister target val
+                                        |> advanceInstructionPointer
+                                }
+                            )
+
         Nothing ->
             Ok (halt machine)
 
@@ -560,6 +549,8 @@ controller1_remainder =
         [ Perform (AssignLabel "label-place" "done")
         , Perform (AssignConstant "a" 1)
         , Perform (PushRegister "a")
+        , Perform (PushRegister "a")
+        , Perform (Pop "b")
         , Perform (JumpToLabelAtRegisterIf "a" "label-place")
         , Perform (AssignConstant "b" 321)
         , Label "done"
@@ -623,6 +614,9 @@ showInstruction instruction =
 
         PushRegister register ->
             String.concat [ "push ", showRegisterUse register ]
+
+        Pop target ->
+            showAssignment target "stack"
 
 
 showInstructions : List LabelOrInstruction -> String

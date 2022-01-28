@@ -241,6 +241,9 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.PushRegister register ->
                         [ viewInstructionName "push", viewRegisterUse register ]
+
+                    RegisterMachine.Pop target ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "stack" ]
                 )
     in
     E.column [ E.width E.fill ]
