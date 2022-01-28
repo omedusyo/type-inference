@@ -31,10 +31,10 @@ type
     -- b <- :foo
     -- a <- op($x, $y)
     -- a <- constant
-    -- if $a jump :foo
-    -- if $a jump $b // is a register that contains a labelb
     -- jump :foo
     -- jump $a
+    -- if $a jump :foo
+    -- if $a jump $b // is a register that contains a labelb
     -- halt
     = AssignRegister Register Register
     | AssignLabel Register Label
@@ -42,7 +42,8 @@ type
     | AssignConstant Register Int
     | JumpToLabel Label
     | JumpToLabelAtRegister Register
-    | JumpIf Register Label
+    | JumpToLabelIf Register Label
+    | JumpToLabelAtRegisterIf Register Register -- first register is the test register, second register is the register containing the label
     | Halt
 
 
@@ -138,12 +139,23 @@ parse controller =
                     else
                         Err (UnknownRegister target)
 
-                JumpIf source _ ->
-                    if Set.member source controller.registers then
+                JumpToLabelIf testRegister _ ->
+                    if Set.member testRegister controller.registers then
                         Ok ()
 
                     else
-                        Err (UnknownRegister source)
+                        Err (UnknownRegister testRegister)
+
+                JumpToLabelAtRegisterIf testRegister target ->
+                    if Set.member testRegister controller.registers then
+                        if Set.member target controller.registers then
+                            Ok ()
+
+                        else
+                            Err (UnknownRegister target)
+
+                    else
+                        Err (UnknownRegister testRegister)
 
                 Halt ->
                     Ok ()
@@ -352,8 +364,8 @@ runOneStep machine =
                                 }
                             )
 
-                JumpIf source label ->
-                    getRegister source machine
+                JumpToLabelIf testRegister label ->
+                    getRegister testRegister machine
                         |> Result.map
                             (\val ->
                                 { isFinished = False
@@ -364,6 +376,26 @@ runOneStep machine =
                                     else
                                         advanceInstructionPointer machine
                                 }
+                            )
+
+                JumpToLabelAtRegisterIf testRegister target ->
+                    getRegister testRegister machine
+                        |> Result.andThen
+                            (\val ->
+                                if val == 1 then
+                                    getRegister target machine
+                                        |> Result.map
+                                            (\pointer ->
+                                                { isFinished = False
+                                                , machine = pointerJump pointer machine
+                                                }
+                                            )
+
+                                else
+                                    Ok
+                                        { isFinished = False
+                                        , machine = advanceInstructionPointer machine
+                                        }
                             )
 
                 Halt ->
@@ -426,7 +458,7 @@ controller0_gcd =
     , instructions =
         [ Label "loop"
         , Perform (AssignOperation "is-b-zero?" (IsZero "b"))
-        , Perform (JumpIf "is-b-zero?" "done")
+        , Perform (JumpToLabelIf "is-b-zero?" "done")
         , Perform (AssignOperation "tmp" (Remainder "a" "b"))
         , Perform (AssignRegister "a" "b")
         , Perform (AssignRegister "b" "tmp")
@@ -442,8 +474,8 @@ controller1_remainder =
     { registers = Set.fromList [ "a", "b", "label-place" ]
     , instructions =
         [ Perform (AssignLabel "label-place" "done")
-        , Perform (AssignRegister "a" "b")
-        , Perform (JumpToLabelAtRegister "label-place")
+        , Perform (AssignConstant "a" 1)
+        , Perform (JumpToLabelAtRegisterIf "a" "label-place")
         , Perform (AssignConstant "b" 321)
         , Label "done"
         , Perform Halt
@@ -495,8 +527,11 @@ showInstruction instruction =
         JumpToLabelAtRegister target ->
             String.concat [ "jump ", showRegisterUse target ]
 
-        JumpIf source label ->
-            String.concat [ "if ", showRegisterUse source, " jump ", showLabel label ]
+        JumpToLabelIf testRegister label ->
+            String.concat [ "if ", showRegisterUse testRegister, " jump ", showLabel label ]
+
+        JumpToLabelAtRegisterIf testRegister target ->
+            String.concat [ "if ", showRegisterUse testRegister, " jump ", showRegisterUse target ]
 
         Halt ->
             "halt"
