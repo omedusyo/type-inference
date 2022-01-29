@@ -261,7 +261,7 @@ controller6_fct_recursive =
     , instructions =
         [ Perform (AssignConstant "n" 5)
         , Perform (AssignCallAtLabel "continue" "fct")
-        , Perform (AssignConstant "n" 1024)
+        , Perform Halt
         , Label "fct"
         , Perform (AssignOperation "done?" (Operation "zero?" [ "n" ]))
         , Perform (JumpToLabelIf "done?" "done")
