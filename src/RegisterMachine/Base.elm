@@ -465,28 +465,6 @@ runOneStep machine =
                     getOperation opName machine
                         |> Result.andThen applyOp
 
-                -- Remainder reg_a reg_b ->
-                --     apply2 reg_a reg_b (\a b -> modBy b a)
-                -- IsZero reg_a ->
-                --     apply1 reg_a
-                --         (\a ->
-                --             if a == 0 then
-                --                 1
-                --             else
-                --                 0
-                --         )
-                -- LessThan reg_a reg_b ->
-                --     apply2
-                --         reg_a
-                --         reg_b
-                --         (\a b ->
-                --             if a < b then
-                --                 1
-                --             else
-                --                 0
-                --         )
-                -- Sub reg_a reg_b ->
-                --     apply2 reg_a reg_b (\a b -> a - b)
                 AssignConstant target x ->
                     Ok
                         { isFinished = False
