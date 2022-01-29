@@ -21,19 +21,39 @@ type alias Model =
 init : InitContext Model Msg
 init =
     let
+        boolToInt : Bool -> Int
+        boolToInt b =
+            if b then
+                1
+
+            else
+                0
+
         controller : Controller
         controller =
             -- RegisterMachine.controller0_gcd
             RegisterMachine.controller1_remainder
 
+        env : RegisterMachine.RegisterEnvironment
         env =
             -- TODO: derive this automatically from the controller
             -- Dict.fromList [ ( "a", 3 * 5 * 7 ), ( "b", 3 * 5 * 5 ), ( "tmp", 0 ), ( "is-b-zero?", 0 ), ( "label-test", 0 ) ]
-            Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "label-place", 5125 ) ]
+            Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "is-finished?", 0 ) ]
+
+        operationEnv : RegisterMachine.OperationEnvironment
+        operationEnv =
+            Dict.fromList
+                [ ( "sub", RegisterMachine.makeOperation2 (\x y -> x - y) )
+                , ( "less-than?", RegisterMachine.makeOperation2 (\x y -> boolToInt (x < y)) )
+                , ( "add", RegisterMachine.makeOperation2 (\x y -> x + y) )
+                , ( "mul", RegisterMachine.makeOperation2 (\x y -> x * y) )
+                , ( "is-zero?", RegisterMachine.makeOperation1 (\x -> boolToInt (x == 0)) )
+                , ( "eq?", RegisterMachine.makeOperation2 (\x y -> boolToInt (x == y)) )
+                ]
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
-            RegisterMachine.makeMachine controller env
+            RegisterMachine.makeMachine controller env operationEnv
     in
     InitContext.setModelTo
         { controller = controller
@@ -191,19 +211,8 @@ viewInstructions instructionPointer instructionBlock =
             E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }
 
         viewOperationApplication : RegisterMachine.OperationApplication -> Element Msg
-        viewOperationApplication operationApplication =
-            case operationApplication of
-                RegisterMachine.Remainder a b ->
-                    viewOperationUse "remainder" [ viewRegisterUse a, viewRegisterUse b ]
-
-                RegisterMachine.IsZero a ->
-                    viewOperationUse "is-zero?" [ viewRegisterUse a ]
-
-                RegisterMachine.LessThan a b ->
-                    viewOperationUse "less-than?" [ viewRegisterUse a, viewRegisterUse b ]
-
-                RegisterMachine.Sub a b ->
-                    viewOperationUse "sub" [ viewRegisterUse a, viewRegisterUse b ]
+        viewOperationApplication (RegisterMachine.Operation opName registers) =
+            viewOperationUse opName (registers |> List.map viewRegisterUse)
 
         viewInstruction : Bool -> RegisterMachine.Instruction -> Element Msg
         viewInstruction isFocused instruction =

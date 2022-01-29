@@ -24,11 +24,30 @@ type alias Pointer =
     Int
 
 
+type alias OperationName =
+    String
+
+
+
+-- TODO: Is this going to be used somewhere? Atleast for basic type checking?
+
+
+type alias OperationArity =
+    Int
+
+
+
+-- TODO: Change the third argument to `Operation` to from `Register` to `OperationArgument`
+-- TODO: What about labels as arguments to operations?
+
+
+type OperationArgument
+    = Register Register
+    | Constant Value
+
+
 type OperationApplication
-    = Remainder Register Register
-    | IsZero Register
-    | LessThan Register Register
-    | Sub Register Register
+    = Operation OperationName (List Register)
 
 
 type
@@ -123,13 +142,20 @@ parse controller =
             case instruction of
                 AssignRegister target source ->
                     Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist source controller)
-                        |> Result.map (\_ -> ())
+                        |> Result.ignore
 
                 AssignLabel target _ ->
                     doesRegisterExist target controller
 
-                AssignOperation target _ ->
-                    doesRegisterExist target controller
+                AssignOperation target (Operation _ arguments) ->
+                    Result.tuple2
+                        (doesRegisterExist target controller)
+                        (arguments
+                            |> List.map (\register -> doesRegisterExist register controller)
+                            |> Result.sequence
+                            |> Result.ignore
+                        )
+                        |> Result.ignore
 
                 AssignConstant target _ ->
                     doesRegisterExist target controller
@@ -145,7 +171,7 @@ parse controller =
 
                 JumpToLabelAtRegisterIf testRegister target ->
                     Result.tuple2 (doesRegisterExist testRegister controller) (doesRegisterExist target controller)
-                        |> Result.map (\_ -> ())
+                        |> Result.ignore
 
                 Halt ->
                     Ok ()
@@ -238,20 +264,56 @@ popStack stack0 =
 -- === Machine ===
 
 
+type alias RegisterEnvironment =
+    Dict Register Value
+
+
+type alias Operation =
+    List Value -> Result RuntimeError Value
+
+
+makeOperation2 : (Value -> Value -> Value) -> Operation
+makeOperation2 op =
+    \xs ->
+        case xs of
+            [ x, y ] ->
+                Ok (op x y)
+
+            _ ->
+                Err (WrongNumberOfArgumentsGivenToOperationExpected 2)
+
+
+makeOperation1 : (Value -> Value) -> Operation
+makeOperation1 op =
+    \xs ->
+        case xs of
+            [ x ] ->
+                Ok (op x)
+
+            _ ->
+                Err (WrongNumberOfArgumentsGivenToOperationExpected 1)
+
+
+type alias OperationEnvironment =
+    Dict OperationName Operation
+
+
 type alias Machine =
-    { env : Dict Register Value
+    { env : RegisterEnvironment
     , stack : Stack
+    , operationEnv : OperationEnvironment
     , instructionPointer : Pointer
     , instructions : MachineInstructions
     }
 
 
-makeMachine : Controller -> Dict Register Value -> Result TranslationError Machine
-makeMachine controller env =
+makeMachine : Controller -> RegisterEnvironment -> OperationEnvironment -> Result TranslationError Machine
+makeMachine controller env operationsEnv =
     parse controller
         |> Result.map
             (\instructions ->
                 { env = env
+                , operationEnv = operationsEnv
                 , stack = emptyStack
                 , instructionPointer = 0
                 , instructions = instructions
@@ -286,6 +348,16 @@ updateRegister register val machine =
     { machine
         | env = Dict.insert register val machine.env
     }
+
+
+getOperation : OperationName -> Machine -> Result RuntimeError (List Value -> Result RuntimeError Value)
+getOperation operationName machine =
+    case Dict.get operationName machine.operationEnv of
+        Just op ->
+            Ok op
+
+        Nothing ->
+            Err (UndefinedOperation operationName)
 
 
 getLabelPosition : Label -> Machine -> Maybe Pointer
@@ -334,6 +406,8 @@ pop machine =
 
 type RuntimeError
     = UndefinedRegister Register
+    | UndefinedOperation OperationName
+    | WrongNumberOfArgumentsGivenToOperationExpected Int
     | LabelPointsToNothing Label
     | PoppingEmptyStack
 
@@ -370,63 +444,49 @@ runOneStep machine =
                         Nothing ->
                             Err (LabelPointsToNothing label)
 
-                AssignOperation target operationApplication ->
+                AssignOperation target (Operation opName registers) ->
                     let
-                        apply2 : Register -> Register -> (Int -> Int -> Int) -> Result RuntimeError { isFinished : Bool, machine : Machine }
-                        apply2 reg_a reg_b f =
-                            Result.tuple2 (getRegister reg_a machine) (getRegister reg_b machine)
+                        applyOp : Operation -> Result RuntimeError { isFinished : Bool, machine : Machine }
+                        applyOp op =
+                            registers
+                                |> List.map (\register -> getRegister register machine)
+                                |> Result.sequence
+                                |> Result.andThen op
                                 |> Result.map
-                                    (\( a, b ) ->
+                                    (\output ->
                                         { isFinished = False
                                         , machine =
                                             machine
-                                                |> updateRegister target (f a b)
-                                                |> advanceInstructionPointer
-                                        }
-                                    )
-
-                        apply1 : Register -> (Int -> Int) -> Result RuntimeError { isFinished : Bool, machine : Machine }
-                        apply1 reg_a f =
-                            getRegister reg_a machine
-                                |> Result.map
-                                    (\a ->
-                                        { isFinished = False
-                                        , machine =
-                                            machine
-                                                |> updateRegister target (f a)
+                                                |> updateRegister target output
                                                 |> advanceInstructionPointer
                                         }
                                     )
                     in
-                    case operationApplication of
-                        Remainder reg_a reg_b ->
-                            apply2 reg_a reg_b (\a b -> modBy b a)
+                    getOperation opName machine
+                        |> Result.andThen applyOp
 
-                        IsZero reg_a ->
-                            apply1 reg_a
-                                (\a ->
-                                    if a == 0 then
-                                        1
-
-                                    else
-                                        0
-                                )
-
-                        LessThan reg_a reg_b ->
-                            apply2
-                                reg_a
-                                reg_b
-                                (\a b ->
-                                    if a < b then
-                                        1
-
-                                    else
-                                        0
-                                )
-
-                        Sub reg_a reg_b ->
-                            apply2 reg_a reg_b (\a b -> a - b)
-
+                -- Remainder reg_a reg_b ->
+                --     apply2 reg_a reg_b (\a b -> modBy b a)
+                -- IsZero reg_a ->
+                --     apply1 reg_a
+                --         (\a ->
+                --             if a == 0 then
+                --                 1
+                --             else
+                --                 0
+                --         )
+                -- LessThan reg_a reg_b ->
+                --     apply2
+                --         reg_a
+                --         reg_b
+                --         (\a b ->
+                --             if a < b then
+                --                 1
+                --             else
+                --                 0
+                --         )
+                -- Sub reg_a reg_b ->
+                --     apply2 reg_a reg_b (\a b -> a - b)
                 AssignConstant target x ->
                     Ok
                         { isFinished = False
@@ -588,9 +648,9 @@ controller0_gcd =
     { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?", "label-test" ]
     , instructions =
         [ Label "loop"
-        , Perform (AssignOperation "is-b-zero?" (IsZero "b"))
+        , Perform (AssignOperation "is-b-zero?" (Operation "is-zero?" [ "b" ]))
         , Perform (JumpToLabelIf "is-b-zero?" "done")
-        , Perform (AssignOperation "tmp" (Remainder "a" "b"))
+        , Perform (AssignOperation "tmp" (Operation "remainder" [ "a", "b" ]))
         , Perform (AssignRegister "a" "b")
         , Perform (AssignRegister "b" "tmp")
         , Perform (JumpToLabel "loop")
@@ -602,24 +662,26 @@ controller0_gcd =
 
 controller1_remainder : Controller
 controller1_remainder =
-    -- How do we compute remainder?
-    -- 16 3
-    -- 13 3
-    -- 10 3
-    -- 7  3
-    -- 4  3
-    -- 1  3
-    -- I need two basic operations
-    -- sub(a, b)
-    -- less-than(a, b)
-    { registers = Set.fromList [ "a", "b", "label-place" ]
+    -- What's the algorithm?
+    -- subtract $b from $a and assign it into $a, until $a <- $b is true. Then halt. The result is in the register $a.
+    --
+    -- registers: a, b, is-finished?
+    -- start:
+    --   is-finished <- less-than?($a, $b)
+    --   if $is-finished? jump :done
+    --   $a <- sub($a, $b)
+    --   jump $start
+    -- done:
+    --   halt
+    { registers = Set.fromList [ "a", "b", "is-finished?" ]
     , instructions =
-        [ Perform (AssignLabel "label-place" "done")
-        , Perform (AssignConstant "a" 2)
+        [ Perform (AssignConstant "a" 16)
         , Perform (AssignConstant "b" 3)
-        , Perform (AssignOperation "a" (LessThan "a" "b"))
-        , Perform (JumpToLabelAtRegisterIf "a" "label-place")
-        , Perform (AssignConstant "b" 321)
+        , Label "start"
+        , Perform (AssignOperation "is-finished?" (Operation "less-than?" [ "a", "b" ]))
+        , Perform (JumpToLabelIf "is-finished?" "done")
+        , Perform (AssignOperation "a" (Operation "sub" [ "a", "b" ]))
+        , Perform (JumpToLabel "start")
         , Label "done"
         , Perform Halt
         ]
@@ -655,31 +717,10 @@ showInstruction instruction =
         AssignLabel target label ->
             showAssignment target (showLabel label)
 
-        AssignOperation target operation ->
+        AssignOperation target (Operation opName registers) ->
             showAssignment
                 target
-                (let
-                    show1 : String -> Register -> String
-                    show1 opName a =
-                        String.concat [ opName, "(", showRegisterUse a, ")" ]
-
-                    show2 : String -> Register -> Register -> String
-                    show2 opName a b =
-                        String.concat [ opName, "(", showRegisterUse a, ",", showRegisterUse b, ")" ]
-                 in
-                 case operation of
-                    Remainder a b ->
-                        show2 "remainder" a b
-
-                    IsZero a ->
-                        show1 "is-zero?" a
-
-                    LessThan a b ->
-                        show2 "less-than?" a b
-
-                    Sub a b ->
-                        show2 "sub" a b
-                )
+                (String.concat [ opName, "(", registers |> List.map showRegisterUse |> String.join ", ", ")" ])
 
         AssignConstant target val ->
             showAssignment target (showValue val)
