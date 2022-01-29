@@ -236,10 +236,45 @@ controller5_sqrt =
     --     jump :sqrt-iter
     --   done:
     --     halt
-    { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
+    { registers = Set.fromList []
     , instructions =
-        [ Perform (AssignConstant "a" 0)
+        []
+    }
+
+
+controller6_fct_recursive =
+    -- fct:
+    --   done? <- $n == 0
+    --   if $test call :done
+    --   push $continue
+    --   push $n
+    --   n <- $n - 1
+    --   continue <- call :fct
+    --   n <- pop
+    --   continue <- pop
+    --   result <- $n * $result
+    --   jump $continue
+    -- done:
+    --   result <- 1
+    --   jump $continue
+    { registers = Set.fromList [ "n", "result", "done?" ]
+    , instructions =
+        [ Perform (AssignConstant "n" 5)
+        , Perform (AssignCallAtLabel "continue" "fct")
+        , Perform (AssignConstant "n" 1024)
+        , Label "fct"
+        , Perform (AssignOperation "done?" (Operation "zero?" [ "n" ]))
+        , Perform (JumpToLabelIf "done?" "done")
+        , Perform (PushRegister "continue")
+        , Perform (PushRegister "n")
+        , Perform (AssignOperation "n" (Operation "decrement" [ "n" ]))
+        , Perform (AssignCallAtLabel "continue" "fct")
+        , Perform (Pop "n")
+        , Perform (Pop "continue")
+        , Perform (AssignOperation "result" (Operation "mul" [ "n", "result" ]))
+        , Perform (JumpToLabelAtRegister "continue")
         , Label "done"
-        , Perform Halt
+        , Perform (AssignConstant "result" 1)
+        , Perform (JumpToLabelAtRegister "continue")
         ]
     }

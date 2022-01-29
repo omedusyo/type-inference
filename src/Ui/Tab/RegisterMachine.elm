@@ -50,7 +50,8 @@ init =
             -- Controllers.controller1_remainder
             -- Controllers.controller2_fct_iterative
             -- Controllers.controller3_gcd_with_inlined_remainder
-            Controllers.controller4_gcd_with_inlined_remainder_using_jump
+            -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
+            Controllers.controller6_fct_recursive
 
         env : RegisterMachine.RegisterEnvironment
         env =
@@ -59,7 +60,8 @@ init =
             -- Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "done?", 0 ) ]
             -- Dict.fromList [ ( "counter", 0 ), ( "state", 0 ), ( "done?", 0 ) ]
             -- Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ) ]
-            Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ), ( "continue", 0 ) ]
+            -- Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ), ( "continue", 0 ) ]
+            Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
