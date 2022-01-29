@@ -47,7 +47,7 @@ type OperationArgument
 
 
 type OperationApplication
-    = Operation OperationName (List Register)
+    = Operation OperationName (List OperationArgument)
 
 
 type
@@ -154,7 +154,15 @@ parse controller =
                     Result.tuple2
                         (doesRegisterExist target controller)
                         (arguments
-                            |> List.map (\register -> doesRegisterExist register controller)
+                            |> List.map
+                                (\argument ->
+                                    case argument of
+                                        Register register ->
+                                            doesRegisterExist register controller
+
+                                        _ ->
+                                            Ok ()
+                                )
                             |> Result.sequence
                             |> Result.ignore
                         )
@@ -459,7 +467,15 @@ runOneStep machine =
                         applyOp : Operation -> Result RuntimeError { isFinished : Bool, machine : Machine }
                         applyOp op =
                             registers
-                                |> List.map (\register -> getRegister register machine)
+                                |> List.map
+                                    (\argument ->
+                                        case argument of
+                                            Register register ->
+                                                getRegister register machine
+
+                                            Constant val ->
+                                                Ok val
+                                    )
                                 |> Result.sequence
                                 |> Result.andThen op
                                 |> Result.map
@@ -664,10 +680,26 @@ showInstruction instruction =
         AssignLabel target label ->
             showAssignment target (showLabel label)
 
-        AssignOperation target (Operation opName registers) ->
+        AssignOperation target (Operation opName arguments) ->
             showAssignment
                 target
-                (String.concat [ opName, "(", registers |> List.map showRegisterUse |> String.join ", ", ")" ])
+                (String.concat
+                    [ opName
+                    , "("
+                    , arguments
+                        |> List.map
+                            (\argument ->
+                                case argument of
+                                    Register register ->
+                                        showRegisterUse register
+
+                                    Constant val ->
+                                        showValue val
+                            )
+                        |> String.join ", "
+                    , ")"
+                    ]
+                )
 
         AssignConstant target val ->
             showAssignment target (showValue val)

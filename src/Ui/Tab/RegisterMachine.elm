@@ -51,7 +51,8 @@ init =
             -- Controllers.controller2_fct_iterative
             -- Controllers.controller3_gcd_with_inlined_remainder
             -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
-            Controllers.controller6_fct_recursive
+            -- Controllers.controller6_fct_recursive
+            Controllers.controller7_fibonacci_recursive
 
         env : RegisterMachine.RegisterEnvironment
         env =
@@ -61,7 +62,8 @@ init =
             -- Dict.fromList [ ( "counter", 0 ), ( "state", 0 ), ( "done?", 0 ) ]
             -- Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ) ]
             -- Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ), ( "continue", 0 ) ]
-            Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
+            -- Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
+            Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "tmp", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
@@ -223,8 +225,20 @@ viewInstructions instructionPointer instructionBlock =
             E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }
 
         viewOperationApplication : RegisterMachine.OperationApplication -> Element Msg
-        viewOperationApplication (RegisterMachine.Operation opName registers) =
-            viewOperationUse opName (registers |> List.map viewRegisterUse)
+        viewOperationApplication (RegisterMachine.Operation opName arguments) =
+            viewOperationUse
+                opName
+                (arguments
+                    |> List.map
+                        (\argument ->
+                            case argument of
+                                RegisterMachine.Register register ->
+                                    viewRegisterUse register
+
+                                RegisterMachine.Constant val ->
+                                    viewValue val
+                        )
+                )
 
         viewInstruction : Bool -> RegisterMachine.Instruction -> Element Msg
         viewInstruction isFocused instruction =
