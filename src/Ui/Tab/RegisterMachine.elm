@@ -6,6 +6,7 @@ import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
 import RegisterMachine.Base as RegisterMachine exposing (Controller, Machine, RuntimeError, TranslationError)
+import RegisterMachine.Controllers as Controllers
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.Style.Button as Button
@@ -31,8 +32,8 @@ init =
 
         controller : Controller
         controller =
-            -- RegisterMachine.controller0_gcd
-            RegisterMachine.controller1_remainder
+            -- Controllers.controller0_gcd
+            Controllers.controller1_remainder
 
         env : RegisterMachine.RegisterEnvironment
         env =
