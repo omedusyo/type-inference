@@ -30,17 +30,6 @@ init =
             else
                 0
 
-        controller : Controller
-        controller =
-            -- Controllers.controller0_gcd
-            Controllers.controller1_remainder
-
-        env : RegisterMachine.RegisterEnvironment
-        env =
-            -- TODO: derive this automatically from the controller
-            -- Dict.fromList [ ( "a", 3 * 5 * 7 ), ( "b", 3 * 5 * 5 ), ( "tmp", 0 ), ( "is-b-zero?", 0 ), ( "label-test", 0 ) ]
-            Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "is-finished?", 0 ) ]
-
         operationEnv : RegisterMachine.OperationEnvironment
         operationEnv =
             Dict.fromList
@@ -48,9 +37,29 @@ init =
                 , ( "less-than?", RegisterMachine.makeOperation2 (\x y -> boolToInt (x < y)) )
                 , ( "add", RegisterMachine.makeOperation2 (\x y -> x + y) )
                 , ( "mul", RegisterMachine.makeOperation2 (\x y -> x * y) )
-                , ( "is-zero?", RegisterMachine.makeOperation1 (\x -> boolToInt (x == 0)) )
+                , ( "zero?", RegisterMachine.makeOperation1 (\x -> boolToInt (x == 0)) )
                 , ( "eq?", RegisterMachine.makeOperation2 (\x y -> boolToInt (x == y)) )
+                , ( "decrement", RegisterMachine.makeOperation1 (\x -> x - 1) )
+                , ( "increment", RegisterMachine.makeOperation1 (\x -> x + 1) )
+                , ( "remainder", RegisterMachine.makeOperation2 (\x y -> remainderBy y x) )
                 ]
+
+        controller : Controller
+        controller =
+            -- Controllers.controller0_gcd
+            -- Controllers.controller1_remainder
+            -- Controllers.controller2_fct_iterative
+            -- Controllers.controller3_gcd_with_inlined_remainder
+            Controllers.controller4_gcd_with_inlined_remainder_using_jump
+
+        env : RegisterMachine.RegisterEnvironment
+        env =
+            -- TODO: derive this automatically from the controller
+            -- Dict.fromList [ ( "a", 3 * 5 * 7 ), ( "b", 3 * 5 * 5 ), ( "tmp", 0 ), ( "is-b-zero?", 0 ), ( "label-test", 0 ) ]
+            -- Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "done?", 0 ) ]
+            -- Dict.fromList [ ( "counter", 0 ), ( "state", 0 ), ( "done?", 0 ) ]
+            -- Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ) ]
+            Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ), ( "continue", 0 ) ]
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
@@ -265,7 +274,13 @@ viewInstructions instructionPointer instructionBlock =
                         [ viewInstructionName "push", viewLabelUse label ]
 
                     RegisterMachine.Pop target ->
-                        [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "stack" ]
+                        [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "pop-stack" ]
+
+                    RegisterMachine.AssignCallAtLabel target label ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "call", viewLabelUse label ]
+
+                    RegisterMachine.AssignCallAtRegister target labelRegister ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "call", viewRegisterUse labelRegister ]
                 )
     in
     E.column [ E.width E.fill ]

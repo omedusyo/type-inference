@@ -79,6 +79,9 @@ type
     | PushConstant Value
     | PushLabel Label
     | Pop Register
+      -- calling procedure
+    | AssignCallAtLabel Register Label
+    | AssignCallAtRegister Register Register
 
 
 type LabelOrInstruction
@@ -187,6 +190,13 @@ parse controller =
 
                 Pop target ->
                     doesRegisterExist target controller
+
+                AssignCallAtLabel target _ ->
+                    doesRegisterExist target controller
+
+                AssignCallAtRegister target labelRegister ->
+                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist labelRegister controller)
+                        |> Result.ignore
 
         initMachineInstructions : ( Pointer, MachineInstructions )
         initMachineInstructions =
@@ -570,6 +580,31 @@ runOneStep machine =
                                 }
                             )
 
+                AssignCallAtLabel target label ->
+                    -- target <- $ip + 1
+                    -- ip <- :label
+                    Ok
+                        { isFinished = False
+                        , machine =
+                            machine
+                                |> updateRegister target (machine.instructionPointer + 1)
+                                |> jump label
+                        }
+
+                AssignCallAtRegister target labelRegister ->
+                    -- target <- $ip + 1
+                    -- ip <- $labelRegister
+                    getRegister labelRegister machine
+                        |> Result.map
+                            (\pointer ->
+                                { isFinished = False
+                                , machine =
+                                    machine
+                                        |> updateRegister target (machine.instructionPointer + 1)
+                                        |> pointerJump pointer
+                                }
+                            )
+
         Nothing ->
             Ok (halt machine)
 
@@ -662,7 +697,13 @@ showInstruction instruction =
             String.concat [ "push ", showLabel label ]
 
         Pop target ->
-            showAssignment target "stack"
+            showAssignment target "pop-stack"
+
+        AssignCallAtLabel target label ->
+            showAssignment target (showLabel label)
+
+        AssignCallAtRegister target labelRegister ->
+            showAssignment target (showRegisterUse labelRegister)
 
 
 showInstructions : List LabelOrInstruction -> String
