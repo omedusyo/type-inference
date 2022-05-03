@@ -3,6 +3,7 @@ module RegisterMachine.Base exposing (..)
 -- sequence of instructions should start with a label
 
 import Array exposing (Array)
+import Array.Extra as Array
 import Dict exposing (Dict)
 import Lib.Result as Result
 import Set exposing (Set)
@@ -279,6 +280,207 @@ popStack stack0 =
 
 
 
+-- === Memory ===
+
+
+type alias MemoryAddress =
+    Int
+
+
+type MemoryCell
+    = Num Value
+    | Nil
+    | Pair MemoryAddress MemoryAddress
+
+
+type alias MemoryState =
+    { memory : Array MemoryCell
+    , maxSize : Int
+    , nextFreePointer : MemoryAddress
+    }
+
+
+type MemoryError
+    = MemoryExceeded
+    | InvalidMemoryAccessAt MemoryAddress
+    | ExpectedNumAt MemoryAddress
+    | ExpectedPairAt MemoryAddress
+    | ExpectedNilAt MemoryAddress
+
+
+emptyMemoryState : Int -> MemoryState
+emptyMemoryState maxSize =
+    { memory = Array.empty
+    , maxSize = maxSize
+    , nextFreePointer = 0
+    }
+
+
+memory_example0 : MemoryState
+memory_example0 =
+    -- ((1, (2, nil)), (5, (6, nil)))
+    -- [[1 2] 5 6]
+    { memory =
+        Array.fromList
+            [ Num 1, Num 2, Nil, Pair 1 3, Pair 0 4, Num 5, Num 6, Nil, Pair 7 8, Pair 5 9 ]
+    , maxSize = 4096
+    , nextFreePointer = 11
+    }
+
+
+get : MemoryAddress -> MemoryState -> Result MemoryError MemoryCell
+get pointer ({ memory } as memoryState) =
+    case memory |> Array.get pointer of
+        Just memoryCell ->
+            Ok memoryCell
+
+        Nothing ->
+            Err (InvalidMemoryAccessAt pointer)
+
+
+set : MemoryAddress -> MemoryCell -> MemoryState -> MemoryState
+set pointer cell ({ memory } as memoryState) =
+    { memoryState
+        | memory = memory |> Array.set pointer cell
+    }
+
+
+getNum : MemoryAddress -> MemoryState -> Result MemoryError Value
+getNum pointer memoryState =
+    memoryState
+        |> get pointer
+        |> Result.andThen
+            (\memoryCell ->
+                case memoryCell of
+                    Num x ->
+                        Ok x
+
+                    _ ->
+                        Err (ExpectedNumAt pointer)
+            )
+
+
+isNum : MemoryAddress -> MemoryState -> Bool
+isNum pointer { memory } =
+    case memory |> Array.get pointer of
+        Just memoryCell ->
+            case memoryCell of
+                Num _ ->
+                    True
+
+                _ ->
+                    False
+
+        Nothing ->
+            False
+
+
+isPair : MemoryAddress -> MemoryState -> Bool
+isPair pointer { memory } =
+    case memory |> Array.get pointer of
+        Just memoryCell ->
+            case memoryCell of
+                Pair _ _ ->
+                    True
+
+                _ ->
+                    False
+
+        Nothing ->
+            False
+
+
+isNil : MemoryAddress -> MemoryState -> Bool
+isNil pointer { memory } =
+    case memory |> Array.get pointer of
+        Just memoryCell ->
+            case memoryCell of
+                Nil ->
+                    True
+
+                _ ->
+                    False
+
+        Nothing ->
+            False
+
+
+getPairPointers : MemoryAddress -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryAddress )
+getPairPointers pointer memoryState =
+    memoryState
+        |> get pointer
+        |> Result.andThen
+            (\memoryCell ->
+                case memoryCell of
+                    Pair p q ->
+                        Ok ( p, q )
+
+                    _ ->
+                        Err (ExpectedPairAt pointer)
+            )
+
+
+getFst : MemoryAddress -> MemoryState -> Result MemoryError MemoryCell
+getFst pointer memoryState =
+    memoryState
+        |> getPairPointers pointer
+        |> Result.andThen
+            (\( p, _ ) -> memoryState |> get p)
+
+
+getSnd : MemoryAddress -> MemoryState -> Result MemoryError MemoryCell
+getSnd pointer memoryState =
+    memoryState
+        |> getPairPointers pointer
+        |> Result.andThen
+            (\( _, q ) -> memoryState |> get q)
+
+
+setFst : MemoryAddress -> MemoryCell -> MemoryState -> Result MemoryError MemoryState
+setFst pointer cell memoryState =
+    memoryState
+        |> getPairPointers pointer
+        |> Result.map
+            (\( p, _ ) -> memoryState |> set p cell)
+
+
+setSnd : MemoryAddress -> MemoryCell -> MemoryState -> Result MemoryError MemoryState
+setSnd pointer cell ({ memory } as memoryState) =
+    memoryState
+        |> getPairPointers pointer
+        |> Result.map
+            (\( _, q ) -> memoryState |> set q cell)
+
+
+new : MemoryCell -> MemoryState -> Result MemoryError MemoryState
+new memoryCell ({ memory, maxSize, nextFreePointer } as memoryState) =
+    if nextFreePointer + 1 < maxSize then
+        Ok
+            { memoryState
+                | memory = memory |> Array.set nextFreePointer memoryCell
+                , nextFreePointer = nextFreePointer + 1
+            }
+
+    else
+        Err MemoryExceeded
+
+
+num : Value -> MemoryState -> Result MemoryError MemoryState
+num x memoryState =
+    memoryState |> new (Num x)
+
+
+nil : MemoryState -> Result MemoryError MemoryState
+nil memoryState =
+    memoryState |> new Nil
+
+
+pair : MemoryAddress -> MemoryAddress -> MemoryState -> Result MemoryError MemoryState
+pair p q memoryState =
+    memoryState |> new (Pair p q)
+
+
+
 -- === Machine ===
 
 
@@ -428,6 +630,7 @@ type RuntimeError
     | WrongNumberOfArgumentsGivenToOperationExpected Int
     | LabelPointsToNothing Label
     | PoppingEmptyStack
+    | MemoryError MemoryError
 
 
 runOneStep : Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }

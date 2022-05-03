@@ -5,7 +5,7 @@ import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
-import RegisterMachine.Base as RegisterMachine exposing (Controller, Machine, RuntimeError, TranslationError)
+import RegisterMachine.Base as RegisterMachine exposing (Controller, Machine, MemoryError(..), RuntimeError(..), TranslationError)
 import RegisterMachine.Controllers as Controllers
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
@@ -44,27 +44,15 @@ init =
                 , ( "remainder", RegisterMachine.makeOperation2 (\x y -> remainderBy y x) )
                 ]
 
-        controller : Controller
-        controller =
+        ( controller, env ) =
             -- Controllers.controller0_gcd
             -- Controllers.controller1_remainder
-            -- Controllers.controller2_fct_iterative
-            -- Controllers.controller3_gcd_with_inlined_remainder
-            -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
-            -- Controllers.controller6_fct_recursive
-            Controllers.controller7_fibonacci_recursive
+            Controllers.controller2_fct_iterative
 
-        env : RegisterMachine.RegisterEnvironment
-        env =
-            -- TODO: derive this automatically from the controller
-            -- Dict.fromList [ ( "a", 3 * 5 * 7 ), ( "b", 3 * 5 * 5 ), ( "tmp", 0 ), ( "is-b-zero?", 0 ), ( "label-test", 0 ) ]
-            -- Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "done?", 0 ) ]
-            -- Dict.fromList [ ( "counter", 0 ), ( "state", 0 ), ( "done?", 0 ) ]
-            -- Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ) ]
-            -- Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ), ( "continue", 0 ) ]
-            -- Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
-            Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "tmp", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
-
+        -- Controllers.controller3_gcd_with_inlined_remainder
+        -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
+        -- Controllers.controller6_fct_recursive
+        -- Controllers.controller7_fibonacci_recursive
         parsedMachine : Result TranslationError Machine
         parsedMachine =
             RegisterMachine.makeMachine controller env operationEnv
@@ -161,7 +149,7 @@ view config model =
                     []
 
                 Just (Err runtimeError) ->
-                    [ E.text "runtime error" ]
+                    [ E.text (runTimeErrorToString runtimeError) ]
 
                 Just (Ok machine) ->
                     [ viewRegisters (machine.env |> Dict.toList)
@@ -171,6 +159,42 @@ view config model =
                     ]
             )
         ]
+
+
+runTimeErrorToString : RuntimeError -> String
+runTimeErrorToString err =
+    case err of
+        UndefinedRegister register ->
+            String.concat [ "Undefined register $", register ]
+
+        UndefinedOperation operationName ->
+            String.concat [ "Undefined operation ", operationName ]
+
+        WrongNumberOfArgumentsGivenToOperationExpected int ->
+            String.concat [ "Wrong number of arguments given to the operation. Expected ", String.fromInt int ]
+
+        LabelPointsToNothing label ->
+            String.concat [ "The label :", label, " points to nothing" ]
+
+        PoppingEmptyStack ->
+            "Popping empty stack"
+
+        MemoryError memoryError ->
+            case memoryError of
+                MemoryExceeded ->
+                    "Memory Exceeded"
+
+                InvalidMemoryAccessAt pointer ->
+                    String.concat [ "Invalid memory access at #", String.fromInt pointer ]
+
+                ExpectedNumAt pointer ->
+                    String.concat [ "Expected Num at #", String.fromInt pointer ]
+
+                ExpectedPairAt pointer ->
+                    String.concat [ "Expected Pair at #", String.fromInt pointer ]
+
+                ExpectedNilAt pointer ->
+                    String.concat [ "Expected Nil at #", String.fromInt pointer ]
 
 
 type LabelOrInstruction

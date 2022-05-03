@@ -1,5 +1,6 @@
 module RegisterMachine.Controllers exposing (..)
 
+import Dict exposing (Dict)
 import RegisterMachine.Base as RegisterMachine
     exposing
         ( Controller
@@ -9,11 +10,12 @@ import RegisterMachine.Base as RegisterMachine
         , OperationApplication(..)
         , OperationArgument(..)
         , Register
+        , RegisterEnvironment
         )
 import Set exposing (Set)
 
 
-controller0_gcd : Controller
+controller0_gcd : ( Controller, RegisterEnvironment )
 controller0_gcd =
     -- registers: a : Int, b : Int, tmp : Int, is-zero-b? : Bool
     -- labels: loop, done
@@ -36,22 +38,24 @@ controller0_gcd =
     --   5: jump loop
     --   6: halt
     --
-    { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?", "label-test" ]
-    , instructions =
-        [ Label "loop"
-        , Perform (AssignOperation "is-b-zero?" (Operation "is-zero?" [ Register "b" ]))
-        , Perform (JumpToLabelIf "is-b-zero?" "done")
-        , Perform (AssignOperation "tmp" (Operation "remainder" [ Register "a", Register "b" ]))
-        , Perform (AssignRegister "a" "b")
-        , Perform (AssignRegister "b" "tmp")
-        , Perform (JumpToLabel "loop")
-        , Label "done"
-        , Perform Halt
-        ]
-    }
+    ( { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?", "label-test" ]
+      , instructions =
+            [ Label "loop"
+            , Perform (AssignOperation "is-b-zero?" (Operation "zero?" [ Register "b" ]))
+            , Perform (JumpToLabelIf "is-b-zero?" "done")
+            , Perform (AssignOperation "tmp" (Operation "remainder" [ Register "a", Register "b" ]))
+            , Perform (AssignRegister "a" "b")
+            , Perform (AssignRegister "b" "tmp")
+            , Perform (JumpToLabel "loop")
+            , Label "done"
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "a", 3 * 5 * 7 ), ( "b", 3 * 5 * 5 ), ( "tmp", 0 ), ( "is-b-zero?", 0 ) ]
+    )
 
 
-controller1_remainder : Controller
+controller1_remainder : ( Controller, RegisterEnvironment )
 controller1_remainder =
     -- What's the algorithm?
     -- subtract $b from $a and assign it into $a, until $a <- $b is true. Then halt. The result is in the register $a.
@@ -64,19 +68,21 @@ controller1_remainder =
     --   jump $start
     -- done:
     --   halt
-    { registers = Set.fromList [ "a", "b", "is-finished?" ]
-    , instructions =
-        [ Perform (AssignConstant "a" 16)
-        , Perform (AssignConstant "b" 3)
-        , Label "start"
-        , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "a", Register "b" ]))
-        , Perform (JumpToLabelIf "done?" "done")
-        , Perform (AssignOperation "a" (Operation "sub" [ Register "a", Register "b" ]))
-        , Perform (JumpToLabel "start")
-        , Label "done"
-        , Perform Halt
-        ]
-    }
+    ( { registers = Set.fromList [ "a", "b", "is-finished?" ]
+      , instructions =
+            [ Perform (AssignConstant "a" 16)
+            , Perform (AssignConstant "b" 3)
+            , Label "start"
+            , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "a", Register "b" ]))
+            , Perform (JumpToLabelIf "done?" "done")
+            , Perform (AssignOperation "a" (Operation "sub" [ Register "a", Register "b" ]))
+            , Perform (JumpToLabel "start")
+            , Label "done"
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "done?", 0 ) ]
+    )
 
 
 controller2_fct_iterative =
@@ -91,20 +97,22 @@ controller2_fct_iterative =
     --   jump :loop
     -- label done
     --   halt
-    { registers = Set.fromList [ "counter", "state", "done?" ]
-    , instructions =
-        [ Perform (AssignConstant "counter" 5)
-        , Perform (AssignConstant "state" 1)
-        , Label "loop"
-        , Perform (AssignOperation "done?" (Operation "zero?" [ Register "counter" ]))
-        , Perform (JumpToLabelIf "done?" "done")
-        , Perform (AssignOperation "state" (Operation "mul" [ Register "state", Register "counter" ]))
-        , Perform (AssignOperation "counter" (Operation "decrement" [ Register "counter" ]))
-        , Perform (JumpToLabel "loop")
-        , Label "done"
-        , Perform Halt
-        ]
-    }
+    ( { registers = Set.fromList [ "counter", "state", "done?" ]
+      , instructions =
+            [ Perform (AssignConstant "counter" 5)
+            , Perform (AssignConstant "state" 1)
+            , Label "loop"
+            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "counter" ]))
+            , Perform (JumpToLabelIf "done?" "done")
+            , Perform (AssignOperation "state" (Operation "mul" [ Register "state", Register "counter" ]))
+            , Perform (AssignOperation "counter" (Operation "decrement" [ Register "counter" ]))
+            , Perform (JumpToLabel "loop")
+            , Label "done"
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "counter", 0 ), ( "state", 0 ), ( "done?", 0 ) ]
+    )
 
 
 controller3_gcd_with_inlined_remainder =
@@ -129,34 +137,36 @@ controller3_gcd_with_inlined_remainder =
     --   jump :remainder
     -- done:
     --   halt
-    { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?" ]
-    , instructions =
-        [ Perform (AssignConstant "a" (3 * 5 * 7))
-        , Perform (AssignConstant "b" (3 * 5 * 5))
-        , Label "gcd-loop"
-        , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
-        , Perform (JumpToLabelIf "done?" "done")
+    ( { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?" ]
+      , instructions =
+            [ Perform (AssignConstant "a" (3 * 5 * 7))
+            , Perform (AssignConstant "b" (3 * 5 * 5))
+            , Label "gcd-loop"
+            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
+            , Perform (JumpToLabelIf "done?" "done")
 
-        -- BEGIN Calling remainder($remainder-result, $b)
-        , Perform (AssignRegister "remainder-result" "a")
-        , Perform (JumpToLabel "remainder")
-        , Label "after-remainder-done"
+            -- BEGIN Calling remainder($remainder-result, $b)
+            , Perform (AssignRegister "remainder-result" "a")
+            , Perform (JumpToLabel "remainder")
+            , Label "after-remainder-done"
 
-        -- END Calling remainder
-        , Perform (AssignRegister "a" "b")
-        , Perform (AssignRegister "b" "remainder-result")
-        , Perform (JumpToLabel "gcd-loop")
+            -- END Calling remainder
+            , Perform (AssignRegister "a" "b")
+            , Perform (AssignRegister "b" "remainder-result")
+            , Perform (JumpToLabel "gcd-loop")
 
-        -- This is the remainder procedure
-        , Label "remainder"
-        , Perform (AssignOperation "remainder-done?" (Operation "less-than?" [ Register "remainder-result", Register "b" ]))
-        , Perform (JumpToLabelIf "remainder-done?" "after-remainder-done")
-        , Perform (AssignOperation "remainder-result" (Operation "sub" [ Register "remainder-result", Register "b" ]))
-        , Perform (JumpToLabel "remainder")
-        , Label "done"
-        , Perform Halt
-        ]
-    }
+            -- This is the remainder procedure
+            , Label "remainder"
+            , Perform (AssignOperation "remainder-done?" (Operation "less-than?" [ Register "remainder-result", Register "b" ]))
+            , Perform (JumpToLabelIf "remainder-done?" "after-remainder-done")
+            , Perform (AssignOperation "remainder-result" (Operation "sub" [ Register "remainder-result", Register "b" ]))
+            , Perform (JumpToLabel "remainder")
+            , Label "done"
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ) ]
+    )
 
 
 controller4_gcd_with_inlined_remainder_using_jump =
@@ -179,33 +189,35 @@ controller4_gcd_with_inlined_remainder_using_jump =
     --   jump :remainder
     -- done:
     --   halt
-    { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
-    , instructions =
-        [ Perform (AssignConstant "a" (3 * 5 * 7))
-        , Perform (AssignConstant "b" (3 * 5 * 5))
-        , Label "gcd-loop"
-        , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
-        , Perform (JumpToLabelIf "done?" "done")
+    ( { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
+      , instructions =
+            [ Perform (AssignConstant "a" (3 * 5 * 7))
+            , Perform (AssignConstant "b" (3 * 5 * 5))
+            , Label "gcd-loop"
+            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
+            , Perform (JumpToLabelIf "done?" "done")
 
-        -- BEGIN Calling remainder($remainder-result, $b)
-        , Perform (AssignRegister "remainder-result" "a")
-        , Perform (AssignCallAtLabel "continue" "remainder")
+            -- BEGIN Calling remainder($remainder-result, $b)
+            , Perform (AssignRegister "remainder-result" "a")
+            , Perform (AssignCallAtLabel "continue" "remainder")
 
-        -- END Calling remainder
-        , Perform (AssignRegister "a" "b")
-        , Perform (AssignRegister "b" "remainder-result")
-        , Perform (JumpToLabel "gcd-loop")
+            -- END Calling remainder
+            , Perform (AssignRegister "a" "b")
+            , Perform (AssignRegister "b" "remainder-result")
+            , Perform (JumpToLabel "gcd-loop")
 
-        -- This is the remainder procedure
-        , Label "remainder"
-        , Perform (AssignOperation "remainder-done?" (Operation "less-than?" [ Register "remainder-result", Register "b" ]))
-        , Perform (JumpToLabelAtRegisterIf "remainder-done?" "continue")
-        , Perform (AssignOperation "remainder-result" (Operation "sub" [ Register "remainder-result", Register "b" ]))
-        , Perform (JumpToLabel "remainder")
-        , Label "done"
-        , Perform Halt
-        ]
-    }
+            -- This is the remainder procedure
+            , Label "remainder"
+            , Perform (AssignOperation "remainder-done?" (Operation "less-than?" [ Register "remainder-result", Register "b" ]))
+            , Perform (JumpToLabelAtRegisterIf "remainder-done?" "continue")
+            , Perform (AssignOperation "remainder-result" (Operation "sub" [ Register "remainder-result", Register "b" ]))
+            , Perform (JumpToLabel "remainder")
+            , Label "done"
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ), ( "continue", 0 ) ]
+    )
 
 
 controller5_sqrt =
@@ -258,27 +270,29 @@ controller6_fct_recursive =
     -- done:
     --   result <- 1
     --   jump $continue
-    { registers = Set.fromList [ "n", "result", "done?" ]
-    , instructions =
-        [ Perform (AssignConstant "n" 5)
-        , Perform (AssignCallAtLabel "continue" "fct")
-        , Perform Halt
-        , Label "fct"
-        , Perform (AssignOperation "done?" (Operation "zero?" [ Register "n" ]))
-        , Perform (JumpToLabelIf "done?" "done")
-        , Perform (PushRegister "continue")
-        , Perform (PushRegister "n")
-        , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
-        , Perform (AssignCallAtLabel "continue" "fct")
-        , Perform (Pop "n")
-        , Perform (Pop "continue")
-        , Perform (AssignOperation "result" (Operation "mul" [ Register "n", Register "result" ]))
-        , Perform (JumpToLabelAtRegister "continue")
-        , Label "done"
-        , Perform (AssignConstant "result" 1)
-        , Perform (JumpToLabelAtRegister "continue")
-        ]
-    }
+    ( { registers = Set.fromList [ "n", "result", "done?" ]
+      , instructions =
+            [ Perform (AssignConstant "n" 5)
+            , Perform (AssignCallAtLabel "continue" "fct")
+            , Perform Halt
+            , Label "fct"
+            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "n" ]))
+            , Perform (JumpToLabelIf "done?" "done")
+            , Perform (PushRegister "continue")
+            , Perform (PushRegister "n")
+            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
+            , Perform (AssignCallAtLabel "continue" "fct")
+            , Perform (Pop "n")
+            , Perform (Pop "continue")
+            , Perform (AssignOperation "result" (Operation "mul" [ Register "n", Register "result" ]))
+            , Perform (JumpToLabelAtRegister "continue")
+            , Label "done"
+            , Perform (AssignConstant "result" 1)
+            , Perform (JumpToLabelAtRegister "continue")
+            ]
+      }
+    , Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
+    )
 
 
 controller7_fibonacci_recursive =
@@ -304,38 +318,40 @@ controller7_fibonacci_recursive =
     -- done:
     --   result <- $n
     --   jump $continue
-    { registers = Set.fromList [ "n", "result", "tmp", "done?", "continue" ]
-    , instructions =
-        [ Perform (AssignConstant "n" 8)
-        , Perform (AssignCallAtLabel "continue" "fib")
-        , Perform Halt
-        , Label "fib"
-        , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "n", Constant 2 ]))
-        , Perform (JumpToLabelIf "done?" "done")
+    ( { registers = Set.fromList [ "n", "result", "tmp", "done?", "continue" ]
+      , instructions =
+            [ Perform (AssignConstant "n" 8)
+            , Perform (AssignCallAtLabel "continue" "fib")
+            , Perform Halt
+            , Label "fib"
+            , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "n", Constant 2 ]))
+            , Perform (JumpToLabelIf "done?" "done")
 
-        -- call to fib(n - 1)
-        , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
-        , Perform (PushRegister "n")
-        , Perform (PushRegister "continue")
-        , Perform (AssignCallAtLabel "continue" "fib")
-        , Perform (Pop "continue")
-        , Perform (Pop "n")
+            -- call to fib(n - 1)
+            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
+            , Perform (PushRegister "n")
+            , Perform (PushRegister "continue")
+            , Perform (AssignCallAtLabel "continue" "fib")
+            , Perform (Pop "continue")
+            , Perform (Pop "n")
 
-        -- call to fib(n - 2)
-        , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
-        , Perform (PushRegister "result")
-        , Perform (PushRegister "continue")
-        , Perform (AssignCallAtLabel "continue" "fib")
-        , Perform (Pop "continue")
-        , Perform (Pop "tmp")
+            -- call to fib(n - 2)
+            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
+            , Perform (PushRegister "result")
+            , Perform (PushRegister "continue")
+            , Perform (AssignCallAtLabel "continue" "fib")
+            , Perform (Pop "continue")
+            , Perform (Pop "tmp")
 
-        -- returning fib(n - 1) + fib(n - 2)
-        , Perform (AssignOperation "result" (Operation "add" [ Register "result", Register "tmp" ]))
-        , Perform (JumpToLabelAtRegister "continue")
+            -- returning fib(n - 1) + fib(n - 2)
+            , Perform (AssignOperation "result" (Operation "add" [ Register "result", Register "tmp" ]))
+            , Perform (JumpToLabelAtRegister "continue")
 
-        -- base case
-        , Label "done"
-        , Perform (AssignRegister "result" "n")
-        , Perform (JumpToLabelAtRegister "continue")
-        ]
-    }
+            -- base case
+            , Label "done"
+            , Perform (AssignRegister "result" "n")
+            , Perform (JumpToLabelAtRegister "continue")
+            ]
+      }
+    , Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "tmp", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
+    )
