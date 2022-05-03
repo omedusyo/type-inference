@@ -1,11 +1,15 @@
 module Ui.Tab.RegisterMachine exposing (Model, Msg, init, update, view)
 
+import Array exposing (Array)
+import Array.Extra as Array
 import Dict exposing (Dict)
 import Element as E exposing (Element)
 import Element.Background as Background
+import Element.Border as Border
+import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import RegisterMachine.Base as RegisterMachine exposing (Controller, Machine, MemoryError(..), RuntimeError(..), TranslationError)
+import RegisterMachine.Base as RegisterMachine exposing (Controller, Machine, MemoryAddress, MemoryCell, MemoryError(..), MemoryState, RuntimeError(..), TranslationError)
 import RegisterMachine.Controllers as Controllers
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
@@ -16,6 +20,8 @@ type alias Model =
     { controller : Controller
     , parsedMachine : Result TranslationError Machine
     , maybeRuntime : Maybe (Result RuntimeError Machine)
+    , memoryView : MemoryView
+    , currentlyHighlightedCell : MemoryAddress
     }
 
 
@@ -67,7 +73,45 @@ init =
 
                 Err _ ->
                     Nothing
+        , memoryView = initMemoryView
+        , currentlyHighlightedCell = centerOfMemoryView initMemoryView
         }
+
+
+type alias MemoryView =
+    { bottom : Int, top : Int }
+
+
+initMemoryView : MemoryView
+initMemoryView =
+    { bottom = 0, top = 10 }
+
+
+centerOfMemoryView : MemoryView -> Int
+centerOfMemoryView { top, bottom } =
+    bottom + (top - bottom) // 2
+
+
+shiftBy : Int -> MemoryView -> MemoryView
+shiftBy delta ({ bottom, top } as memoryView) =
+    let
+        ( bottomNew, topNew ) =
+            ( bottom + delta, top + delta )
+    in
+    if bottomNew < 0 then
+        { bottom = 0, top = topNew - bottomNew }
+
+    else
+        { bottom = bottomNew, top = topNew }
+
+
+centerAt : Int -> MemoryView -> MemoryView
+centerAt p memoryView =
+    let
+        oldCenter =
+            centerOfMemoryView memoryView
+    in
+    memoryView |> shiftBy (p - oldCenter)
 
 
 resetRuntime : Model -> Model
@@ -87,6 +131,8 @@ type Msg
     = Reset
     | Start
     | RunOneStep
+    | MemoryAddressClicked MemoryAddress
+    | ShiftMemoryViewBy Int
 
 
 update : Msg -> Context Model msg
@@ -120,6 +166,31 @@ update msg =
                     }
                 )
 
+        MemoryAddressClicked p ->
+            Context.update
+                (\model ->
+                    let
+                        newMemoryView =
+                            model.memoryView |> centerAt p
+                    in
+                    { model
+                        | memoryView = newMemoryView
+                        , currentlyHighlightedCell = p
+                    }
+                )
+
+        ShiftMemoryViewBy delta ->
+            Context.update
+                (\model ->
+                    let
+                        newMemoryView =
+                            model.memoryView |> shiftBy delta
+                    in
+                    { model
+                        | memoryView = newMemoryView
+                    }
+                )
+
 
 view : Config -> Model -> Element Msg
 view config model =
@@ -143,21 +214,23 @@ view config model =
                 , label = E.text "Run one step"
                 }
             ]
-        , E.row [ E.width E.fill ]
-            (case model.maybeRuntime of
-                Nothing ->
-                    []
+        , case model.maybeRuntime of
+            Nothing ->
+                E.text ""
 
-                Just (Err runtimeError) ->
-                    [ E.text (runTimeErrorToString runtimeError) ]
+            Just (Err runtimeError) ->
+                E.text (runTimeErrorToString runtimeError)
 
-                Just (Ok machine) ->
-                    [ viewRegisters (machine.env |> Dict.toList)
-                    , viewStack machine.stack
-                    , -- instructions
-                      viewInstructions machine.instructionPointer model.controller.instructions
+            Just (Ok machine) ->
+                E.column [ E.width E.fill ]
+                    [ E.row [ E.width E.fill ]
+                        [ viewRegisters (machine.env |> Dict.toList)
+                        , viewStack machine.stack
+                        , -- instructions
+                          viewInstructions machine.instructionPointer model.controller.instructions
+                        ]
+                    , viewMemoryState machine.memoryState model
                     ]
-            )
         ]
 
 
@@ -369,3 +442,62 @@ viewStack stack =
                     E.el [] (E.text (String.fromInt val))
                 )
         )
+
+
+viewMemoryState : MemoryState -> Model -> Element Msg
+viewMemoryState memoryState model =
+    let
+        viewMemorySegment a b =
+            E.row [ E.width E.fill ]
+                (memoryState.memory
+                    |> Array.slice a (b + 1)
+                    |> Array.toIndexedList
+                    |> List.map
+                        (\( i, memoryCell ) ->
+                            viewMemoryCell (i + a) memoryCell model
+                        )
+                )
+    in
+    E.column [ E.width E.fill ]
+        [ E.text "Memory"
+        , E.row [] [ E.text "Next free address: ", viewMemoryAddress memoryState.nextFreePointer ]
+        , E.row []
+            [ Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy -1), label = E.text "-1" }
+            , Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy 1), label = E.text "+1" }
+            ]
+        , viewMemorySegment model.memoryView.bottom model.memoryView.top
+        ]
+
+
+viewMemoryCell : MemoryAddress -> MemoryCell -> Model -> Element Msg
+viewMemoryCell memoryAddress memoryCell model =
+    E.column [ Border.solid, Border.width 1, E.width (E.px 100) ]
+        [ E.el [ E.centerX, E.paddingXY 0 15 ]
+            (case memoryCell of
+                RegisterMachine.Nil ->
+                    E.text "nil"
+
+                RegisterMachine.Num x ->
+                    E.text (String.fromInt x)
+
+                RegisterMachine.Pair p q ->
+                    E.row [] [ E.text "(", viewMemoryAddress p, E.text ", ", viewMemoryAddress q, E.text ")" ]
+            )
+        , E.el
+            (List.concat
+                [ [ E.centerX, E.paddingXY 0 5 ]
+                , if model.currentlyHighlightedCell == memoryAddress then
+                    [ Font.color (E.rgb255 255 0 0) ]
+
+                  else
+                    []
+                ]
+            )
+            (E.text (String.concat [ "#", String.fromInt memoryAddress ]))
+        ]
+
+
+viewMemoryAddress : MemoryAddress -> Element Msg
+viewMemoryAddress p =
+    E.el [ Events.onClick (MemoryAddressClicked p), E.pointer ]
+        (E.text (String.concat [ "#", String.fromInt p ]))

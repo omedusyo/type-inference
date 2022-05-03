@@ -322,7 +322,7 @@ memory_example0 =
     -- [[1 2] 5 6]
     { memory =
         Array.fromList
-            [ Num 1, Num 2, Nil, Pair 1 3, Pair 0 4, Num 5, Num 6, Nil, Pair 7 8, Pair 5 9 ]
+            [ Num 1, Num 2, Nil, Pair 1 2, Pair 0 3, Num 5, Num 6, Nil, Pair 6 7, Pair 5 8, Pair 4 9 ]
     , maxSize = 4096
     , nextFreePointer = 11
     }
@@ -523,6 +523,7 @@ type alias OperationEnvironment =
 type alias Machine =
     { env : RegisterEnvironment
     , stack : Stack
+    , memoryState : MemoryState
     , operationEnv : OperationEnvironment
     , instructionPointer : Pointer
     , instructions : MachineInstructions
@@ -536,6 +537,10 @@ makeMachine controller env operationsEnv =
             (\instructions ->
                 { env = env
                 , operationEnv = operationsEnv
+                , memoryState =
+                    -- TODO
+                    -- emptyMemoryState 4096
+                    memory_example0
                 , stack = emptyStack
                 , instructionPointer = 0
                 , instructions = instructions
