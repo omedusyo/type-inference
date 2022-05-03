@@ -452,30 +452,32 @@ setSnd pointer cell ({ memory } as memoryState) =
             (\( _, q ) -> memoryState |> set q cell)
 
 
-new : MemoryCell -> MemoryState -> Result MemoryError MemoryState
+new : MemoryCell -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
 new memoryCell ({ memory, maxSize, nextFreePointer } as memoryState) =
     if nextFreePointer + 1 < maxSize then
         Ok
-            { memoryState
+            ( nextFreePointer
+            , { memoryState
                 | memory = memory |> Array.set nextFreePointer memoryCell
                 , nextFreePointer = nextFreePointer + 1
-            }
+              }
+            )
 
     else
         Err MemoryExceeded
 
 
-num : Value -> MemoryState -> Result MemoryError MemoryState
+num : Value -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
 num x memoryState =
     memoryState |> new (Num x)
 
 
-nil : MemoryState -> Result MemoryError MemoryState
+nil : MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
 nil memoryState =
     memoryState |> new Nil
 
 
-pair : MemoryAddress -> MemoryAddress -> MemoryState -> Result MemoryError MemoryState
+pair : MemoryAddress -> MemoryAddress -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
 pair p q memoryState =
     memoryState |> new (Pair p q)
 
