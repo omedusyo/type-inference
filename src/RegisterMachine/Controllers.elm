@@ -21,6 +21,10 @@ num x =
     ConstantValue (Num x)
 
 
+nil =
+    ConstantValue Nil
+
+
 controller0_gcd : ( Controller, RegisterEnvironment )
 controller0_gcd =
     -- registers: a : Int, b : Int, tmp : Int, is-zero-b? : Bool
@@ -360,4 +364,21 @@ controller7_fibonacci_recursive =
             ]
       }
     , Dict.fromList [ ( "n", num 0 ), ( "result", num 0 ), ( "tmp", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
+    )
+
+
+controller8_memory_test =
+    ( { registers = Set.fromList [ "p", "a", "b", "test" ]
+      , instructions =
+            [ Label "memory_test"
+            , Perform (ConstructPair "p" (Constant (Num 16)) (Constant (Num 32)))
+            , Perform (First "a" "p")
+            , Perform (Second "b" "p")
+            , Perform (SetFirst "p" (Constant (Num 17)))
+            , Perform (SetSecond "p" (Constant (Num 33)))
+            , Perform (AssignOperation "test" (Operation "pair?" [ Register "p" ]))
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "p", nil ), ( "a", num 0 ), ( "b", num 0 ), ( "test", num 0 ) ]
     )

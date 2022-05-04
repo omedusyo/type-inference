@@ -21,6 +21,7 @@ type Value
     = ConstantValue Constant
     | Pair MemoryAddress
     | InstructionAddress InstructionAddress
+    | Uninitialized
 
 
 type Constant
@@ -77,10 +78,6 @@ type
     -- b <- second $p
     -- set-first $p $a
     -- set-second $p $b
-    --
-    -- num? $a
-    -- nil? $a
-    -- pair? $a
     = -- assignment
       AssignRegister Register Register
     | AssignLabel Register Label
@@ -106,10 +103,6 @@ type
     | Second Register Register
     | SetFirst Register OperationArgument
     | SetSecond Register OperationArgument
-      -- predicates
-    | IsNum Register
-    | IsPair Register
-    | IsNil Register
 
 
 type LabelOrInstruction
@@ -256,15 +249,6 @@ parse controller =
                     Result.tuple2 (doesRegisterExist target controller) (checkArg arg)
                         |> Result.ignore
 
-                IsNum register ->
-                    doesRegisterExist register controller
-
-                IsPair register ->
-                    doesRegisterExist register controller
-
-                IsNil register ->
-                    doesRegisterExist register controller
-
         initMachineInstructions : ( InstructionAddress, MachineInstructions )
         initMachineInstructions =
             ( 0
@@ -366,7 +350,7 @@ type MemoryError
 
 emptyMemoryState : Int -> MemoryState
 emptyMemoryState maxSize =
-    { memory = Array.empty
+    { memory = Array.repeat maxSize ( Uninitialized, Uninitialized )
     , maxSize = maxSize
     , nextFreePointer = 0
     }
@@ -403,6 +387,13 @@ set : MemoryAddress -> MemoryCell -> MemoryState -> MemoryState
 set pointer cell ({ memory } as memoryState) =
     { memoryState
         | memory = memory |> Array.set pointer cell
+    }
+
+
+updateMemoryState : MemoryAddress -> (MemoryCell -> MemoryCell) -> MemoryState -> MemoryState
+updateMemoryState pointer f ({ memory } as memoryState) =
+    { memoryState
+        | memory = memory |> Array.update pointer f
     }
 
 
@@ -504,8 +495,9 @@ makeMachine controller env operationsEnv =
                 , operationEnv = operationsEnv
                 , memoryState =
                     -- TODO
-                    -- emptyMemoryState 4096
-                    memory_example0
+                    emptyMemoryState 4096
+
+                -- memory_example0
                 , stack = emptyStack
                 , instructionPointer = 0
                 , instructions = instructions
@@ -535,6 +527,16 @@ getRegister register machine =
             Err (UndefinedRegister register)
 
 
+getValueFromArgument : OperationArgument -> Machine -> Result RuntimeError Value
+getValueFromArgument argument machine =
+    case argument of
+        Register register ->
+            getRegister register machine
+
+        Constant val ->
+            Ok (ConstantValue val)
+
+
 getInstructionAddressAtRegister : Register -> Machine -> Result RuntimeError InstructionAddress
 getInstructionAddressAtRegister register machine =
     machine
@@ -550,11 +552,31 @@ getInstructionAddressAtRegister register machine =
             )
 
 
+getMemoryAddressAtRegister : Register -> Machine -> Result RuntimeError MemoryAddress
+getMemoryAddressAtRegister register machine =
+    machine
+        |> getRegister register
+        |> Result.andThen
+            (\value ->
+                case value of
+                    Pair pointer ->
+                        Ok pointer
+
+                    _ ->
+                        Err ExpectedPairInRegister
+            )
+
+
 updateRegister : Register -> Value -> Machine -> Machine
 updateRegister register val machine =
     { machine
         | env = Dict.insert register val machine.env
     }
+
+
+updateMemoryStateOfMachine : MemoryState -> Machine -> Machine
+updateMemoryStateOfMachine memoryState machine =
+    { machine | memoryState = memoryState }
 
 
 getOperation : OperationName -> Machine -> Result RuntimeError (List Value -> Result RuntimeError Value)
@@ -619,6 +641,7 @@ type RuntimeError
     | LabelPointsToNothing Label
     | PoppingEmptyStack
     | ExpectedInstructionAddressInRegister
+    | ExpectedPairInRegister
     | MemoryError MemoryError
 
 
@@ -659,15 +682,7 @@ runOneStep machine =
                         applyOp : Operation -> Result RuntimeError { isFinished : Bool, machine : Machine }
                         applyOp op =
                             args
-                                |> List.map
-                                    (\argument ->
-                                        case argument of
-                                            Register register ->
-                                                getRegister register machine
-
-                                            Constant val ->
-                                                Ok (ConstantValue val)
-                                    )
+                                |> List.map (\argument -> machine |> getValueFromArgument argument)
                                 |> Result.sequence
                                 |> Result.andThen op
                                 |> Result.map
@@ -814,28 +829,86 @@ runOneStep machine =
                             )
 
                 ConstructPair target arg0 arg1 ->
-                    Debug.todo ""
+                    Result.tuple2 (machine |> getValueFromArgument arg0) (machine |> getValueFromArgument arg1)
+                        |> Result.andThen
+                            (\( value0, value1 ) ->
+                                (machine.memoryState |> new ( value0, value1 ))
+                                    |> Result.mapError MemoryError
+                                    |> Result.map
+                                        (\( newPairAddress, newMemoryState ) ->
+                                            { isFinished = False
+                                            , machine =
+                                                machine
+                                                    |> updateMemoryStateOfMachine newMemoryState
+                                                    |> updateRegister target (Pair newPairAddress)
+                                                    |> advanceInstructionPointer
+                                            }
+                                        )
+                            )
 
                 First target source ->
-                    Debug.todo ""
+                    machine
+                        |> getMemoryAddressAtRegister source
+                        |> Result.andThen
+                            (\pointer ->
+                                machine.memoryState
+                                    |> get pointer
+                                    |> Result.mapError MemoryError
+                                    |> Result.map
+                                        (\( a, _ ) ->
+                                            { isFinished = False
+                                            , machine =
+                                                machine
+                                                    |> updateRegister target a
+                                                    |> advanceInstructionPointer
+                                            }
+                                        )
+                            )
 
                 Second target source ->
-                    Debug.todo ""
+                    machine
+                        |> getMemoryAddressAtRegister source
+                        |> Result.andThen
+                            (\pointer ->
+                                machine.memoryState
+                                    |> get pointer
+                                    |> Result.mapError MemoryError
+                                    |> Result.map
+                                        (\( _, b ) ->
+                                            { isFinished = False
+                                            , machine =
+                                                machine
+                                                    |> updateRegister target b
+                                                    |> advanceInstructionPointer
+                                            }
+                                        )
+                            )
 
                 SetFirst register arg ->
-                    Debug.todo ""
+                    Result.tuple2 (machine |> getValueFromArgument arg) (machine |> getMemoryAddressAtRegister register)
+                        |> Result.map
+                            (\( val, pointer ) ->
+                                { isFinished = False
+                                , machine =
+                                    machine
+                                        |> updateMemoryStateOfMachine
+                                            (updateMemoryState pointer (\( _, b ) -> ( val, b )) machine.memoryState)
+                                        |> advanceInstructionPointer
+                                }
+                            )
 
                 SetSecond register arg ->
-                    Debug.todo ""
-
-                IsNum register ->
-                    Debug.todo ""
-
-                IsPair register ->
-                    Debug.todo ""
-
-                IsNil register ->
-                    Debug.todo ""
+                    Result.tuple2 (machine |> getValueFromArgument arg) (machine |> getMemoryAddressAtRegister register)
+                        |> Result.map
+                            (\( val, pointer ) ->
+                                { isFinished = False
+                                , machine =
+                                    machine
+                                        |> updateMemoryStateOfMachine
+                                            (updateMemoryState pointer (\( a, _ ) -> ( a, val )) machine.memoryState)
+                                        |> advanceInstructionPointer
+                                }
+                            )
 
         Nothing ->
             Ok (halt machine)
@@ -979,15 +1052,6 @@ showInstruction instruction =
 
         SetSecond register arg ->
             String.concat [ "set-second ", register, showArgument arg ]
-
-        IsNum register ->
-            String.concat [ "num? ", showRegisterUse register ]
-
-        IsPair register ->
-            String.concat [ "pair? ", showRegisterUse register ]
-
-        IsNil register ->
-            String.concat [ "nil? ", showRegisterUse register ]
 
 
 showInstructions : List LabelOrInstruction -> String

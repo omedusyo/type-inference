@@ -48,17 +48,51 @@ init =
                 , ( "decrement", RegisterMachine.makeNumOperation1 (\x -> x - 1) )
                 , ( "increment", RegisterMachine.makeNumOperation1 (\x -> x + 1) )
                 , ( "remainder", RegisterMachine.makeNumOperation2 (\x y -> remainderBy y x) )
+                , ( "pair?"
+                  , RegisterMachine.makeOperation1
+                        (\val ->
+                            case val of
+                                Pair _ ->
+                                    Ok (ConstantValue (Num 1))
+
+                                _ ->
+                                    Ok (ConstantValue (Num 0))
+                        )
+                  )
+                , ( "nil?"
+                  , RegisterMachine.makeOperation1
+                        (\val ->
+                            case val of
+                                ConstantValue Nil ->
+                                    Ok (ConstantValue (Num 1))
+
+                                _ ->
+                                    Ok (ConstantValue (Num 0))
+                        )
+                  )
+                , ( "num?"
+                  , RegisterMachine.makeOperation1
+                        (\val ->
+                            case val of
+                                ConstantValue (Num _) ->
+                                    Ok (ConstantValue (Num 1))
+
+                                _ ->
+                                    Ok (ConstantValue (Num 0))
+                        )
+                  )
                 ]
 
         ( controller, env ) =
             -- Controllers.controller0_gcd
             -- Controllers.controller1_remainder
-            Controllers.controller2_fct_iterative
+            -- Controllers.controller2_fct_iterative
+            -- Controllers.controller3_gcd_with_inlined_remainder
+            -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
+            -- Controllers.controller6_fct_recursive
+            -- Controllers.controller7_fibonacci_recursive
+            Controllers.controller8_memory_test
 
-        -- Controllers.controller3_gcd_with_inlined_remainder
-        -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
-        -- Controllers.controller6_fct_recursive
-        -- Controllers.controller7_fibonacci_recursive
         parsedMachine : Result TranslationError Machine
         parsedMachine =
             RegisterMachine.makeMachine controller env operationEnv
@@ -258,6 +292,9 @@ runTimeErrorToString err =
         ExpectedInstructionAddressInRegister ->
             "Expected instruction address in the register"
 
+        ExpectedPairInRegister ->
+            "Expected pair in the register"
+
         MemoryError memoryError ->
             case memoryError of
                 MemoryExceeded ->
@@ -411,15 +448,6 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.SetSecond register arg ->
                         [ viewInstructionName "set-second", viewRegisterName register, viewOperationArgument arg ]
-
-                    RegisterMachine.IsNum register ->
-                        [ viewInstructionName "num?", viewRegisterUse register ]
-
-                    RegisterMachine.IsPair register ->
-                        [ viewInstructionName "pair?", viewRegisterUse register ]
-
-                    RegisterMachine.IsNil register ->
-                        [ viewInstructionName "nil?", viewRegisterUse register ]
                 )
     in
     E.column [ E.width E.fill ]
@@ -498,7 +526,7 @@ viewMemoryState memoryState model =
 viewMemoryCell : MemoryAddress -> MemoryCell -> Model -> Element Msg
 viewMemoryCell memoryAddress ( a, b ) model =
     E.column [ Border.solid, Border.width 1, E.width (E.px 100) ]
-        [ E.column [ E.centerX, E.paddingXY 0 15 ]
+        [ E.column [ E.centerX, E.paddingXY 0 15, E.height (E.px 80) ]
             [ viewValue a model
             , viewValue b model
             ]
@@ -527,6 +555,9 @@ viewValue value model =
 
         InstructionAddress instructionAddress ->
             viewInstructionAddress instructionAddress
+
+        Uninitialized ->
+            E.text ""
 
 
 viewConstant : Constant -> Element Msg
