@@ -324,21 +324,20 @@ viewInstructions instructionPointer instructionBlock =
         paddingLeft px =
             E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }
 
-        viewOperationApplication : RegisterMachine.OperationApplication -> Element Msg
-        viewOperationApplication (RegisterMachine.Operation opName arguments) =
+        viewOperationArgument : RegisterMachine.OperationArgument -> Element Msg
+        viewOperationArgument argument =
+            case argument of
+                RegisterMachine.Register register ->
+                    viewRegisterUse register
+
+                RegisterMachine.Constant val ->
+                    viewConstant val
+
+        viewOperationApplication : RegisterMachine.OperationName -> List RegisterMachine.OperationArgument -> Element Msg
+        viewOperationApplication opName arguments =
             viewOperationUse
                 opName
-                (arguments
-                    |> List.map
-                        (\argument ->
-                            case argument of
-                                RegisterMachine.Register register ->
-                                    viewRegisterUse register
-
-                                RegisterMachine.Constant val ->
-                                    viewConstant val
-                        )
-                )
+                (arguments |> List.map viewOperationArgument)
 
         viewInstruction : Bool -> RegisterMachine.Instruction -> Element Msg
         viewInstruction isFocused instruction =
@@ -359,8 +358,8 @@ viewInstructions instructionPointer instructionBlock =
                     RegisterMachine.AssignLabel target label ->
                         [ viewRegisterName target, viewInstructionName "<-", viewLabelUse label ]
 
-                    RegisterMachine.AssignOperation target operationApplication ->
-                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication operationApplication ]
+                    RegisterMachine.AssignOperation target (RegisterMachine.Operation opName args) ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication opName args ]
 
                     RegisterMachine.AssignConstant target x ->
                         [ viewRegisterName target, viewInstructionName "<-", viewConstant x ]
@@ -399,28 +398,28 @@ viewInstructions instructionPointer instructionBlock =
                         [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "call", viewRegisterUse labelRegister ]
 
                     RegisterMachine.ConstructPair target arg0 arg1 ->
-                        Debug.todo ""
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "pair" [ arg0, arg1 ] ]
 
                     RegisterMachine.First target source ->
-                        Debug.todo ""
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "first" [ RegisterMachine.Register source ] ]
 
                     RegisterMachine.Second target source ->
-                        Debug.todo ""
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "second" [ RegisterMachine.Register source ] ]
 
                     RegisterMachine.SetFirst register arg ->
-                        Debug.todo ""
+                        [ viewInstructionName "set-first", viewRegisterName register, viewOperationArgument arg ]
 
                     RegisterMachine.SetSecond register arg ->
-                        Debug.todo ""
+                        [ viewInstructionName "set-second", viewRegisterName register, viewOperationArgument arg ]
 
                     RegisterMachine.IsNum register ->
-                        Debug.todo ""
+                        [ viewInstructionName "num?", viewRegisterUse register ]
 
                     RegisterMachine.IsPair register ->
-                        Debug.todo ""
+                        [ viewInstructionName "pair?", viewRegisterUse register ]
 
                     RegisterMachine.IsNil register ->
-                        Debug.todo ""
+                        [ viewInstructionName "nil?", viewRegisterUse register ]
                 )
     in
     E.column [ E.width E.fill ]

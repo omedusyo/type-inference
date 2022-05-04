@@ -892,6 +892,31 @@ showAssignment source target =
     source ++ " <- " ++ target
 
 
+showArgument : OperationArgument -> String
+showArgument argument =
+    case argument of
+        Register register ->
+            showRegisterUse register
+
+        Constant val ->
+            showConstant val
+
+
+showOperation : Register -> String -> List OperationArgument -> String
+showOperation target opName arguments =
+    showAssignment
+        target
+        (String.concat
+            [ opName
+            , "("
+            , arguments
+                |> List.map showArgument
+                |> String.join ", "
+            , ")"
+            ]
+        )
+
+
 showInstruction : Instruction -> String
 showInstruction instruction =
     case instruction of
@@ -902,25 +927,7 @@ showInstruction instruction =
             showAssignment target (showLabel label)
 
         AssignOperation target (Operation opName arguments) ->
-            showAssignment
-                target
-                (String.concat
-                    [ opName
-                    , "("
-                    , arguments
-                        |> List.map
-                            (\argument ->
-                                case argument of
-                                    Register register ->
-                                        showRegisterUse register
-
-                                    Constant val ->
-                                        showConstant val
-                            )
-                        |> String.join ", "
-                    , ")"
-                    ]
-                )
+            showOperation target opName arguments
 
         AssignConstant target val ->
             showAssignment target (showConstant val)
@@ -959,28 +966,28 @@ showInstruction instruction =
             showAssignment target (showRegisterUse labelRegister)
 
         ConstructPair target arg0 arg1 ->
-            Debug.todo ""
+            showOperation target "pair" [ arg0, arg1 ]
 
         First target source ->
-            Debug.todo ""
+            showOperation target "first" [ Register source ]
 
         Second target source ->
-            Debug.todo ""
+            showOperation target "second" [ Register source ]
 
         SetFirst register arg ->
-            Debug.todo ""
+            String.concat [ "set-first ", register, showArgument arg ]
 
         SetSecond register arg ->
-            Debug.todo ""
+            String.concat [ "set-second ", register, showArgument arg ]
 
         IsNum register ->
-            Debug.todo ""
+            String.concat [ "num? ", showRegisterUse register ]
 
         IsPair register ->
-            Debug.todo ""
+            String.concat [ "pair? ", showRegisterUse register ]
 
         IsNil register ->
-            Debug.todo ""
+            String.concat [ "nil? ", showRegisterUse register ]
 
 
 showInstructions : List LabelOrInstruction -> String
