@@ -91,7 +91,8 @@ init =
             -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
             -- Controllers.controller6_fct_recursive
             -- Controllers.controller7_fibonacci_recursive
-            Controllers.controller8_memory_test
+            -- Controllers.controller8_memory_test
+            Controllers.controller9_range
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =

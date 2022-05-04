@@ -382,3 +382,20 @@ controller8_memory_test =
       }
     , Dict.fromList [ ( "p", nil ), ( "a", num 0 ), ( "b", num 0 ), ( "test", num 0 ) ]
     )
+
+
+controller9_range =
+    ( { registers = Set.fromList [ "xs", "n", "done?" ]
+      , instructions =
+            [ Label "start"
+            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "n" ]))
+            , Perform (JumpToLabelIf "done?" "done")
+            , Perform (ConstructPair "xs" (Register "n") (Register "xs"))
+            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
+            , Perform (JumpToLabel "start")
+            , Label "done"
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "xs", nil ), ( "n", num 5 ), ( "done?", num 0 ) ]
+    )
