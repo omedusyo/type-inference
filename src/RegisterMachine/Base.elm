@@ -17,11 +17,18 @@ type alias Register =
     String
 
 
-type alias Value =
-    Int
+type Value
+    = ConstantValue Constant
+    | Pair MemoryAddress
+    | InstructionAddress InstructionAddress
 
 
-type alias Pointer =
+type Constant
+    = Num Int
+    | Nil
+
+
+type alias InstructionAddress =
     Int
 
 
@@ -44,7 +51,7 @@ type alias OperationArity =
 
 type OperationArgument
     = Register Register
-    | Constant Value
+    | Constant Constant
 
 
 type OperationApplication
@@ -63,12 +70,27 @@ type
     -- if $a jump $b // is a register that contains a labelb
     -- halt
     -- push $a
-    -- $a <- stack
+    -- a <- stack
+    --
+    -- TODO: Define the memory instructions
+    -- a <- new 123
+    -- b <- new nil
+    -- p <- new pair($a, $b)
+    --
+    -- update(p, 123)
+    -- update(p, nil)
+    -- update(p, pair($a, $b)
+    --
+    -- a <- get(p) ???
+    --
+    -- nil?
+    -- num?
+    -- pair?
     = -- assignment
       AssignRegister Register Register
     | AssignLabel Register Label
     | AssignOperation Register OperationApplication
-    | AssignConstant Register Value
+    | AssignConstant Register Constant
       -- jumping
     | JumpToLabel Label
     | JumpToLabelAtRegister Register
@@ -77,7 +99,7 @@ type
     | Halt
       -- stack
     | PushRegister Register
-    | PushConstant Value
+    | PushConstant Constant
     | PushLabel Label
     | Pop Register
       -- calling procedure
@@ -108,7 +130,7 @@ type alias Controller =
 
 type alias MachineInstructions =
     { labels : Set Label
-    , labelToPosition : Dict Label Pointer
+    , labelToPosition : Dict Label InstructionAddress
     , instructions : Array Instruction
     }
 
@@ -207,7 +229,7 @@ parse controller =
                     Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist labelRegister controller)
                         |> Result.ignore
 
-        initMachineInstructions : ( Pointer, MachineInstructions )
+        initMachineInstructions : ( InstructionAddress, MachineInstructions )
         initMachineInstructions =
             ( 0
             , { labels = Set.empty
@@ -216,7 +238,7 @@ parse controller =
               }
             )
 
-        update : LabelOrInstruction -> ( Pointer, MachineInstructions ) -> Result TranslationError ( Pointer, MachineInstructions )
+        update : LabelOrInstruction -> ( InstructionAddress, MachineInstructions ) -> Result TranslationError ( InstructionAddress, MachineInstructions )
         update labelOrInstruction ( pointer, machineInstructions ) =
             case labelOrInstruction of
                 Label label ->
@@ -287,10 +309,8 @@ type alias MemoryAddress =
     Int
 
 
-type MemoryCell
-    = Num Value
-    | Nil
-    | Pair MemoryAddress MemoryAddress
+type alias MemoryCell =
+    ( Value, Value )
 
 
 type alias MemoryState =
@@ -322,9 +342,14 @@ memory_example0 =
     -- [[1 2] 5 6]
     { memory =
         Array.fromList
-            [ Num 1, Num 2, Nil, Pair 1 2, Pair 0 3, Num 5, Num 6, Nil, Pair 6 7, Pair 5 8, Pair 4 9 ]
+            [ ( ConstantValue (Num 32), ConstantValue Nil )
+            , ( ConstantValue (Num 16), Pair 0 )
+            , ( ConstantValue (Num 128), ConstantValue Nil )
+            , ( ConstantValue (Num 64), Pair 2 )
+            , ( Pair 1, Pair 3 )
+            ]
     , maxSize = 4096
-    , nextFreePointer = 11
+    , nextFreePointer = 5
     }
 
 
@@ -345,113 +370,6 @@ set pointer cell ({ memory } as memoryState) =
     }
 
 
-getNum : MemoryAddress -> MemoryState -> Result MemoryError Value
-getNum pointer memoryState =
-    memoryState
-        |> get pointer
-        |> Result.andThen
-            (\memoryCell ->
-                case memoryCell of
-                    Num x ->
-                        Ok x
-
-                    _ ->
-                        Err (ExpectedNumAt pointer)
-            )
-
-
-isNum : MemoryAddress -> MemoryState -> Bool
-isNum pointer { memory } =
-    case memory |> Array.get pointer of
-        Just memoryCell ->
-            case memoryCell of
-                Num _ ->
-                    True
-
-                _ ->
-                    False
-
-        Nothing ->
-            False
-
-
-isPair : MemoryAddress -> MemoryState -> Bool
-isPair pointer { memory } =
-    case memory |> Array.get pointer of
-        Just memoryCell ->
-            case memoryCell of
-                Pair _ _ ->
-                    True
-
-                _ ->
-                    False
-
-        Nothing ->
-            False
-
-
-isNil : MemoryAddress -> MemoryState -> Bool
-isNil pointer { memory } =
-    case memory |> Array.get pointer of
-        Just memoryCell ->
-            case memoryCell of
-                Nil ->
-                    True
-
-                _ ->
-                    False
-
-        Nothing ->
-            False
-
-
-getPairPointers : MemoryAddress -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryAddress )
-getPairPointers pointer memoryState =
-    memoryState
-        |> get pointer
-        |> Result.andThen
-            (\memoryCell ->
-                case memoryCell of
-                    Pair p q ->
-                        Ok ( p, q )
-
-                    _ ->
-                        Err (ExpectedPairAt pointer)
-            )
-
-
-getFst : MemoryAddress -> MemoryState -> Result MemoryError MemoryCell
-getFst pointer memoryState =
-    memoryState
-        |> getPairPointers pointer
-        |> Result.andThen
-            (\( p, _ ) -> memoryState |> get p)
-
-
-getSnd : MemoryAddress -> MemoryState -> Result MemoryError MemoryCell
-getSnd pointer memoryState =
-    memoryState
-        |> getPairPointers pointer
-        |> Result.andThen
-            (\( _, q ) -> memoryState |> get q)
-
-
-setFst : MemoryAddress -> MemoryCell -> MemoryState -> Result MemoryError MemoryState
-setFst pointer cell memoryState =
-    memoryState
-        |> getPairPointers pointer
-        |> Result.map
-            (\( p, _ ) -> memoryState |> set p cell)
-
-
-setSnd : MemoryAddress -> MemoryCell -> MemoryState -> Result MemoryError MemoryState
-setSnd pointer cell ({ memory } as memoryState) =
-    memoryState
-        |> getPairPointers pointer
-        |> Result.map
-            (\( _, q ) -> memoryState |> set q cell)
-
-
 new : MemoryCell -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
 new memoryCell ({ memory, maxSize, nextFreePointer } as memoryState) =
     if nextFreePointer + 1 < maxSize then
@@ -467,21 +385,6 @@ new memoryCell ({ memory, maxSize, nextFreePointer } as memoryState) =
         Err MemoryExceeded
 
 
-num : Value -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
-num x memoryState =
-    memoryState |> new (Num x)
-
-
-nil : MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
-nil memoryState =
-    memoryState |> new Nil
-
-
-pair : MemoryAddress -> MemoryAddress -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
-pair p q memoryState =
-    memoryState |> new (Pair p q)
-
-
 
 -- === Machine ===
 
@@ -494,26 +397,52 @@ type alias Operation =
     List Value -> Result RuntimeError Value
 
 
-makeOperation2 : (Value -> Value -> Value) -> Operation
+makeOperation2 : (Value -> Value -> Result RuntimeError Value) -> Operation
 makeOperation2 op =
     \xs ->
         case xs of
             [ x, y ] ->
-                Ok (op x y)
+                op x y
 
             _ ->
                 Err (WrongNumberOfArgumentsGivenToOperationExpected 2)
 
 
-makeOperation1 : (Value -> Value) -> Operation
+makeNumOperation2 : (Int -> Int -> Int) -> Operation
+makeNumOperation2 op =
+    makeOperation2
+        (\v0 v1 ->
+            case ( v0, v1 ) of
+                ( ConstantValue (Num x), ConstantValue (Num y) ) ->
+                    Ok (ConstantValue (Num (op x y)))
+
+                _ ->
+                    Err TheOperationExpectsIntegerArguments
+        )
+
+
+makeOperation1 : (Value -> Result RuntimeError Value) -> Operation
 makeOperation1 op =
     \xs ->
         case xs of
             [ x ] ->
-                Ok (op x)
+                op x
 
             _ ->
                 Err (WrongNumberOfArgumentsGivenToOperationExpected 1)
+
+
+makeNumOperation1 : (Int -> Int) -> Operation
+makeNumOperation1 op =
+    makeOperation1
+        (\v ->
+            case v of
+                ConstantValue (Num x) ->
+                    Ok (ConstantValue (Num (op x)))
+
+                _ ->
+                    Err TheOperationExpectsIntegerArguments
+        )
 
 
 type alias OperationEnvironment =
@@ -525,7 +454,7 @@ type alias Machine =
     , stack : Stack
     , memoryState : MemoryState
     , operationEnv : OperationEnvironment
-    , instructionPointer : Pointer
+    , instructionPointer : InstructionAddress
     , instructions : MachineInstructions
     }
 
@@ -570,6 +499,21 @@ getRegister register machine =
             Err (UndefinedRegister register)
 
 
+getInstructionAddressAtRegister : Register -> Machine -> Result RuntimeError InstructionAddress
+getInstructionAddressAtRegister register machine =
+    machine
+        |> getRegister register
+        |> Result.andThen
+            (\value ->
+                case value of
+                    InstructionAddress pointer ->
+                        Ok pointer
+
+                    _ ->
+                        Err ExpectedInstructionAddressInRegister
+            )
+
+
 updateRegister : Register -> Value -> Machine -> Machine
 updateRegister register val machine =
     { machine
@@ -587,7 +531,7 @@ getOperation operationName machine =
             Err (UndefinedOperation operationName)
 
 
-getLabelPosition : Label -> Machine -> Maybe Pointer
+getLabelPosition : Label -> Machine -> Maybe InstructionAddress
 getLabelPosition label machine =
     Dict.get label machine.instructions.labelToPosition
 
@@ -602,7 +546,7 @@ jump label machine =
             machine
 
 
-pointerJump : Pointer -> Machine -> Machine
+pointerJump : InstructionAddress -> Machine -> Machine
 pointerJump pointer machine =
     { machine
         | instructionPointer = pointer
@@ -635,8 +579,10 @@ type RuntimeError
     = UndefinedRegister Register
     | UndefinedOperation OperationName
     | WrongNumberOfArgumentsGivenToOperationExpected Int
+    | TheOperationExpectsIntegerArguments
     | LabelPointsToNothing Label
     | PoppingEmptyStack
+    | ExpectedInstructionAddressInRegister
     | MemoryError MemoryError
 
 
@@ -665,18 +611,18 @@ runOneStep machine =
                                 { isFinished = False
                                 , machine =
                                     machine
-                                        |> updateRegister target pointer
+                                        |> updateRegister target (InstructionAddress pointer)
                                         |> advanceInstructionPointer
                                 }
 
                         Nothing ->
                             Err (LabelPointsToNothing label)
 
-                AssignOperation target (Operation opName registers) ->
+                AssignOperation target (Operation opName args) ->
                     let
                         applyOp : Operation -> Result RuntimeError { isFinished : Bool, machine : Machine }
                         applyOp op =
-                            registers
+                            args
                                 |> List.map
                                     (\argument ->
                                         case argument of
@@ -684,7 +630,7 @@ runOneStep machine =
                                                 getRegister register machine
 
                                             Constant val ->
-                                                Ok val
+                                                Ok (ConstantValue val)
                                     )
                                 |> Result.sequence
                                 |> Result.andThen op
@@ -706,7 +652,7 @@ runOneStep machine =
                         { isFinished = False
                         , machine =
                             machine
-                                |> updateRegister target x
+                                |> updateRegister target (ConstantValue x)
                                 |> advanceInstructionPointer
                         }
 
@@ -714,7 +660,7 @@ runOneStep machine =
                     Ok { isFinished = False, machine = jump label machine }
 
                 JumpToLabelAtRegister register ->
-                    getRegister register machine
+                    getInstructionAddressAtRegister register machine
                         |> Result.map
                             (\pointer ->
                                 { isFinished = False
@@ -728,7 +674,7 @@ runOneStep machine =
                             (\val ->
                                 { isFinished = False
                                 , machine =
-                                    if val == 1 then
+                                    if val == ConstantValue (Num 1) then
                                         jump label machine
 
                                     else
@@ -740,8 +686,8 @@ runOneStep machine =
                     getRegister testRegister machine
                         |> Result.andThen
                             (\val ->
-                                if val == 1 then
-                                    getRegister target machine
+                                if val == ConstantValue (Num 1) then
+                                    getInstructionAddressAtRegister target machine
                                         |> Result.map
                                             (\pointer ->
                                                 { isFinished = False
@@ -776,7 +722,7 @@ runOneStep machine =
                         { isFinished = False
                         , machine =
                             machine
-                                |> push val
+                                |> push (ConstantValue val)
                                 |> advanceInstructionPointer
                         }
 
@@ -787,7 +733,7 @@ runOneStep machine =
                                 { isFinished = False
                                 , machine =
                                     machine
-                                        |> push pointer
+                                        |> push (InstructionAddress pointer)
                                         |> advanceInstructionPointer
                                 }
 
@@ -813,20 +759,20 @@ runOneStep machine =
                         { isFinished = False
                         , machine =
                             machine
-                                |> updateRegister target (machine.instructionPointer + 1)
+                                |> updateRegister target (InstructionAddress (machine.instructionPointer + 1))
                                 |> jump label
                         }
 
                 AssignCallAtRegister target labelRegister ->
                     -- target <- $ip + 1
                     -- ip <- $labelRegister
-                    getRegister labelRegister machine
+                    getInstructionAddressAtRegister labelRegister machine
                         |> Result.map
                             (\pointer ->
                                 { isFinished = False
                                 , machine =
                                     machine
-                                        |> updateRegister target (machine.instructionPointer + 1)
+                                        |> updateRegister target (InstructionAddress (machine.instructionPointer + 1))
                                         |> pointerJump pointer
                                 }
                             )
@@ -861,9 +807,14 @@ start machine0 =
             )
 
 
-showValue : Value -> String
-showValue val =
-    String.fromInt val
+showConstant : Constant -> String
+showConstant val =
+    case val of
+        Num x ->
+            String.fromInt x
+
+        Nil ->
+            "nil"
 
 
 showLabel : Label -> String
@@ -904,7 +855,7 @@ showInstruction instruction =
                                         showRegisterUse register
 
                                     Constant val ->
-                                        showValue val
+                                        showConstant val
                             )
                         |> String.join ", "
                     , ")"
@@ -912,7 +863,7 @@ showInstruction instruction =
                 )
 
         AssignConstant target val ->
-            showAssignment target (showValue val)
+            showAssignment target (showConstant val)
 
         JumpToLabel label ->
             String.concat [ "jump ", showLabel label ]
@@ -933,7 +884,7 @@ showInstruction instruction =
             String.concat [ "push ", showRegisterUse register ]
 
         PushConstant val ->
-            String.concat [ "push ", showValue val ]
+            String.concat [ "push ", showConstant val ]
 
         PushLabel label ->
             String.concat [ "push ", showLabel label ]

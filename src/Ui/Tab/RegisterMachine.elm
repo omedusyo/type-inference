@@ -9,7 +9,7 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import RegisterMachine.Base as RegisterMachine exposing (Controller, Machine, MemoryAddress, MemoryCell, MemoryError(..), MemoryState, RuntimeError(..), TranslationError)
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Controller, InstructionAddress, Machine, MemoryAddress, MemoryCell, MemoryError(..), MemoryState, RuntimeError(..), TranslationError, Value(..))
 import RegisterMachine.Controllers as Controllers
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
@@ -39,15 +39,15 @@ init =
         operationEnv : RegisterMachine.OperationEnvironment
         operationEnv =
             Dict.fromList
-                [ ( "sub", RegisterMachine.makeOperation2 (\x y -> x - y) )
-                , ( "less-than?", RegisterMachine.makeOperation2 (\x y -> boolToInt (x < y)) )
-                , ( "add", RegisterMachine.makeOperation2 (\x y -> x + y) )
-                , ( "mul", RegisterMachine.makeOperation2 (\x y -> x * y) )
-                , ( "zero?", RegisterMachine.makeOperation1 (\x -> boolToInt (x == 0)) )
-                , ( "eq?", RegisterMachine.makeOperation2 (\x y -> boolToInt (x == y)) )
-                , ( "decrement", RegisterMachine.makeOperation1 (\x -> x - 1) )
-                , ( "increment", RegisterMachine.makeOperation1 (\x -> x + 1) )
-                , ( "remainder", RegisterMachine.makeOperation2 (\x y -> remainderBy y x) )
+                [ ( "sub", RegisterMachine.makeNumOperation2 (\x y -> x - y) )
+                , ( "less-than?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x < y)) )
+                , ( "add", RegisterMachine.makeNumOperation2 (\x y -> x + y) )
+                , ( "mul", RegisterMachine.makeNumOperation2 (\x y -> x * y) )
+                , ( "zero?", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
+                , ( "eq?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x == y)) )
+                , ( "decrement", RegisterMachine.makeNumOperation1 (\x -> x - 1) )
+                , ( "increment", RegisterMachine.makeNumOperation1 (\x -> x + 1) )
+                , ( "remainder", RegisterMachine.makeNumOperation2 (\x y -> remainderBy y x) )
                 ]
 
         ( controller, env ) =
@@ -224,8 +224,8 @@ view config model =
             Just (Ok machine) ->
                 E.column [ E.width E.fill ]
                     [ E.row [ E.width E.fill ]
-                        [ viewRegisters (machine.env |> Dict.toList)
-                        , viewStack machine.stack
+                        [ viewRegisters (machine.env |> Dict.toList) model
+                        , viewStack machine.stack model
                         , -- instructions
                           viewInstructions machine.instructionPointer model.controller.instructions
                         ]
@@ -251,6 +251,12 @@ runTimeErrorToString err =
 
         PoppingEmptyStack ->
             "Popping empty stack"
+
+        TheOperationExpectsIntegerArguments ->
+            "The operation expects integer arguments"
+
+        ExpectedInstructionAddressInRegister ->
+            "Expected instruction address in the register"
 
         MemoryError memoryError ->
             case memoryError of
@@ -315,9 +321,6 @@ viewInstructions instructionPointer instructionBlock =
         viewLabelIntroduction label =
             E.row [ E.spacing 8 ] [ E.text "label ", E.row [] [ viewLabel label ] ]
 
-        viewValue x =
-            E.row [] [ E.text (String.fromInt x) ]
-
         paddingLeft px =
             E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }
 
@@ -333,7 +336,7 @@ viewInstructions instructionPointer instructionBlock =
                                     viewRegisterUse register
 
                                 RegisterMachine.Constant val ->
-                                    viewValue val
+                                    viewConstant val
                         )
                 )
 
@@ -360,7 +363,7 @@ viewInstructions instructionPointer instructionBlock =
                         [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication operationApplication ]
 
                     RegisterMachine.AssignConstant target x ->
-                        [ viewRegisterName target, viewInstructionName "<-", viewValue x ]
+                        [ viewRegisterName target, viewInstructionName "<-", viewConstant x ]
 
                     RegisterMachine.JumpToLabel label ->
                         [ viewInstructionName "jump", viewLabelUse label ]
@@ -381,7 +384,7 @@ viewInstructions instructionPointer instructionBlock =
                         [ viewInstructionName "push", viewRegisterUse register ]
 
                     RegisterMachine.PushConstant val ->
-                        [ viewInstructionName "push", viewValue val ]
+                        [ viewInstructionName "push", viewConstant val ]
 
                     RegisterMachine.PushLabel label ->
                         [ viewInstructionName "push", viewLabelUse label ]
@@ -411,18 +414,18 @@ viewInstructions instructionPointer instructionBlock =
         )
 
 
-viewRegisters : List ( RegisterMachine.Register, Int ) -> Element Msg
-viewRegisters registers =
+viewRegisters : List ( RegisterMachine.Register, Value ) -> Model -> Element Msg
+viewRegisters registers model =
     let
         registerStyle =
             [ Background.color (E.rgb255 240 0 245)
             , E.padding 20
             ]
 
-        viewRegister : RegisterMachine.Register -> Int -> Element Msg
+        viewRegister : RegisterMachine.Register -> Value -> Element Msg
         viewRegister name val =
             E.row [ E.spacing 10 ]
-                [ E.el [ E.width (E.px 100) ] (E.text name), E.text "<-", E.el registerStyle (E.text (String.fromInt val)) ]
+                [ E.el [ E.width (E.px 100) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val model) ]
     in
     -- registers
     E.column [ E.width E.fill, E.spacing 5 ]
@@ -431,15 +434,15 @@ viewRegisters registers =
         )
 
 
-viewStack : RegisterMachine.Stack -> Element Msg
-viewStack stack =
+viewStack : RegisterMachine.Stack -> Model -> Element Msg
+viewStack stack model =
     E.column [ E.width E.fill, E.spacing 5 ]
         (stack
             |> RegisterMachine.stackToList
             |> List.reverse
             |> List.map
                 (\val ->
-                    E.el [] (E.text (String.fromInt val))
+                    viewValue val model
                 )
         )
 
@@ -470,19 +473,12 @@ viewMemoryState memoryState model =
 
 
 viewMemoryCell : MemoryAddress -> MemoryCell -> Model -> Element Msg
-viewMemoryCell memoryAddress memoryCell model =
+viewMemoryCell memoryAddress ( a, b ) model =
     E.column [ Border.solid, Border.width 1, E.width (E.px 100) ]
-        [ E.el [ E.centerX, E.paddingXY 0 15 ]
-            (case memoryCell of
-                RegisterMachine.Nil ->
-                    E.text "nil"
-
-                RegisterMachine.Num x ->
-                    E.text (String.fromInt x)
-
-                RegisterMachine.Pair p q ->
-                    E.row [] [ E.text "(", viewMemoryAddress p, E.text ", ", viewMemoryAddress q, E.text ")" ]
-            )
+        [ E.column [ E.centerX, E.paddingXY 0 15 ]
+            [ viewValue a model
+            , viewValue b model
+            ]
         , E.el
             (List.concat
                 [ [ E.centerX, E.paddingXY 0 5 ]
@@ -497,7 +493,37 @@ viewMemoryCell memoryAddress memoryCell model =
         ]
 
 
+viewValue : Value -> Model -> Element Msg
+viewValue value model =
+    case value of
+        ConstantValue constant ->
+            viewConstant constant
+
+        Pair memoryAddress ->
+            viewMemoryAddress memoryAddress
+
+        InstructionAddress instructionAddress ->
+            viewInstructionAddress instructionAddress
+
+
+viewConstant : Constant -> Element Msg
+viewConstant const =
+    E.row []
+        [ case const of
+            Num x ->
+                E.text (String.fromInt x)
+
+            Nil ->
+                E.text "nil"
+        ]
+
+
 viewMemoryAddress : MemoryAddress -> Element Msg
 viewMemoryAddress p =
     E.el [ Events.onClick (MemoryAddressClicked p), E.pointer ]
         (E.text (String.concat [ "#", String.fromInt p ]))
+
+
+viewInstructionAddress : InstructionAddress -> Element Msg
+viewInstructionAddress pointer =
+    E.text (String.concat [ ":", String.fromInt pointer ])

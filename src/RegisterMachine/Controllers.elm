@@ -3,7 +3,8 @@ module RegisterMachine.Controllers exposing (..)
 import Dict exposing (Dict)
 import RegisterMachine.Base as RegisterMachine
     exposing
-        ( Controller
+        ( Constant(..)
+        , Controller
         , Instruction(..)
         , Label
         , LabelOrInstruction(..)
@@ -11,8 +12,13 @@ import RegisterMachine.Base as RegisterMachine
         , OperationArgument(..)
         , Register
         , RegisterEnvironment
+        , Value(..)
         )
 import Set exposing (Set)
+
+
+num x =
+    ConstantValue (Num x)
 
 
 controller0_gcd : ( Controller, RegisterEnvironment )
@@ -51,7 +57,7 @@ controller0_gcd =
             , Perform Halt
             ]
       }
-    , Dict.fromList [ ( "a", 3 * 5 * 7 ), ( "b", 3 * 5 * 5 ), ( "tmp", 0 ), ( "is-b-zero?", 0 ) ]
+    , Dict.fromList [ ( "a", num (3 * 5 * 7) ), ( "b", num (3 * 5 * 5) ), ( "tmp", num 0 ), ( "is-b-zero?", num 0 ) ]
     )
 
 
@@ -70,8 +76,8 @@ controller1_remainder =
     --   halt
     ( { registers = Set.fromList [ "a", "b", "is-finished?" ]
       , instructions =
-            [ Perform (AssignConstant "a" 16)
-            , Perform (AssignConstant "b" 3)
+            [ Perform (AssignConstant "a" (Num 16))
+            , Perform (AssignConstant "b" (Num 3))
             , Label "start"
             , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "a", Register "b" ]))
             , Perform (JumpToLabelIf "done?" "done")
@@ -81,7 +87,7 @@ controller1_remainder =
             , Perform Halt
             ]
       }
-    , Dict.fromList [ ( "a", 0 ), ( "b", 15 ), ( "done?", 0 ) ]
+    , Dict.fromList [ ( "a", num 0 ), ( "b", num 15 ), ( "done?", num 0 ) ]
     )
 
 
@@ -99,8 +105,8 @@ controller2_fct_iterative =
     --   halt
     ( { registers = Set.fromList [ "counter", "state", "done?" ]
       , instructions =
-            [ Perform (AssignConstant "counter" 5)
-            , Perform (AssignConstant "state" 1)
+            [ Perform (AssignConstant "counter" (Num 5))
+            , Perform (AssignConstant "state" (Num 1))
             , Label "loop"
             , Perform (AssignOperation "done?" (Operation "zero?" [ Register "counter" ]))
             , Perform (JumpToLabelIf "done?" "done")
@@ -111,7 +117,7 @@ controller2_fct_iterative =
             , Perform Halt
             ]
       }
-    , Dict.fromList [ ( "counter", 0 ), ( "state", 0 ), ( "done?", 0 ) ]
+    , Dict.fromList [ ( "counter", num 0 ), ( "state", num 0 ), ( "done?", num 0 ) ]
     )
 
 
@@ -139,8 +145,8 @@ controller3_gcd_with_inlined_remainder =
     --   halt
     ( { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?" ]
       , instructions =
-            [ Perform (AssignConstant "a" (3 * 5 * 7))
-            , Perform (AssignConstant "b" (3 * 5 * 5))
+            [ Perform (AssignConstant "a" (Num (3 * 5 * 7)))
+            , Perform (AssignConstant "b" (Num (3 * 5 * 5)))
             , Label "gcd-loop"
             , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
             , Perform (JumpToLabelIf "done?" "done")
@@ -165,7 +171,7 @@ controller3_gcd_with_inlined_remainder =
             , Perform Halt
             ]
       }
-    , Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ) ]
+    , Dict.fromList [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ) ]
     )
 
 
@@ -191,8 +197,8 @@ controller4_gcd_with_inlined_remainder_using_jump =
     --   halt
     ( { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
       , instructions =
-            [ Perform (AssignConstant "a" (3 * 5 * 7))
-            , Perform (AssignConstant "b" (3 * 5 * 5))
+            [ Perform (AssignConstant "a" (Num (3 * 5 * 7)))
+            , Perform (AssignConstant "b" (Num (3 * 5 * 5)))
             , Label "gcd-loop"
             , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
             , Perform (JumpToLabelIf "done?" "done")
@@ -216,7 +222,7 @@ controller4_gcd_with_inlined_remainder_using_jump =
             , Perform Halt
             ]
       }
-    , Dict.fromList [ ( "a", 0 ), ( "b", 0 ), ( "remainder-result", 0 ), ( "done?", 0 ), ( "remainder-done?", 0 ), ( "continue", 0 ) ]
+    , Dict.fromList [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ), ( "continue", num 0 ) ]
     )
 
 
@@ -272,7 +278,7 @@ controller6_fct_recursive =
     --   jump $continue
     ( { registers = Set.fromList [ "n", "result", "done?" ]
       , instructions =
-            [ Perform (AssignConstant "n" 5)
+            [ Perform (AssignConstant "n" (Num 5))
             , Perform (AssignCallAtLabel "continue" "fct")
             , Perform Halt
             , Label "fct"
@@ -287,11 +293,11 @@ controller6_fct_recursive =
             , Perform (AssignOperation "result" (Operation "mul" [ Register "n", Register "result" ]))
             , Perform (JumpToLabelAtRegister "continue")
             , Label "done"
-            , Perform (AssignConstant "result" 1)
+            , Perform (AssignConstant "result" (Num 1))
             , Perform (JumpToLabelAtRegister "continue")
             ]
       }
-    , Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
+    , Dict.fromList [ ( "n", num 0 ), ( "result", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
     )
 
 
@@ -320,11 +326,11 @@ controller7_fibonacci_recursive =
     --   jump $continue
     ( { registers = Set.fromList [ "n", "result", "tmp", "done?", "continue" ]
       , instructions =
-            [ Perform (AssignConstant "n" 8)
+            [ Perform (AssignConstant "n" (Num 8))
             , Perform (AssignCallAtLabel "continue" "fib")
             , Perform Halt
             , Label "fib"
-            , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "n", Constant 2 ]))
+            , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "n", Constant (Num 2) ]))
             , Perform (JumpToLabelIf "done?" "done")
 
             -- call to fib(n - 1)
@@ -353,5 +359,5 @@ controller7_fibonacci_recursive =
             , Perform (JumpToLabelAtRegister "continue")
             ]
       }
-    , Dict.fromList [ ( "n", 0 ), ( "result", 0 ), ( "tmp", 0 ), ( "done?", 0 ), ( "continue", 0 ) ]
+    , Dict.fromList [ ( "n", num 0 ), ( "result", num 0 ), ( "tmp", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
     )
