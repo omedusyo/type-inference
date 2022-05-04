@@ -72,20 +72,15 @@ type
     -- push $a
     -- a <- stack
     --
-    -- TODO: Define the memory instructions
-    -- a <- new 123
-    -- b <- new nil
-    -- p <- new pair($a, $b)
+    -- p <- pair $a  $b
+    -- a <- first $p
+    -- b <- second $p
+    -- set-first $p $a
+    -- set-second $p $b
     --
-    -- update(p, 123)
-    -- update(p, nil)
-    -- update(p, pair($a, $b)
-    --
-    -- a <- get(p) ???
-    --
-    -- nil?
-    -- num?
-    -- pair?
+    -- num? $a
+    -- nil? $a
+    -- pair? $a
     = -- assignment
       AssignRegister Register Register
     | AssignLabel Register Label
@@ -105,6 +100,16 @@ type
       -- calling procedure
     | AssignCallAtLabel Register Label
     | AssignCallAtRegister Register Register
+      -- memory
+    | ConstructPair Register OperationArgument OperationArgument
+    | First Register Register
+    | Second Register Register
+    | SetFirst Register OperationArgument
+    | SetSecond Register OperationArgument
+      -- predicates
+    | IsNum Register
+    | IsPair Register
+    | IsNil Register
 
 
 type LabelOrInstruction
@@ -163,6 +168,15 @@ doesRegisterExist register controller =
 parse : Controller -> Result TranslationError MachineInstructions
 parse controller =
     let
+        checkArg : OperationArgument -> Result TranslationError ()
+        checkArg arg =
+            case arg of
+                Register register ->
+                    doesRegisterExist register controller
+
+                _ ->
+                    Ok ()
+
         checkRegisterUse : Instruction -> Result TranslationError ()
         checkRegisterUse instruction =
             case instruction of
@@ -177,15 +191,7 @@ parse controller =
                     Result.tuple2
                         (doesRegisterExist target controller)
                         (arguments
-                            |> List.map
-                                (\argument ->
-                                    case argument of
-                                        Register register ->
-                                            doesRegisterExist register controller
-
-                                        _ ->
-                                            Ok ()
-                                )
+                            |> List.map checkArg
                             |> Result.sequence
                             |> Result.ignore
                         )
@@ -228,6 +234,36 @@ parse controller =
                 AssignCallAtRegister target labelRegister ->
                     Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist labelRegister controller)
                         |> Result.ignore
+
+                ConstructPair target arg0 arg1 ->
+                    [ doesRegisterExist target controller, checkArg arg0, checkArg arg1 ]
+                        |> Result.sequence
+                        |> Result.ignore
+
+                First target source ->
+                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist source controller)
+                        |> Result.ignore
+
+                Second target source ->
+                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist source controller)
+                        |> Result.ignore
+
+                SetFirst target arg ->
+                    Result.tuple2 (doesRegisterExist target controller) (checkArg arg)
+                        |> Result.ignore
+
+                SetSecond target arg ->
+                    Result.tuple2 (doesRegisterExist target controller) (checkArg arg)
+                        |> Result.ignore
+
+                IsNum register ->
+                    doesRegisterExist register controller
+
+                IsPair register ->
+                    doesRegisterExist register controller
+
+                IsNil register ->
+                    doesRegisterExist register controller
 
         initMachineInstructions : ( InstructionAddress, MachineInstructions )
         initMachineInstructions =
@@ -777,6 +813,30 @@ runOneStep machine =
                                 }
                             )
 
+                ConstructPair target arg0 arg1 ->
+                    Debug.todo ""
+
+                First target source ->
+                    Debug.todo ""
+
+                Second target source ->
+                    Debug.todo ""
+
+                SetFirst register arg ->
+                    Debug.todo ""
+
+                SetSecond register arg ->
+                    Debug.todo ""
+
+                IsNum register ->
+                    Debug.todo ""
+
+                IsPair register ->
+                    Debug.todo ""
+
+                IsNil register ->
+                    Debug.todo ""
+
         Nothing ->
             Ok (halt machine)
 
@@ -897,6 +957,30 @@ showInstruction instruction =
 
         AssignCallAtRegister target labelRegister ->
             showAssignment target (showRegisterUse labelRegister)
+
+        ConstructPair target arg0 arg1 ->
+            Debug.todo ""
+
+        First target source ->
+            Debug.todo ""
+
+        Second target source ->
+            Debug.todo ""
+
+        SetFirst register arg ->
+            Debug.todo ""
+
+        SetSecond register arg ->
+            Debug.todo ""
+
+        IsNum register ->
+            Debug.todo ""
+
+        IsPair register ->
+            Debug.todo ""
+
+        IsNil register ->
+            Debug.todo ""
 
 
 showInstructions : List LabelOrInstruction -> String

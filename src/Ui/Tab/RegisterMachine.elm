@@ -397,6 +397,30 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.AssignCallAtRegister target labelRegister ->
                         [ viewRegisterName target, viewInstructionName "<-", viewInstructionName "call", viewRegisterUse labelRegister ]
+
+                    RegisterMachine.ConstructPair target arg0 arg1 ->
+                        Debug.todo ""
+
+                    RegisterMachine.First target source ->
+                        Debug.todo ""
+
+                    RegisterMachine.Second target source ->
+                        Debug.todo ""
+
+                    RegisterMachine.SetFirst register arg ->
+                        Debug.todo ""
+
+                    RegisterMachine.SetSecond register arg ->
+                        Debug.todo ""
+
+                    RegisterMachine.IsNum register ->
+                        Debug.todo ""
+
+                    RegisterMachine.IsPair register ->
+                        Debug.todo ""
+
+                    RegisterMachine.IsNil register ->
+                        Debug.todo ""
                 )
     in
     E.column [ E.width E.fill ]
