@@ -92,7 +92,8 @@ init =
             -- Controllers.controller6_fct_recursive
             -- Controllers.controller7_fibonacci_recursive
             -- Controllers.controller8_memory_test
-            Controllers.controller9_range
+            -- Controllers.controller9_range
+            Controllers.controller10_append
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =

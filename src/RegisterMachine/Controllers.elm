@@ -399,3 +399,64 @@ controller9_range =
       }
     , Dict.fromList [ ( "xs", nil ), ( "n", num 5 ), ( "done?", num 0 ) ]
     )
+
+
+controller10_append =
+    -- xs <- pair 40 nil
+    -- xs <- pair 30 xs
+    -- xs <- pair 20 xs
+    -- xs <- pair 10 xs
+    -- ys <- pair 16 nil
+    -- ys <- pair 32 ys
+    -- ys <- pair 64 ys
+    -- continue <- :done
+    -- append:
+    --   done? <- pair? $xs
+    --   if $done? jump $continue
+    --   x <- first $xs
+    --   xs <- second $xs
+    --   push $x
+    --   push $continue
+    --   continue <- :append-after-rec-call
+    --   jump :append
+    -- append-after-rec-call:
+    --   continue <- pop-stack
+    --   x <- pop-stack
+    --   ys <- pair $x $ys
+    --   jump $continue
+    -- :done
+    --   halt
+    ( { registers = Set.fromList [ "xs", "ys", "x", "done?", "continue" ]
+      , instructions =
+            [ -- xs <- list(10, 20, 30, 40)
+              Perform (ConstructPair "xs" (Constant (Num 40)) (Constant Nil))
+            , Perform (ConstructPair "xs" (Constant (Num 30)) (Register "xs"))
+            , Perform (ConstructPair "xs" (Constant (Num 20)) (Register "xs"))
+            , Perform (ConstructPair "xs" (Constant (Num 10)) (Register "xs"))
+            , -- ys <- list(64, 32, 16)
+              Perform (ConstructPair "ys" (Constant (Num 16)) (Constant Nil))
+            , Perform (ConstructPair "ys" (Constant (Num 32)) (Register "ys"))
+            , Perform (ConstructPair "ys" (Constant (Num 64)) (Register "ys"))
+            , Perform (AssignLabel "continue" "done")
+            , Label "append"
+            , Perform (AssignOperation "done?" (Operation "nil?" [ Register "xs" ]))
+            , Perform (JumpToLabelAtRegisterIf "done?" "continue")
+            , Perform (First "x" "xs")
+            , Perform (Second "xs" "xs")
+            , Perform (PushRegister "x")
+            , Perform (PushRegister "continue")
+            , Perform (AssignLabel "continue" "append-after-rec-call")
+            , Perform (JumpToLabel "append")
+            , Label "append-after-rec-call"
+            , Perform (Pop "continue")
+            , Perform (Pop "x")
+            , Perform (ConstructPair "ys" (Register "x") (Register "ys"))
+            , Perform (JumpToLabelAtRegister "continue")
+
+            ----
+            , Label "done"
+            , Perform Halt
+            ]
+      }
+    , Dict.fromList [ ( "continue", Uninitialized ), ( "xs", Uninitialized ), ( "ys", Uninitialized ), ( "x", Uninitialized ), ( "done?", Uninitialized ) ]
+    )
