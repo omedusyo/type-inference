@@ -1,4 +1,4 @@
-module Calculus.Ui.Control.Context exposing
+module Ui.Control.Context exposing
     ( Config
     , Context
     , State

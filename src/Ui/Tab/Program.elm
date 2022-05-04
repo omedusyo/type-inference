@@ -1,4 +1,4 @@
-module Calculus.Ui.Tab.Program exposing (Model, Msg, init, update, view)
+module Ui.Tab.Program exposing (Model, Msg, init, update, view)
 
 import Calculus.Base as L exposing (ModuleTerm, Term, Type)
 import Calculus.Evaluation.Evaluation as L exposing (ThunkContext)
@@ -7,14 +7,13 @@ import Calculus.Parser as LambdaParser
 import Calculus.Show as L
 import Calculus.Type.Inference as L
 import Calculus.Type.TypeVarContext as L
-import Calculus.Ui.Control.Context as Context exposing (Config, Context)
-import Calculus.Ui.Control.InitContext as InitContext exposing (InitContext)
-import Calculus.Ui.Style.Button as Button
 import Element as E exposing (Element)
-import Element.Font as Font
 import Element.Input as Input
 import Lib.Parser.Error as PError
 import Lib.State.StatefulWithErr as State
+import Ui.Control.Context as Context exposing (Config, Context)
+import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Style.Button as Button
 
 
 type alias Binding =

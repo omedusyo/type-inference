@@ -2,10 +2,11 @@ module Main exposing (..)
 
 import Browser
 import Calculus.Example
-import Calculus.Ui.Control.Context as Context exposing (Context)
-import Calculus.Ui.Main as LambdaUi
 import Element as E exposing (Element)
 import Lib.State.StatefulReader as StatefulReader exposing (StatefulReader)
+import RegisterMachine.Base as RMachineBase
+import Ui.Control.Context as Context exposing (Context)
+import Ui.Main as LambdaUi
 
 
 

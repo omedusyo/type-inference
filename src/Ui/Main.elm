@@ -1,45 +1,50 @@
-module Calculus.Ui.Main exposing (Model, Msg, init, update, view)
+module Ui.Main exposing (Model, Msg, init, update, view)
 
-import Calculus.Ui.Control.Context as Context exposing (Config, Context)
-import Calculus.Ui.Control.InitContext as InitContext exposing (InitContext)
-import Calculus.Ui.Style.Button as Button
-import Calculus.Ui.Tab.Help as Help
-import Calculus.Ui.Tab.Module as Module
-import Calculus.Ui.Tab.Program as Program
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Ui.Control.Context as Context exposing (Config, Context)
+import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Style.Button as Button
+import Ui.Tab.Help as Help
+import Ui.Tab.Module as Module
+import Ui.Tab.Program as Program
+import Ui.Tab.RegisterMachine as RegisterMachine
 
 
 type Tab
-    = Program
-    | Module
-    | Help
+    = ProgramTab
+    | ModuleTab
+    | HelpTab
+    | RegisterMachineTab
 
 
 tabs : List Tab
 tabs =
-    [ Program, Module, Help ]
+    [ ProgramTab, ModuleTab, HelpTab, RegisterMachineTab ]
 
 
 initTab : Tab
 initTab =
-    Module
+    RegisterMachineTab
 
 
 tabToString : Tab -> String
 tabToString tab =
     case tab of
-        Program ->
+        ProgramTab ->
             "Program"
 
-        Module ->
+        ModuleTab ->
             "Module"
 
-        Help ->
+        HelpTab ->
             "Help"
+
+        RegisterMachineTab ->
+            "Register Machine"
 
 
 type alias Model =
@@ -49,24 +54,27 @@ type alias Model =
     , programModel : Program.Model
     , moduleModel : Module.Model
     , helpModel : Help.Model
+    , registerMachineModel : RegisterMachine.Model
     }
 
 
 init : InitContext Model Msg
 init =
     InitContext.setModelTo
-        (\programModel moduleModel helpModel ->
+        (\programModel moduleModel helpModel registerMachineModel ->
             { tab = initTab
 
             -- subcomponents
             , programModel = programModel
             , moduleModel = moduleModel
             , helpModel = helpModel
+            , registerMachineModel = registerMachineModel
             }
         )
         |> InitContext.ooo (Program.init |> InitContext.mapCmd ProgramMsg)
         |> InitContext.ooo (Module.init |> InitContext.mapCmd ModuleMsg)
         |> InitContext.ooo (Help.init |> InitContext.mapCmd HelpMsg)
+        |> InitContext.ooo (RegisterMachine.init |> InitContext.mapCmd RegisterMachineMsg)
 
 
 type Msg
@@ -75,6 +83,7 @@ type Msg
     | HelpMsg Help.Msg
     | ModuleMsg Module.Msg
     | ProgramMsg Program.Msg
+    | RegisterMachineMsg RegisterMachine.Msg
 
 
 update : Msg -> Context Model msg
@@ -101,6 +110,12 @@ update msg =
                     .programModel
                     (\model programModel -> { model | programModel = programModel })
 
+        RegisterMachineMsg registerMachineMsg ->
+            RegisterMachine.update registerMachineMsg
+                |> Context.embed
+                    .registerMachineModel
+                    (\model registerMachineModel -> { model | registerMachineModel = registerMachineModel })
+
 
 view : Config -> Model -> Element Msg
 view config model =
@@ -116,12 +131,15 @@ view config model =
                     )
             )
         , case model.tab of
-            Program ->
+            ProgramTab ->
                 Program.view config model.programModel |> E.map ProgramMsg
 
-            Module ->
+            ModuleTab ->
                 Module.view config model.moduleModel |> E.map ModuleMsg
 
-            Help ->
+            HelpTab ->
                 Help.view config model.helpModel |> E.map HelpMsg
+
+            RegisterMachineTab ->
+                RegisterMachine.view config model.registerMachineModel |> E.map RegisterMachineMsg
         ]
