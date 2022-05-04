@@ -479,6 +479,8 @@ type alias OperationEnvironment =
 type alias Machine =
     { env : RegisterEnvironment
     , stack : Stack
+
+    -- TODO: This will need to be augmented with a second "free" memory
     , memoryState : MemoryState
     , operationEnv : OperationEnvironment
     , instructionPointer : InstructionAddress
