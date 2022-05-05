@@ -268,7 +268,11 @@ view config model =
                         , -- instructions
                           viewInstructions machine.instructionPointer model.controller.instructions
                         ]
-                    , viewMemoryState machine.memoryState model
+
+                    -- TODO
+                    -- , viewMemoryState (machine |> RegisterMachine.currentMemoryState) model
+                    , viewMemoryState machine.memory.memoryState0 model
+                    , viewMemoryState machine.memory.memoryState1 model
                     ]
         ]
 

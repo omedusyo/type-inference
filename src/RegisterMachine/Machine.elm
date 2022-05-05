@@ -12,7 +12,7 @@ import Set exposing (Set)
 type alias Machine =
     { env : RegisterEnvironment
     , stack : Stack
-    , memoryState : MemoryState
+    , memory : MachineMemory
     , operationEnv : OperationEnvironment
     , instructionPointer : InstructionAddress
     , instructions : MachineInstructions
@@ -53,8 +53,8 @@ type Two
 
 
 type alias MachineMemory =
-    { memory0 : MemoryState
-    , memory1 : MemoryState
+    { memoryState0 : MemoryState
+    , memoryState1 : MemoryState
     , memoryInUse : Two
     }
 
@@ -238,11 +238,14 @@ makeMachine controller env operationsEnv =
             (\instructions ->
                 { env = env
                 , operationEnv = operationsEnv
-                , memoryState =
+                , memory =
                     -- TODO
-                    MemoryState.empty 4096
+                    { memoryState0 = MemoryState.empty 4096
 
-                -- MemoryState.example0
+                    -- MemoryState.example0
+                    , memoryState1 = MemoryState.empty 4096
+                    , memoryInUse = Zero
+                    }
                 , stack = Stack.empty
                 , instructionPointer = 0
                 , instructions = instructions
@@ -371,9 +374,24 @@ updateRegister register val machine =
     }
 
 
-updateMemoryStateOfMachine : MemoryState -> Machine -> Machine
-updateMemoryStateOfMachine memoryState machine =
-    { machine | memoryState = memoryState }
+setMemoryStateOfMachine : MemoryState -> Machine -> Machine
+setMemoryStateOfMachine memoryState ({ memory } as machine) =
+    case memory.memoryInUse of
+        Zero ->
+            { machine | memory = { memory | memoryState0 = memoryState } }
+
+        One ->
+            { machine | memory = { memory | memoryState1 = memoryState } }
+
+
+currentMemoryState : Machine -> MemoryState
+currentMemoryState machine =
+    case machine.memory.memoryInUse of
+        Zero ->
+            machine.memory.memoryState0
+
+        One ->
+            machine.memory.memoryState1
 
 
 getOperation : OperationName -> Machine -> Result RuntimeError (List Value -> Result RuntimeError Value)
@@ -629,14 +647,14 @@ runOneStep machine =
                     Result.tuple2 (machine |> getValueFromArgument arg0) (machine |> getValueFromArgument arg1)
                         |> Result.andThen
                             (\( value0, value1 ) ->
-                                (machine.memoryState |> MemoryState.new ( value0, value1 ))
+                                (machine |> currentMemoryState |> MemoryState.new ( value0, value1 ))
                                     |> Result.mapError MemoryError
                                     |> Result.map
                                         (\( newPairAddress, newMemoryState ) ->
                                             { isFinished = False
                                             , machine =
                                                 machine
-                                                    |> updateMemoryStateOfMachine newMemoryState
+                                                    |> setMemoryStateOfMachine newMemoryState
                                                     |> updateRegister target (Pair newPairAddress)
                                                     |> advanceInstructionPointer
                                             }
@@ -648,7 +666,8 @@ runOneStep machine =
                         |> getMemoryAddressAtRegister source
                         |> Result.andThen
                             (\pointer ->
-                                machine.memoryState
+                                machine
+                                    |> currentMemoryState
                                     |> MemoryState.get pointer
                                     |> Result.mapError MemoryError
                                     |> Result.map
@@ -667,7 +686,8 @@ runOneStep machine =
                         |> getMemoryAddressAtRegister source
                         |> Result.andThen
                             (\pointer ->
-                                machine.memoryState
+                                machine
+                                    |> currentMemoryState
                                     |> MemoryState.get pointer
                                     |> Result.mapError MemoryError
                                     |> Result.map
@@ -688,8 +708,8 @@ runOneStep machine =
                                 { isFinished = False
                                 , machine =
                                     machine
-                                        |> updateMemoryStateOfMachine
-                                            (MemoryState.update pointer (\( _, b ) -> ( val, b )) machine.memoryState)
+                                        |> setMemoryStateOfMachine
+                                            (MemoryState.update pointer (\( _, b ) -> ( val, b )) (machine |> currentMemoryState))
                                         |> advanceInstructionPointer
                                 }
                             )
@@ -701,8 +721,8 @@ runOneStep machine =
                                 { isFinished = False
                                 , machine =
                                     machine
-                                        |> updateMemoryStateOfMachine
-                                            (MemoryState.update pointer (\( a, _ ) -> ( a, val )) machine.memoryState)
+                                        |> setMemoryStateOfMachine
+                                            (MemoryState.update pointer (\( a, _ ) -> ( a, val )) (machine |> currentMemoryState))
                                         |> advanceInstructionPointer
                                 }
                             )
