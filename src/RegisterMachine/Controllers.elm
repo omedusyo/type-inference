@@ -4,16 +4,14 @@ import Dict exposing (Dict)
 import RegisterMachine.Base as RegisterMachine
     exposing
         ( Constant(..)
-        , Controller
         , Instruction(..)
         , Label
-        , LabelOrInstruction(..)
         , OperationApplication(..)
         , OperationArgument(..)
         , Register
-        , RegisterEnvironment
         , Value(..)
         )
+import RegisterMachine.Machine as RegisterMachine exposing (Controller, LabelOrInstruction(..), RegisterEnvironment)
 import Set exposing (Set)
 
 

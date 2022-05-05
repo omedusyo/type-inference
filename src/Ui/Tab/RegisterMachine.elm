@@ -9,8 +9,11 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Controller, InstructionAddress, Machine, MemoryAddress, MemoryCell, MemoryError(..), MemoryState, RuntimeError(..), TranslationError, Value(..))
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionAddress, MemoryAddress, Value(..))
 import RegisterMachine.Controllers as Controllers
+import RegisterMachine.Machine as RegisterMachine exposing (Controller, Machine, RuntimeError(..), TranslationError)
+import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
+import RegisterMachine.Stack as Stack exposing (Stack)
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.Style.Button as Button
@@ -487,11 +490,11 @@ viewRegisters registers model =
         )
 
 
-viewStack : RegisterMachine.Stack -> Model -> Element Msg
+viewStack : Stack -> Model -> Element Msg
 viewStack stack model =
     E.column [ E.width E.fill, E.spacing 5 ]
         (stack
-            |> RegisterMachine.stackToList
+            |> Stack.toList
             |> List.reverse
             |> List.map
                 (\val ->
@@ -560,6 +563,12 @@ viewValue value model =
 
         Uninitialized ->
             E.text ""
+
+        Collected memoryAddress ->
+            E.column []
+                [ E.text "Collected"
+                , viewMemoryAddress memoryAddress
+                ]
 
 
 viewConstant : Constant -> Element Msg
