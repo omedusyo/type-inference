@@ -85,6 +85,17 @@ init =
                                     Ok (ConstantValue (Num 0))
                         )
                   )
+                , ( "moved?"
+                  , RegisterMachine.makeOperation1
+                        (\val ->
+                            case val of
+                                Moved ->
+                                    Ok (ConstantValue (Num 1))
+
+                                _ ->
+                                    Ok (ConstantValue (Num 0))
+                        )
+                  )
                 ]
 
         ( controller, env ) =
@@ -472,8 +483,8 @@ viewInstructions instructionPointer instructionBlock =
                     RegisterMachine.MoveToDual target source ->
                         [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "move-to-dual" [ RegisterMachine.Register source ] ]
 
-                    RegisterMachine.MarkAsCollected toBeCollected referenceToDualMemory ->
-                        [ viewInstructionName "mark", viewRegisterUse toBeCollected, viewInstructionName "as-collected-to", viewRegisterUse referenceToDualMemory ]
+                    RegisterMachine.MarkAsMoved toBeCollected referenceToDualMemory ->
+                        [ viewInstructionName "mark", viewRegisterUse toBeCollected, viewInstructionName "as-moved-to", viewRegisterUse referenceToDualMemory ]
 
                     RegisterMachine.SwapMemory ->
                         [ viewInstructionName "swap-memory" ]

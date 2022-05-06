@@ -25,25 +25,30 @@ init registers instructions =
 
 
 controller =
-    init [ "xs", "ys", "to-be-moved", "main-pair", "dual-pair", "root", "to-be-moved-nil?", "first-to-be-moved", "second-to-be-moved", "test", "continue" ]
+    init [ "xs", "ys", "main-pair", "dual-pair", "tmp", "root", "test", "continue" ]
         [ Label "initialization"
-
-        -- xs <- ((10, nil), (20, nil))
-        , Perform (ConstructPair "xs" (Constant (Num 10)) (Constant Nil))
-        , Perform (ConstructPair "ys" (Constant (Num 20)) (Constant Nil))
-        , Perform (ConstructPair "xs" (Register "xs") (Register "ys"))
 
         -- xs <- list(10, 20, 30, 40)
         -- , Perform (ConstructPair "xs" (Constant (Num 40)) (Constant Nil))
         -- , Perform (ConstructPair "xs" (Constant (Num 30)) (Register "xs"))
         -- , Perform (ConstructPair "xs" (Constant (Num 20)) (Register "xs"))
         -- , Perform (ConstructPair "xs" (Constant (Num 10)) (Register "xs"))
+        -- xs <- ((10, nil), (20, nil))
+        -- , Perform (ConstructPair "xs" (Constant (Num 10)) (Constant Nil))
+        -- , Perform (ConstructPair "ys" (Constant (Num 20)) (Constant Nil))
+        -- , Perform (ConstructPair "xs" (Register "xs") (Register "ys"))
+        -- ys <- (16, nil)
+        -- xs <- (32, ys)
+        -- root <- list(ys, xs)
+        , Perform (ConstructPair "ys" (Constant (Num 16)) (Constant Nil))
+        , Perform (ConstructPair "xs" (Constant (Num 16)) (Register "ys"))
         , Label "initializing root"
         , Perform (ConstructPair "root" (Register "xs") (Constant Nil))
+        , Perform (ConstructPair "root" (Register "ys") (Register "root"))
         , Perform (AssignRegister "to-be-moved" "root")
         , Label "start garbage collection"
-        , Perform (AssignOperation "to-be-moved-nil?" (Operation "nil?" [ Register "to-be-moved" ]))
-        , Perform (JumpToLabelIf "to-be-moved-nil?" "refresh root")
+        , Perform (AssignOperation "test" (Operation "nil?" [ Register "to-be-moved" ]))
+        , Perform (JumpToLabelIf "test" "refresh root")
         , Perform (First "main-pair" "to-be-moved")
         , Perform (Second "to-be-moved" "to-be-moved")
         , Perform (AssignLabel "continue" "start garbage collection")
@@ -52,7 +57,7 @@ controller =
         --   dual-pair <- move-pair($main-pair, $continue)
         , Label "move-pair"
         , Perform (MoveToDual "dual-pair" "main-pair")
-        , Perform (MarkAsCollected "main-pair" "dual-pair")
+        , Perform (MarkAsMoved "main-pair" "dual-pair")
 
         -- The following label isn't actually needed
         , Label "attempt to move first component"

@@ -209,7 +209,7 @@ parse controller =
                 MoveToDual target source ->
                     controller |> checkRegisters [ target, source ] []
 
-                MarkAsCollected toBeCollected referenceToDualMemory ->
+                MarkAsMoved toBeCollected referenceToDualMemory ->
                     controller |> checkRegisters [ toBeCollected, referenceToDualMemory ] []
 
                 SwapMemory ->
@@ -828,7 +828,7 @@ runOneStep machine =
                                         )
                             )
 
-                MarkAsCollected toBeCollected referenceToDualMemory ->
+                MarkAsMoved toBeCollected referenceToDualMemory ->
                     Result.tuple2 (machine |> getMemoryAddressAtRegister toBeCollected) (machine |> getMemoryAddressAtRegister referenceToDualMemory)
                         |> Result.map
                             (\( addressToBeCollected, addressToDualMemory ) ->

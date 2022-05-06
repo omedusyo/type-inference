@@ -127,5 +127,5 @@ type
     | DualSetSecond Register OperationArgument
       -- garbage collection
     | MoveToDual Register Register -- p <- move-to-dual $q   :=   MoveToDual "p" "q"
-    | MarkAsCollected Register Register -- MarkAsCollected memory_address_to_be_collected memory_address_to_dual_memory
+    | MarkAsMoved Register Register -- MarkAsMoved memory_address_to_be_collected memory_address_to_dual_memory
     | SwapMemory
