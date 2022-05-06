@@ -41,7 +41,7 @@ controller =
         -- xs <- (32, ys)
         -- root <- list(ys, xs)
         , Perform (ConstructPair "ys" (Constant (Num 16)) (Constant Nil))
-        , Perform (ConstructPair "xs" (Constant (Num 16)) (Register "ys"))
+        , Perform (ConstructPair "xs" (Constant (Num 32)) (Register "ys"))
         , Label "initializing root"
         , Perform (ConstructPair "root" (Register "xs") (Constant Nil))
         , Perform (ConstructPair "root" (Register "ys") (Register "root"))
@@ -56,12 +56,15 @@ controller =
         -- BEGIN PROCEDURE: move-pair
         --   dual-pair <- move-pair($main-pair, $continue)
         , Label "move-pair"
+        , Perform (First "tmp" "main-pair")
+        , Perform (AssignOperation "test" (Operation "moved?" [ Register "tmp" ]))
+        , Perform (JumpToLabelIf "test" "already moved")
         , Perform (MoveToDual "dual-pair" "main-pair")
         , Perform (MarkAsMoved "main-pair" "dual-pair")
 
         -- The following label isn't actually needed
         , Label "attempt to move first component"
-        , Perform (DualFirst "main-pair" "dual-pair")
+        , Perform (AssignRegister "main-pair" "tmp")
         , Perform (AssignOperation "test" (Operation "pair?" [ Register "main-pair" ]))
         , Perform (JumpToLabelIf "test" "move first component")
         , Label "attempt to move second component"
@@ -91,6 +94,9 @@ controller =
         , Perform (Pop "dual-pair")
         , Perform (DualSetFirst "dual-pair" (Register "tmp"))
         , Perform (JumpToLabel "attempt to move second component")
+        , Label "already moved"
+        , Perform (Second "dual-pair" "main-pair")
+        , Perform (JumpToLabelAtRegister "continue")
 
         -- END PROCEDURE: move-pair
         , Label "refresh root"

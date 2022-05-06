@@ -49,6 +49,7 @@ init =
                 , ( "mul", RegisterMachine.makeNumOperation2 (\x y -> x * y) )
                 , ( "zero?", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
                 , ( "eq?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x == y)) )
+                , ( "not", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
                 , ( "decrement", RegisterMachine.makeNumOperation1 (\x -> x - 1) )
                 , ( "increment", RegisterMachine.makeNumOperation1 (\x -> x + 1) )
                 , ( "remainder", RegisterMachine.makeNumOperation2 (\x y -> remainderBy y x) )
