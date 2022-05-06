@@ -397,14 +397,20 @@ updateRegister register val machine =
     }
 
 
-setMemoryStateOfMachine : MemoryState -> Machine -> Machine
-setMemoryStateOfMachine memoryState ({ memory } as machine) =
-    case memory.memoryInUse of
-        Zero ->
+setMemoryStateOfMachine : MemoryType -> MemoryState -> Machine -> Machine
+setMemoryStateOfMachine memoryType memoryState ({ memory } as machine) =
+    case ( memoryType, memory.memoryInUse ) of
+        ( Main, Zero ) ->
             { machine | memory = { memory | memoryState0 = memoryState } }
 
-        One ->
+        ( Main, One ) ->
             { machine | memory = { memory | memoryState1 = memoryState } }
+
+        ( Dual, Zero ) ->
+            { machine | memory = { memory | memoryState1 = memoryState } }
+
+        ( Dual, One ) ->
+            { machine | memory = { memory | memoryState0 = memoryState } }
 
 
 setDualMemoryStateOfMachine : MemoryState -> Machine -> Machine
@@ -454,6 +460,7 @@ setPair memoryCellComponent memoryType register arg machine =
                 , machine =
                     machine
                         |> setMemoryStateOfMachine
+                            memoryType
                             (MemoryState.update pointer
                                 (\( a, b ) ->
                                     case memoryCellComponent of
@@ -762,7 +769,7 @@ runOneStep machine =
                                             { isFinished = False
                                             , machine =
                                                 machine
-                                                    |> setMemoryStateOfMachine newMemoryState
+                                                    |> setMemoryStateOfMachine Main newMemoryState
                                                     |> updateRegister target (Pair newPairAddress)
                                                     |> advanceInstructionPointer
                                             }
@@ -828,7 +835,7 @@ runOneStep machine =
                                 { isFinished = False
                                 , machine =
                                     machine
-                                        |> setMemoryStateOfMachine
+                                        |> setMemoryStateOfMachine Main
                                             (machine
                                                 |> currentMemoryState Main
                                                 |> MemoryState.set addressToBeCollected ( Moved, Pair addressToDualMemory )

@@ -11,6 +11,7 @@ import Element.Font as Font
 import Element.Input as Input
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionAddress, MemoryAddress, Value(..))
 import RegisterMachine.Controllers as Controllers
+import RegisterMachine.GarbageCollector as GarbageCollector
 import RegisterMachine.Machine as RegisterMachine exposing (Controller, Machine, RuntimeError(..), TranslationError)
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
@@ -97,7 +98,7 @@ init =
             -- Controllers.controller8_memory_test
             -- Controllers.controller9_range
             -- Controllers.controller10_append
-            Controllers.controller11_garbage_collection_test
+            GarbageCollector.controller
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
@@ -504,7 +505,7 @@ viewRegisters registers model =
         viewRegister : RegisterMachine.Register -> Value -> Element Msg
         viewRegister name val =
             E.row [ E.spacing 10 ]
-                [ E.el [ E.width (E.px 100) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val model) ]
+                [ E.el [ E.width (E.px 230) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val model) ]
     in
     -- registers
     E.column [ E.width E.fill, E.spacing 5 ]
