@@ -458,3 +458,38 @@ controller10_append =
       }
     , Dict.fromList [ ( "continue", Uninitialized ), ( "xs", Uninitialized ), ( "ys", Uninitialized ), ( "x", Uninitialized ), ( "done?", Uninitialized ) ]
     )
+
+
+controller11_garbage_collection_test =
+    ( { registers = Set.fromList [ "xs", "collect", "tmp", "dual", "done?", "continue" ]
+      , instructions =
+            [ -- xs <- list(10, 20, 30, 40)
+              Perform (ConstructPair "xs" (Constant (Num 40)) (Constant Nil))
+            , Perform (ConstructPair "xs" (Constant (Num 30)) (Register "xs"))
+            , Perform (ConstructPair "xs" (Constant (Num 20)) (Register "xs"))
+            , Perform (ConstructPair "xs" (Constant (Num 10)) (Register "xs"))
+            , Perform (AssignRegister "collect" "xs")
+            , Perform (MoveToDual "dual" "collect")
+
+            -- TODO: Nope, I need instructions that can manipulate the dual memory
+            , Perform (AssignRegister "xs" "dual")
+            , Perform (AssignRegister "tmp" "collect")
+            , Perform (Second "collect" "collect")
+            , Perform (MarkAsCollected "tmp" "dual")
+            , Perform (MoveToDual "dual" "collect")
+            , Perform (AssignRegister "tmp" "collect")
+            , Perform (Second "collect" "collect")
+            , Perform (MarkAsCollected "tmp" "dual")
+            , Perform (MoveToDual "dual" "collect")
+            , Perform (AssignRegister "tmp" "collect")
+            , Perform (Second "collect" "collect")
+            , Perform (MarkAsCollected "tmp" "dual")
+            , Perform (MoveToDual "dual" "collect")
+            , Perform (MarkAsCollected "collect" "dual")
+
+            -- , Perform (PushRegister "collect")
+            , Perform SwapMemory
+            ]
+      }
+    , Dict.fromList [ ( "continue", Uninitialized ), ( "xs", Uninitialized ), ( "collect", Uninitialized ), ( "dual", Uninitialized ), ( "tmp", Uninitialized ), ( "done?", Uninitialized ) ]
+    )

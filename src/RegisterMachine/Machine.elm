@@ -59,6 +59,16 @@ type alias MachineMemory =
     }
 
 
+type MemoryCellComponent
+    = FirstComponent
+    | SecondComponent
+
+
+type MemoryType
+    = Main
+    | Dual
+
+
 type TranslationError
     = LabelUsedMoreThanOnce Label
     | UnknownRegister Register
@@ -92,68 +102,67 @@ foldlMayFail update state actions0 =
                 |> Result.andThen (\newState -> foldlMayFail update newState actions1)
 
 
-doesRegisterExist : Register -> Controller -> Result TranslationError ()
-doesRegisterExist register controller =
-    if Set.member register controller.registers then
-        Ok ()
+checkRegisters : List Register -> List OperationArgument -> Controller -> Result TranslationError ()
+checkRegisters registers arguments controller =
+    let
+        checkRegister : Register -> Result TranslationError ()
+        checkRegister register =
+            if Set.member register controller.registers then
+                Ok ()
 
-    else
-        Err (UnknownRegister register)
+            else
+                Err (UnknownRegister register)
+
+        checkArg : OperationArgument -> Result TranslationError ()
+        checkArg arg =
+            case arg of
+                Register register ->
+                    checkRegister register
+
+                _ ->
+                    Ok ()
+    in
+    Result.tuple2
+        (registers |> List.map checkRegister |> Result.sequence)
+        (arguments |> List.map checkArg |> Result.sequence)
+        |> Result.ignore
 
 
 parse : Controller -> Result TranslationError MachineInstructions
 parse controller =
     let
-        checkArg : OperationArgument -> Result TranslationError ()
-        checkArg arg =
-            case arg of
-                Register register ->
-                    doesRegisterExist register controller
-
-                _ ->
-                    Ok ()
-
         checkRegisterUse : Instruction -> Result TranslationError ()
         checkRegisterUse instruction =
             case instruction of
                 AssignRegister target source ->
-                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist source controller)
-                        |> Result.ignore
+                    controller |> checkRegisters [ target, source ] []
 
                 AssignLabel target _ ->
-                    doesRegisterExist target controller
+                    controller |> checkRegisters [ target ] []
 
                 AssignOperation target (Operation _ arguments) ->
-                    Result.tuple2
-                        (doesRegisterExist target controller)
-                        (arguments
-                            |> List.map checkArg
-                            |> Result.sequence
-                            |> Result.ignore
-                        )
-                        |> Result.ignore
+                    controller |> checkRegisters [] arguments
 
                 AssignConstant target _ ->
-                    doesRegisterExist target controller
+                    controller |> checkRegisters [ target ] []
 
                 JumpToLabel label ->
                     Ok ()
 
                 JumpToLabelAtRegister target ->
-                    doesRegisterExist target controller
+                    controller |> checkRegisters [ target ] []
 
                 JumpToLabelIf testRegister _ ->
-                    doesRegisterExist testRegister controller
+                    controller |> checkRegisters [ testRegister ] []
 
                 JumpToLabelAtRegisterIf testRegister target ->
-                    Result.tuple2 (doesRegisterExist testRegister controller) (doesRegisterExist target controller)
-                        |> Result.ignore
+                    controller |> checkRegisters [ testRegister, target ] []
 
                 Halt ->
                     Ok ()
 
                 PushRegister register ->
-                    doesRegisterExist register controller
+                    controller |> checkRegisters [ register ] []
 
                 PushConstant _ ->
                     Ok ()
@@ -162,35 +171,49 @@ parse controller =
                     Ok ()
 
                 Pop target ->
-                    doesRegisterExist target controller
+                    controller |> checkRegisters [ target ] []
 
                 AssignCallAtLabel target _ ->
-                    doesRegisterExist target controller
+                    controller |> checkRegisters [ target ] []
 
                 AssignCallAtRegister target labelRegister ->
-                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist labelRegister controller)
-                        |> Result.ignore
+                    controller |> checkRegisters [ target, labelRegister ] []
 
                 ConstructPair target arg0 arg1 ->
-                    [ doesRegisterExist target controller, checkArg arg0, checkArg arg1 ]
-                        |> Result.sequence
-                        |> Result.ignore
+                    controller |> checkRegisters [ target ] [ arg0, arg1 ]
 
                 First target source ->
-                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist source controller)
-                        |> Result.ignore
+                    controller |> checkRegisters [ target, source ] []
 
                 Second target source ->
-                    Result.tuple2 (doesRegisterExist target controller) (doesRegisterExist source controller)
-                        |> Result.ignore
+                    controller |> checkRegisters [ target, source ] []
 
                 SetFirst target arg ->
-                    Result.tuple2 (doesRegisterExist target controller) (checkArg arg)
-                        |> Result.ignore
+                    controller |> checkRegisters [ target ] [ arg ]
 
                 SetSecond target arg ->
-                    Result.tuple2 (doesRegisterExist target controller) (checkArg arg)
-                        |> Result.ignore
+                    controller |> checkRegisters [ target ] [ arg ]
+
+                DualFirst target source ->
+                    controller |> checkRegisters [ target, source ] []
+
+                DualSecond target source ->
+                    controller |> checkRegisters [ target, source ] []
+
+                DualSetFirst target arg ->
+                    controller |> checkRegisters [ target ] [ arg ]
+
+                DualSetSecond target arg ->
+                    controller |> checkRegisters [ target ] [ arg ]
+
+                MoveToDual target source ->
+                    controller |> checkRegisters [ target, source ] []
+
+                MarkAsCollected toBeCollected referenceToDualMemory ->
+                    controller |> checkRegisters [ toBeCollected, referenceToDualMemory ] []
+
+                SwapMemory ->
+                    Ok ()
 
         initMachineInstructions : ( InstructionAddress, MachineInstructions )
         initMachineInstructions =
@@ -384,14 +407,83 @@ setMemoryStateOfMachine memoryState ({ memory } as machine) =
             { machine | memory = { memory | memoryState1 = memoryState } }
 
 
-currentMemoryState : Machine -> MemoryState
-currentMemoryState machine =
-    case machine.memory.memoryInUse of
+setDualMemoryStateOfMachine : MemoryState -> Machine -> Machine
+setDualMemoryStateOfMachine memoryState ({ memory } as machine) =
+    case memory.memoryInUse of
         Zero ->
-            machine.memory.memoryState0
+            { machine | memory = { memory | memoryState1 = memoryState } }
 
         One ->
+            { machine | memory = { memory | memoryState0 = memoryState } }
+
+
+accessPair : MemoryCellComponent -> MemoryType -> Register -> Register -> Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
+accessPair memoryCellComponent memoryType target source machine =
+    machine
+        |> getMemoryAddressAtRegister source
+        |> Result.andThen
+            (\pointer ->
+                machine
+                    |> currentMemoryState memoryType
+                    |> MemoryState.get pointer
+                    |> Result.mapError MemoryError
+                    |> Result.map
+                        (\( a, b ) ->
+                            { isFinished = False
+                            , machine =
+                                machine
+                                    |> (case memoryCellComponent of
+                                            FirstComponent ->
+                                                updateRegister target a
+
+                                            SecondComponent ->
+                                                updateRegister target b
+                                       )
+                                    |> advanceInstructionPointer
+                            }
+                        )
+            )
+
+
+setPair : MemoryCellComponent -> MemoryType -> Register -> OperationArgument -> Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
+setPair memoryCellComponent memoryType register arg machine =
+    Result.tuple2 (machine |> getValueFromArgument arg) (machine |> getMemoryAddressAtRegister register)
+        |> Result.map
+            (\( val, pointer ) ->
+                { isFinished = False
+                , machine =
+                    machine
+                        |> setMemoryStateOfMachine
+                            (MemoryState.update pointer
+                                (\( a, b ) ->
+                                    case memoryCellComponent of
+                                        FirstComponent ->
+                                            ( val, b )
+
+                                        SecondComponent ->
+                                            ( a, val )
+                                )
+                                (machine |> currentMemoryState memoryType)
+                            )
+                        |> advanceInstructionPointer
+                }
+            )
+
+
+currentMemoryState : MemoryType -> Machine -> MemoryState
+currentMemoryState memoryType machine =
+    case ( memoryType, machine.memory.memoryInUse ) of
+        ( Main, Zero ) ->
+            machine.memory.memoryState0
+
+        ( Main, One ) ->
             machine.memory.memoryState1
+
+        ( Dual, Zero ) ->
+            machine.memory.memoryState1
+
+        ( Dual, One ) ->
+            machine.memory.memoryState0
 
 
 getOperation : OperationName -> Machine -> Result RuntimeError (List Value -> Result RuntimeError Value)
@@ -446,6 +538,22 @@ pop machine =
 
         Nothing ->
             Err PoppingEmptyStack
+
+
+swapMemory : Machine -> Machine
+swapMemory ({ memory } as machine) =
+    { machine
+        | memory =
+            { memory
+                | memoryInUse =
+                    case memory.memoryInUse of
+                        Zero ->
+                            One
+
+                        One ->
+                            Zero
+            }
+    }
 
 
 type RuntimeError
@@ -647,7 +755,7 @@ runOneStep machine =
                     Result.tuple2 (machine |> getValueFromArgument arg0) (machine |> getValueFromArgument arg1)
                         |> Result.andThen
                             (\( value0, value1 ) ->
-                                (machine |> currentMemoryState |> MemoryState.new ( value0, value1 ))
+                                (machine |> currentMemoryState Main |> MemoryState.new ( value0, value1 ))
                                     |> Result.mapError MemoryError
                                     |> Result.map
                                         (\( newPairAddress, newMemoryState ) ->
@@ -662,70 +770,81 @@ runOneStep machine =
                             )
 
                 First target source ->
-                    machine
-                        |> getMemoryAddressAtRegister source
-                        |> Result.andThen
-                            (\pointer ->
-                                machine
-                                    |> currentMemoryState
-                                    |> MemoryState.get pointer
-                                    |> Result.mapError MemoryError
-                                    |> Result.map
-                                        (\( a, _ ) ->
-                                            { isFinished = False
-                                            , machine =
-                                                machine
-                                                    |> updateRegister target a
-                                                    |> advanceInstructionPointer
-                                            }
-                                        )
-                            )
+                    machine |> accessPair FirstComponent Main target source
 
                 Second target source ->
+                    machine |> accessPair SecondComponent Main target source
+
+                SetFirst register arg ->
+                    machine |> setPair FirstComponent Main register arg
+
+                SetSecond register arg ->
+                    machine |> setPair SecondComponent Main register arg
+
+                DualFirst target source ->
+                    machine |> accessPair FirstComponent Dual target source
+
+                DualSecond target source ->
+                    machine |> accessPair SecondComponent Dual target source
+
+                DualSetFirst register arg ->
+                    machine |> setPair FirstComponent Dual register arg
+
+                DualSetSecond register arg ->
+                    machine |> setPair SecondComponent Dual register arg
+
+                MoveToDual target source ->
                     machine
                         |> getMemoryAddressAtRegister source
                         |> Result.andThen
-                            (\pointer ->
+                            (\sourceAddress ->
                                 machine
-                                    |> currentMemoryState
-                                    |> MemoryState.get pointer
+                                    |> currentMemoryState Main
+                                    |> MemoryState.get sourceAddress
                                     |> Result.mapError MemoryError
+                                    |> Result.andThen
+                                        (\memoryCell ->
+                                            machine
+                                                |> currentMemoryState Dual
+                                                |> MemoryState.new memoryCell
+                                                |> Result.mapError MemoryError
+                                        )
                                     |> Result.map
-                                        (\( _, b ) ->
+                                        (\( addressOfNewPair, newDualMemoryState ) ->
                                             { isFinished = False
                                             , machine =
                                                 machine
-                                                    |> updateRegister target b
+                                                    |> setDualMemoryStateOfMachine newDualMemoryState
+                                                    |> updateRegister target (Pair addressOfNewPair)
                                                     |> advanceInstructionPointer
                                             }
                                         )
                             )
 
-                SetFirst register arg ->
-                    Result.tuple2 (machine |> getValueFromArgument arg) (machine |> getMemoryAddressAtRegister register)
+                MarkAsCollected toBeCollected referenceToDualMemory ->
+                    Result.tuple2 (machine |> getMemoryAddressAtRegister toBeCollected) (machine |> getMemoryAddressAtRegister referenceToDualMemory)
                         |> Result.map
-                            (\( val, pointer ) ->
+                            (\( addressToBeCollected, addressToDualMemory ) ->
                                 { isFinished = False
                                 , machine =
                                     machine
                                         |> setMemoryStateOfMachine
-                                            (MemoryState.update pointer (\( _, b ) -> ( val, b )) (machine |> currentMemoryState))
+                                            (machine
+                                                |> currentMemoryState Main
+                                                |> MemoryState.set addressToBeCollected ( Moved, Pair addressToDualMemory )
+                                            )
                                         |> advanceInstructionPointer
                                 }
                             )
 
-                SetSecond register arg ->
-                    Result.tuple2 (machine |> getValueFromArgument arg) (machine |> getMemoryAddressAtRegister register)
-                        |> Result.map
-                            (\( val, pointer ) ->
-                                { isFinished = False
-                                , machine =
-                                    machine
-                                        |> setMemoryStateOfMachine
-                                            (MemoryState.update pointer (\( a, _ ) -> ( a, val )) (machine |> currentMemoryState))
-                                        |> advanceInstructionPointer
-                                }
-                            )
+                SwapMemory ->
+                    Ok
+                        { isFinished = False
+                        , machine =
+                            machine
+                                |> swapMemory
+                                |> advanceInstructionPointer
+                        }
 
         Nothing ->
             Ok (halt machine)

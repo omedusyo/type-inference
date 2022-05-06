@@ -96,7 +96,8 @@ init =
             -- Controllers.controller7_fibonacci_recursive
             -- Controllers.controller8_memory_test
             -- Controllers.controller9_range
-            Controllers.controller10_append
+            -- Controllers.controller10_append
+            Controllers.controller11_garbage_collection_test
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
@@ -268,11 +269,8 @@ view config model =
                         , -- instructions
                           viewInstructions machine.instructionPointer model.controller.instructions
                         ]
-
-                    -- TODO
-                    -- , viewMemoryState (machine |> RegisterMachine.currentMemoryState) model
-                    , viewMemoryState machine.memory.memoryState0 model
-                    , viewMemoryState machine.memory.memoryState1 model
+                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
                     ]
         ]
 
@@ -457,6 +455,27 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.SetSecond register arg ->
                         [ viewInstructionName "set-second", viewRegisterName register, viewOperationArgument arg ]
+
+                    RegisterMachine.DualFirst target source ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "dual-first" [ RegisterMachine.Register source ] ]
+
+                    RegisterMachine.DualSecond target source ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "dual-second" [ RegisterMachine.Register source ] ]
+
+                    RegisterMachine.DualSetFirst register arg ->
+                        [ viewInstructionName "dual-set-first", viewRegisterName register, viewOperationArgument arg ]
+
+                    RegisterMachine.DualSetSecond register arg ->
+                        [ viewInstructionName "dual-set-second", viewRegisterName register, viewOperationArgument arg ]
+
+                    RegisterMachine.MoveToDual target source ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "move-to-dual" [ RegisterMachine.Register source ] ]
+
+                    RegisterMachine.MarkAsCollected toBeCollected referenceToDualMemory ->
+                        [ viewInstructionName "mark", viewRegisterUse toBeCollected, viewInstructionName "as-collected-to", viewRegisterUse referenceToDualMemory ]
+
+                    RegisterMachine.SwapMemory ->
+                        [ viewInstructionName "swap-memory" ]
                 )
     in
     E.column [ E.width E.fill ]
@@ -568,11 +587,8 @@ viewValue value model =
         Uninitialized ->
             E.text ""
 
-        Collected memoryAddress ->
-            E.column []
-                [ E.text "Collected"
-                , viewMemoryAddress memoryAddress
-                ]
+        Moved ->
+            E.text "Moved"
 
 
 viewConstant : Constant -> Element Msg

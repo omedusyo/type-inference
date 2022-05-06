@@ -32,7 +32,7 @@ type Value
     | Pair MemoryAddress
     | InstructionAddress InstructionAddress
     | Uninitialized
-    | Collected MemoryAddress
+    | Moved
 
 
 type Constant
@@ -89,6 +89,12 @@ type
     -- b <- second $p
     -- set-first $p $a
     -- set-second $p $b
+    --
+    -- q <- move-to-dual $p // p is a register holding an address in current memory.
+    --                      // This will move the pair pointed by p to the other memory.
+    --                      // Register q will hold the new address.
+    --                      // The
+    -- swap-memory          // Switches the roles of memories.
     = -- assignment
       AssignRegister Register Register
     | AssignLabel Register Label
@@ -114,3 +120,12 @@ type
     | Second Register Register
     | SetFirst Register OperationArgument
     | SetSecond Register OperationArgument
+      -- dual memory
+    | DualFirst Register Register
+    | DualSecond Register Register
+    | DualSetFirst Register OperationArgument
+    | DualSetSecond Register OperationArgument
+      -- garbage collection
+    | MoveToDual Register Register -- p <- move-to-dual $q   :=   MoveToDual "p" "q"
+    | MarkAsCollected Register Register -- MarkAsCollected memory_address_to_be_collected memory_address_to_dual_memory
+    | SwapMemory
