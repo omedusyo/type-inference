@@ -9,8 +9,12 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Controller, InstructionAddress, Machine, MemoryAddress, MemoryCell, MemoryError(..), MemoryState, RuntimeError(..), TranslationError, Value(..))
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionAddress, MemoryAddress, Value(..))
 import RegisterMachine.Controllers as Controllers
+import RegisterMachine.GarbageCollector as GarbageCollector
+import RegisterMachine.Machine as RegisterMachine exposing (Controller, Machine, RuntimeError(..), TranslationError)
+import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
+import RegisterMachine.Stack as Stack exposing (Stack)
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.Style.Button as Button
@@ -45,6 +49,7 @@ init =
                 , ( "mul", RegisterMachine.makeNumOperation2 (\x y -> x * y) )
                 , ( "zero?", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
                 , ( "eq?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x == y)) )
+                , ( "not", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
                 , ( "decrement", RegisterMachine.makeNumOperation1 (\x -> x - 1) )
                 , ( "increment", RegisterMachine.makeNumOperation1 (\x -> x + 1) )
                 , ( "remainder", RegisterMachine.makeNumOperation2 (\x y -> remainderBy y x) )
@@ -81,6 +86,17 @@ init =
                                     Ok (ConstantValue (Num 0))
                         )
                   )
+                , ( "moved?"
+                  , RegisterMachine.makeOperation1
+                        (\val ->
+                            case val of
+                                Moved ->
+                                    Ok (ConstantValue (Num 1))
+
+                                _ ->
+                                    Ok (ConstantValue (Num 0))
+                        )
+                  )
                 ]
 
         ( controller, env ) =
@@ -93,7 +109,8 @@ init =
             -- Controllers.controller7_fibonacci_recursive
             -- Controllers.controller8_memory_test
             -- Controllers.controller9_range
-            Controllers.controller10_append
+            -- Controllers.controller10_append
+            GarbageCollector.controller
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
@@ -265,7 +282,8 @@ view config model =
                         , -- instructions
                           viewInstructions machine.instructionPointer model.controller.instructions
                         ]
-                    , viewMemoryState machine.memoryState model
+                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
                     ]
         ]
 
@@ -450,6 +468,27 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.SetSecond register arg ->
                         [ viewInstructionName "set-second", viewRegisterName register, viewOperationArgument arg ]
+
+                    RegisterMachine.DualFirst target source ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "dual-first" [ RegisterMachine.Register source ] ]
+
+                    RegisterMachine.DualSecond target source ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "dual-second" [ RegisterMachine.Register source ] ]
+
+                    RegisterMachine.DualSetFirst register arg ->
+                        [ viewInstructionName "dual-set-first", viewRegisterName register, viewOperationArgument arg ]
+
+                    RegisterMachine.DualSetSecond register arg ->
+                        [ viewInstructionName "dual-set-second", viewRegisterName register, viewOperationArgument arg ]
+
+                    RegisterMachine.MoveToDual target source ->
+                        [ viewRegisterName target, viewInstructionName "<-", viewOperationApplication "move-to-dual" [ RegisterMachine.Register source ] ]
+
+                    RegisterMachine.MarkAsMoved toBeCollected referenceToDualMemory ->
+                        [ viewInstructionName "mark", viewRegisterUse toBeCollected, viewInstructionName "as-moved-to", viewRegisterUse referenceToDualMemory ]
+
+                    RegisterMachine.SwapMemory ->
+                        [ viewInstructionName "swap-memory" ]
                 )
     in
     E.column [ E.width E.fill ]
@@ -478,7 +517,7 @@ viewRegisters registers model =
         viewRegister : RegisterMachine.Register -> Value -> Element Msg
         viewRegister name val =
             E.row [ E.spacing 10 ]
-                [ E.el [ E.width (E.px 100) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val model) ]
+                [ E.el [ E.width (E.px 230) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val model) ]
     in
     -- registers
     E.column [ E.width E.fill, E.spacing 5 ]
@@ -487,11 +526,11 @@ viewRegisters registers model =
         )
 
 
-viewStack : RegisterMachine.Stack -> Model -> Element Msg
+viewStack : Stack -> Model -> Element Msg
 viewStack stack model =
     E.column [ E.width E.fill, E.spacing 5 ]
         (stack
-            |> RegisterMachine.stackToList
+            |> Stack.toList
             |> List.reverse
             |> List.map
                 (\val ->
@@ -560,6 +599,9 @@ viewValue value model =
 
         Uninitialized ->
             E.text ""
+
+        Moved ->
+            E.text "Moved"
 
 
 viewConstant : Constant -> Element Msg
