@@ -71,6 +71,7 @@ main =
 -- ===SUBSCRIPTIONS===
 
 
-subscriptions : Model -> Sub msg
+subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
+    LambdaUi.subscriptions model.lambdaUiState.model
+        |> Sub.map LambdaUiMsg

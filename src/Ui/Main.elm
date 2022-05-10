@@ -1,4 +1,4 @@
-module Ui.Main exposing (Model, Msg, init, update, view)
+module Ui.Main exposing (Model, Msg, init, subscriptions, update, view)
 
 import Element as E exposing (Element)
 import Element.Background as Background
@@ -143,3 +143,9 @@ view config model =
             RegisterMachineTab ->
                 RegisterMachine.view config model.registerMachineModel |> E.map RegisterMachineMsg
         ]
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    RegisterMachine.subscriptions model.registerMachineModel
+        |> Sub.map RegisterMachineMsg

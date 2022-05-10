@@ -1,4 +1,4 @@
-module Ui.Tab.RegisterMachine exposing (Model, Msg, init, update, view)
+module Ui.Tab.RegisterMachine exposing (Model, Msg, init, subscriptions, update, view)
 
 import Array exposing (Array)
 import Array.Extra as Array
@@ -266,7 +266,7 @@ view config model =
     -- 1. I need to display all the registers
     -- 2. I need to display the instruction block with labels
     E.column [ E.width E.fill ]
-        [ Editor.view model.editorModel
+        [ Editor.view model.editorModel |> E.map EditorMsg
         , E.row []
             [ Input.button Button.buttonStyle
                 { onPress =
@@ -642,3 +642,9 @@ viewMemoryAddress p =
 viewInstructionAddress : InstructionAddress -> Element Msg
 viewInstructionAddress pointer =
     E.text (String.concat [ ":", String.fromInt pointer ])
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Editor.subscriptions model.editorModel
+        |> Sub.map EditorMsg
