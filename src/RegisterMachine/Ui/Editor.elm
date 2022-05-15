@@ -164,8 +164,8 @@ moveNode direction model =
                         |> ZipList.updateCurrent
                             (\instruction ->
                                 case instruction of
-                                    Instruction kind row ->
-                                        Instruction kind (row |> ZipList.left)
+                                    Instruction kind nodes ->
+                                        Instruction kind (nodes |> ZipList.left)
 
                                     Halt ->
                                         instruction
@@ -176,8 +176,8 @@ moveNode direction model =
                         |> ZipList.updateCurrent
                             (\instruction ->
                                 case instruction of
-                                    Instruction kind row ->
-                                        Instruction kind (row |> ZipList.right)
+                                    Instruction kind nodes ->
+                                        Instruction kind (nodes |> ZipList.right)
 
                                     Halt ->
                                         instruction
@@ -369,11 +369,11 @@ view ({ instructions } as model) =
             (instructions
                 |> ZipList.mapToList
                     { current =
-                        \row ->
-                            E.el [ Background.color (E.rgb255 215 215 215) ] (viewInstruction True model.editingMode row)
+                        \instruction ->
+                            E.el [ Background.color (E.rgb255 215 215 215) ] (viewInstruction True model.editingMode instruction)
                     , others =
-                        \row ->
-                            E.el [] (viewInstruction False model.editingMode row)
+                        \instruction ->
+                            E.el [] (viewInstruction False model.editingMode instruction)
                     }
             )
         ]
@@ -385,15 +385,15 @@ viewInstruction isInstructionSelected editingMode instruction =
         Halt ->
             E.text "Halt"
 
-        Instruction kind row ->
+        Instruction kind nodes ->
             case kind of
                 LabelKind ->
                     E.row []
-                        [ E.text "label ", viewNode True isInstructionSelected editingMode (ZipList.current row), E.text ":" ]
+                        [ E.text "label ", viewNode True isInstructionSelected editingMode (ZipList.current nodes), E.text ":" ]
 
                 OperationApplicationKind ->
                     E.row []
-                        (case ZipList.mapToTaggedList row of
+                        (case ZipList.mapToTaggedList nodes of
                             ( isSourceSelected, source ) :: ( isOperationNameSelected, operationName ) :: arguments ->
                                 List.concat
                                     [ [ viewNode isSourceSelected isInstructionSelected editingMode source
