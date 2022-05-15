@@ -33,7 +33,7 @@ type alias Model =
     }
 
 
-init : InitContext Model Msg
+init : InitContext Msg Model
 init =
     let
         boolToInt : Bool -> Int
@@ -198,7 +198,7 @@ type Msg
     | EditorMsg Editor.Msg
 
 
-update : Msg -> Context Model msg
+update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
         Reset ->
@@ -257,6 +257,7 @@ update msg =
         EditorMsg editorMsg ->
             Editor.update editorMsg
                 |> Context.embed
+                    EditorMsg
                     .editorModel
                     (\model editorModel -> { model | editorModel = editorModel })
 

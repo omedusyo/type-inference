@@ -78,7 +78,7 @@ type alias Model =
     }
 
 
-init : InitContext Model Msg
+init : InitContext Msg Model
 init =
     let
         input1 =
@@ -156,7 +156,7 @@ type Msg
     | ReplRunButtonClicked
 
 
-update : Msg -> Context Model msg
+update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
         ModuleInputChanged input ->

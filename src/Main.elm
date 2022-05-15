@@ -43,7 +43,7 @@ update msg model =
         LambdaUiMsg lambdaUiMsg ->
             let
                 ( lambdaUiState, cmd ) =
-                    StatefulReader.run (LambdaUi.update lambdaUiMsg) Context.initConfig model.lambdaUiState
+                    LambdaUi.update lambdaUiMsg Context.initConfig LambdaUiMsg model.lambdaUiState
             in
             ( { model | lambdaUiState = lambdaUiState }, cmd )
 

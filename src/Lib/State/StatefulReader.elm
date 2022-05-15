@@ -6,6 +6,7 @@ module Lib.State.StatefulReader exposing
     , get
     , get0
     , join
+    , liftConfig
     , make
     , map
     , map2
@@ -46,6 +47,13 @@ get f stateful_a =
                     run stateful_a r s0
             in
             run (f r s1) r s1
+
+
+liftConfig : (r0 -> r1) -> StatefulReader r1 s a -> StatefulReader r0 s a
+liftConfig f stateful_a =
+    make <|
+        \r0 s0 ->
+            run stateful_a (f r0) s0
 
 
 get0 : (r -> s -> StatefulReader r s b) -> StatefulReader r s b

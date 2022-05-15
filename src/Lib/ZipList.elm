@@ -52,8 +52,8 @@ right (( revLeft, x0, right0 ) as zipList) =
             ( x0 :: revLeft, x1, right1 )
 
 
-setCurrent : (a -> a) -> ZipList a -> ZipList a
-setCurrent f ( revLeft0, x0, right0 ) =
+updateCurrent : (a -> a) -> ZipList a -> ZipList a
+updateCurrent f ( revLeft0, x0, right0 ) =
     ( revLeft0, f x0, right0 )
 
 
@@ -66,3 +66,50 @@ mapToList : { others : a -> b, current : a -> b } -> ZipList a -> List b
 mapToList f ( revLeft0, x0, right0 ) =
     List.reverse (List.map f.others revLeft0)
         ++ (f.current x0 :: List.map f.others right0)
+
+
+
+-- The bool indicates whether the element is selected or not
+
+
+mapToTaggedList : ZipList a -> List ( Bool, a )
+mapToTaggedList ( revLeft0, x0, right0 ) =
+    let
+        tagAsNotSelected x =
+            ( False, x )
+
+        tagAsSelected x =
+            ( True, x )
+    in
+    List.map tagAsNotSelected (List.reverse revLeft0)
+        ++ (tagAsSelected x0 :: List.map tagAsNotSelected right0)
+
+
+delete : ZipList a -> ZipList a
+delete (( revLeft0, x0, right0 ) as zipList) =
+    case right0 of
+        [] ->
+            case revLeft0 of
+                [] ->
+                    zipList
+
+                x1 :: revLeft1 ->
+                    ( revLeft1, x1, [] )
+
+        x1 :: right1 ->
+            ( revLeft0, x1, right1 )
+
+
+insertLeft : a -> ZipList a -> ZipList a
+insertLeft y ( revLeft0, x0, right0 ) =
+    ( y :: revLeft0, x0, right0 )
+
+
+insertRight : a -> ZipList a -> ZipList a
+insertRight y ( revLeft0, x0, right0 ) =
+    ( revLeft0, x0, y :: right0 )
+
+
+isSingleton : ZipList a -> Bool
+isSingleton ( revLeft0, x0, right0 ) =
+    List.isEmpty revLeft0 && List.isEmpty right0

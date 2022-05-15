@@ -58,7 +58,7 @@ type alias Model =
     }
 
 
-init : InitContext Model Msg
+init : InitContext Msg Model
 init =
     InitContext.setModelTo
         (\programModel moduleModel helpModel registerMachineModel ->
@@ -86,7 +86,7 @@ type Msg
     | RegisterMachineMsg RegisterMachine.Msg
 
 
-update : Msg -> Context Model msg
+update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
         ChangeTab tab ->
@@ -95,24 +95,28 @@ update msg =
         HelpMsg helpMsg ->
             Help.update helpMsg
                 |> Context.embed
+                    HelpMsg
                     .helpModel
                     (\model helpModel -> { model | helpModel = helpModel })
 
         ModuleMsg moduleMsg ->
             Module.update moduleMsg
                 |> Context.embed
+                    ModuleMsg
                     .moduleModel
                     (\model moduleModel -> { model | moduleModel = moduleModel })
 
         ProgramMsg programMsg ->
             Program.update programMsg
                 |> Context.embed
+                    ProgramMsg
                     .programModel
                     (\model programModel -> { model | programModel = programModel })
 
         RegisterMachineMsg registerMachineMsg ->
             RegisterMachine.update registerMachineMsg
                 |> Context.embed
+                    RegisterMachineMsg
                     .registerMachineModel
                     (\model registerMachineModel -> { model | registerMachineModel = registerMachineModel })
 
