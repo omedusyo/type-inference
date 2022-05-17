@@ -174,6 +174,7 @@ type Msg
     = SetModeTo InstructionMode
       -- Instructions
     | InstructionMovement VerticalDirection
+    | SwapInstruction VerticalDirection
     | InstructionEdit
     | InstructionInsertion VerticalDirection
     | ChangeInstructionTo InstructionKind
@@ -196,6 +197,20 @@ moveInstruction direction model =
                 Down ->
                     model.instructions |> ZipList.right
     }
+
+
+swapInstruction : VerticalDirection -> Model -> Model
+swapInstruction direction model =
+    { model
+        | instructions =
+            case direction of
+                Up ->
+                    model.instructions |> ZipList.swapWithLeft
+
+                Down ->
+                    model.instructions |> ZipList.swapWithRight
+    }
+        |> moveInstruction direction
 
 
 insertFutureInstruction : VerticalDirection -> Model -> Model
@@ -382,6 +397,9 @@ update msg =
     case msg of
         InstructionMovement direction ->
             Context.update (moveInstruction direction)
+
+        SwapInstruction direction ->
+            Context.update (swapInstruction direction)
 
         InstructionEdit ->
             Context.update setModeToInsertInstruction
@@ -648,6 +666,8 @@ traverseModeKeyBindings =
     Dict.fromList
         [ ( "k", InstructionMovement Up )
         , ( "j", InstructionMovement Down )
+        , ( "K", SwapInstruction Up )
+        , ( "J", SwapInstruction Down )
         , ( ",", DeleteInstruction )
         , ( "i", InstructionEdit )
         , ( "h", InstructionInsertion Down )

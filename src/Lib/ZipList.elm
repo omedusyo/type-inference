@@ -128,3 +128,23 @@ insertRight y ( revLeft0, x0, right0 ) =
 isSingleton : ZipList a -> Bool
 isSingleton ( revLeft0, x0, right0 ) =
     List.isEmpty revLeft0 && List.isEmpty right0
+
+
+swapWithLeft : ZipList a -> ZipList a
+swapWithLeft (( revLeft0, x0, right0 ) as zipList) =
+    case revLeft0 of
+        [] ->
+            zipList
+
+        x1 :: revLeft1 ->
+            ( x0 :: revLeft1, x1, right0 )
+
+
+swapWithRight : ZipList a -> ZipList a
+swapWithRight (( revLeft0, x0, right0 ) as zipList) =
+    case right0 of
+        [] ->
+            zipList
+
+        x1 :: right1 ->
+            ( revLeft0, x1, x0 :: right1 )
