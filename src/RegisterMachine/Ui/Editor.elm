@@ -78,9 +78,10 @@ type
 --===UI===
 
 
-type EditingMode
+type Mode
     = Moving
-    | Editing
+    | EditingNode
+    | InsertingInstruction
 
 
 type Instruction
@@ -90,7 +91,7 @@ type Instruction
 
 type alias Model =
     { instructions : ZipList Instruction
-    , editingMode : EditingMode
+    , editingMode : Mode
     }
 
 
@@ -128,12 +129,12 @@ type VerticalDirection
 
 
 type Msg
-    = NoOp
+    = SetModeTo Mode
     | LineMovement VerticalDirection
+    | LineEdit
+    | LineInsertion VerticalDirection
     | NodeMovement HorizontalDirection
     | DeleteLine
-    | SetMovingMode
-    | SetEditingMode
     | NodeEdit String
     | NodeInsertion HorizontalDirection
     | DeleteNode
@@ -236,43 +237,32 @@ updateCurrentNode f =
         )
 
 
-insertAndEditNode : HorizontalDirection -> Context rootMsg Msg Model
-insertAndEditNode direction =
-    Context.updateWithCommand <|
-        \model ->
-            case getCurrentNodes model of
-                Just nodes ->
-                    let
-                        maybeNewNodes =
-                            case ZipList.current nodes of
-                                Node Dynamic str ->
-                                    case direction of
-                                        Left ->
-                                            Just
-                                                (nodes
-                                                    |> ZipList.insertLeft (Node Dynamic "")
-                                                    |> ZipList.left
-                                                )
+insertAndEditNode : HorizontalDirection -> Model -> Model
+insertAndEditNode direction model =
+    case getCurrentNodes model of
+        Just nodes ->
+            case ZipList.current nodes of
+                Node Dynamic str ->
+                    model
+                        |> setCurrentNodes
+                            (case direction of
+                                Left ->
+                                    nodes
+                                        |> ZipList.insertLeft (Node Dynamic "")
+                                        |> ZipList.left
 
-                                        Right ->
-                                            Just
-                                                (nodes
-                                                    |> ZipList.insertRight (Node Dynamic "")
-                                                    |> ZipList.right
-                                                )
+                                Right ->
+                                    nodes
+                                        |> ZipList.insertRight (Node Dynamic "")
+                                        |> ZipList.right
+                            )
+                        |> setEditingMode
 
-                                _ ->
-                                    Nothing
-                    in
-                    case maybeNewNodes of
-                        Just newNodes ->
-                            ( model |> setCurrentNodes newNodes |> setEditingMode, focusSearchBox )
+                _ ->
+                    model
 
-                        Nothing ->
-                            ( model, Cmd.none )
-
-                Nothing ->
-                    ( model, Cmd.none )
+        Nothing ->
+            model
 
 
 isCurrentNodeStatic : ZipList Node -> Bool
@@ -294,7 +284,7 @@ setEditingMode : Model -> Model
 setEditingMode model =
     case ZipList.current model.instructions of
         Instruction _ _ ->
-            { model | editingMode = Editing }
+            { model | editingMode = EditingNode }
 
         Halt ->
             model
@@ -303,11 +293,14 @@ setEditingMode model =
 update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
-        NoOp ->
-            Context.none
-
         LineMovement direction ->
             Context.update (moveLine direction)
+
+        LineEdit ->
+            Debug.todo ""
+
+        LineInsertion direction ->
+            Debug.todo ""
 
         NodeMovement direction ->
             Context.update (moveNode direction)
@@ -315,18 +308,22 @@ update msg =
         DeleteLine ->
             Context.update (\model -> { model | instructions = ZipList.delete model.instructions })
 
-        SetMovingMode ->
-            Context.update (\model -> { model | editingMode = Moving })
+        SetModeTo mode ->
+            case mode of
+                Moving ->
+                    Context.update (\model -> { model | editingMode = Moving })
 
-        SetEditingMode ->
-            Context.update setEditingMode
-                |> Context.performCmd focusSearchBox
+                EditingNode ->
+                    Context.update setEditingMode
+
+                InsertingInstruction ->
+                    Debug.todo ""
 
         NodeEdit str ->
             Context.update (updateCurrentNode (\(Node nodeKind _) -> Node nodeKind str))
 
         NodeInsertion direction ->
-            insertAndEditNode direction
+            Context.update (insertAndEditNode direction)
 
         DeleteNode ->
             Context.update
@@ -344,11 +341,6 @@ update msg =
                 )
 
 
-focusSearchBox : Cmd Msg
-focusSearchBox =
-    Task.attempt (\_ -> NoOp) (Dom.focus editorId)
-
-
 editorId : String
 editorId =
     "my-special-editor"
@@ -361,8 +353,11 @@ view ({ instructions } as model) =
             Moving ->
                 E.el [] (E.text "Moving")
 
-            Editing ->
+            EditingNode ->
                 E.el [] (E.text "Editing")
+
+            InsertingInstruction ->
+                E.el [] (E.text "Inserting Instruction")
         , E.column []
             (instructions
                 |> ZipList.mapToList
@@ -377,7 +372,7 @@ view ({ instructions } as model) =
         ]
 
 
-viewInstruction : Bool -> EditingMode -> Instruction -> Element Msg
+viewInstruction : Bool -> Mode -> Instruction -> Element Msg
 viewInstruction isInstructionSelected editingMode instruction =
     case instruction of
         Halt ->
@@ -425,7 +420,7 @@ viewInstruction isInstructionSelected editingMode instruction =
                     Debug.todo ""
 
 
-viewNode : Bool -> Bool -> EditingMode -> Node -> Element Msg
+viewNode : Bool -> Bool -> Mode -> Node -> Element Msg
 viewNode isSelected isInstructionSelected editingMode (Node nodeKind str) =
     let
         viewStr str0 =
@@ -440,8 +435,12 @@ viewNode isSelected isInstructionSelected editingMode (Node nodeKind str) =
             Moving ->
                 E.el [ Border.width 1, Border.solid ] (viewStr str)
 
-            Editing ->
+            EditingNode ->
                 E.inputCell 19 str NodeEdit
+
+            InsertingInstruction ->
+                -- TODO: I think this should be an impossible state
+                Debug.todo ""
 
     else
         E.el [] (viewStr str)
@@ -496,17 +495,26 @@ subscriptions model =
                                 "j" ->
                                     Decode.succeed (LineMovement Down)
 
+                                "," ->
+                                    Decode.succeed DeleteLine
+
+                                "i" ->
+                                    Decode.succeed LineEdit
+
+                                "h" ->
+                                    Decode.succeed (LineInsertion Down)
+
+                                "l" ->
+                                    Decode.succeed (LineInsertion Up)
+
                                 "s" ->
                                     Decode.succeed (NodeMovement Left)
 
                                 "d" ->
                                     Decode.succeed (NodeMovement Right)
 
-                                "," ->
-                                    Decode.succeed DeleteLine
-
                                 "e" ->
-                                    Decode.succeed SetEditingMode
+                                    Decode.succeed (SetModeTo EditingNode)
 
                                 "a" ->
                                     Decode.succeed (NodeInsertion Left)
@@ -520,10 +528,18 @@ subscriptions model =
                                 _ ->
                                     Decode.fail ""
 
-                        Editing ->
+                        EditingNode ->
                             case keyCode of
                                 "Escape" ->
-                                    Decode.succeed SetMovingMode
+                                    Decode.succeed (SetModeTo Moving)
+
+                                _ ->
+                                    Decode.fail ""
+
+                        InsertingInstruction ->
+                            case keyCode of
+                                "Escape" ->
+                                    Decode.succeed (SetModeTo InsertingInstruction)
 
                                 _ ->
                                     Decode.fail ""
