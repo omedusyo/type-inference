@@ -571,10 +571,22 @@ viewInstruction isInstructionSelected instructionMode instruction =
     case instructionMode of
         InsertingInstruction ->
             if isInstructionSelected then
-                E.row []
-                    ([ E.text "l:label", E.text "a:apply", E.text "<:assign", E.text "j:jump", E.text "i:if-jump", E.text "p:push", E.text "h:halt" ]
-                        |> List.intersperse (E.text " ")
-                    )
+                E.column []
+                    [ E.row []
+                        ([ E.row [] [ viewKeyword "q:", E.text "label" ]
+                         , E.row [] [ viewKeyword "w:", E.text "jump" ]
+                         , E.row [] [ viewKeyword "e:", E.text "if-jump" ]
+                         ]
+                            |> List.intersperse (E.text " ")
+                        )
+                    , E.row []
+                        ([ E.row [] [ viewKeyword "a:", E.text "apply" ]
+                         , E.row [] [ viewKeyword "s:", E.text "assign" ]
+                         , E.row [] [ viewKeyword "d:", E.text "push" ]
+                         ]
+                            |> List.intersperse (E.text " ")
+                        )
+                    ]
 
             else
                 viewBareInstruction TraversingNodes
@@ -699,25 +711,28 @@ subscriptions model =
 
                         InsertingInstruction ->
                             case keyCode of
+                                "q" ->
+                                    Decode.succeed (ChangeInstructionTo LabelKind)
+
                                 "l" ->
                                     Decode.succeed (ChangeInstructionTo LabelKind)
+
+                                "w" ->
+                                    Decode.succeed (ChangeInstructionTo JumpKind)
+
+                                "e" ->
+                                    Decode.succeed (ChangeInstructionTo JumpIfKind)
 
                                 "a" ->
                                     Decode.succeed (ChangeInstructionTo OperationApplicationKind)
 
-                                "<" ->
+                                "s" ->
                                     Decode.succeed (ChangeInstructionTo AssignmentKind)
 
-                                "j" ->
-                                    Decode.succeed (ChangeInstructionTo JumpKind)
-
-                                "i" ->
-                                    Decode.succeed (ChangeInstructionTo JumpIfKind)
-
-                                "p" ->
+                                "d" ->
                                     Decode.succeed (ChangeInstructionTo PushKind)
 
-                                "h" ->
+                                "f" ->
                                     Decode.succeed (ChangeInstructionTo HaltKind)
 
                                 "Escape" ->
