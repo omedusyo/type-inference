@@ -49,6 +49,7 @@ class CustomInput extends HTMLElement {
       background: "none",
       outline: "none",
       minWidth: "3px",
+      width: "3px", // this will get overwritten
     };
 
     Object.assign(input.style, inputStyle);
