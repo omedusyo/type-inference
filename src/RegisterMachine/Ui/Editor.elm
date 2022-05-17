@@ -8,14 +8,12 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import Html
-import Html.Attributes as HtmlAttributes
-import Html.Events as HtmlEvents
 import Json.Decode as Decode
 import Lib.ZipList as ZipList exposing (ZipList)
 import Task
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.InputCell as E
 
 
 type WithHole a
@@ -443,24 +441,10 @@ viewNode isSelected isInstructionSelected editingMode (Node nodeKind str) =
                 E.el [ Border.width 1, Border.solid ] (viewStr str)
 
             Editing ->
-                nodeInput str
+                E.inputCell 19 str NodeEdit
 
     else
         E.el [] (viewStr str)
-
-
-nodeInput : String -> Element Msg
-nodeInput str =
-    E.el []
-        (E.html
-            (Html.input
-                [ HtmlAttributes.id editorId
-                , HtmlEvents.onInput NodeEdit
-                , HtmlAttributes.value str
-                ]
-                []
-            )
-        )
 
 
 viewLabel label =
