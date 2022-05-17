@@ -72,6 +72,7 @@ class CustomInput extends HTMLElement {
     setTimeout(() => {
       input.value = this.value;
       input.focus();
+      input.select();
 
       input.style.fontSize = this.style.fontSize;
       fakeEle.style.fontSize = this.style.fontSize;
