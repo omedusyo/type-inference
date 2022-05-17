@@ -85,8 +85,8 @@ mapToTaggedList ( revLeft0, x0, right0 ) =
         ++ (tagAsSelected x0 :: List.map tagAsNotSelected right0)
 
 
-delete : ZipList a -> ZipList a
-delete (( revLeft0, x0, right0 ) as zipList) =
+deleteAndFocusRight : ZipList a -> ZipList a
+deleteAndFocusRight (( revLeft0, x0, right0 ) as zipList) =
     case right0 of
         [] ->
             case revLeft0 of
@@ -98,6 +98,21 @@ delete (( revLeft0, x0, right0 ) as zipList) =
 
         x1 :: right1 ->
             ( revLeft0, x1, right1 )
+
+
+deleteAndFocusLeft : ZipList a -> ZipList a
+deleteAndFocusLeft (( revLeft0, x0, right0 ) as zipList) =
+    case revLeft0 of
+        [] ->
+            case right0 of
+                [] ->
+                    zipList
+
+                x1 :: right1 ->
+                    ( [], x1, right1 )
+
+        x1 :: revLeft1 ->
+            ( revLeft1, x1, right0 )
 
 
 insertLeft : a -> ZipList a -> ZipList a

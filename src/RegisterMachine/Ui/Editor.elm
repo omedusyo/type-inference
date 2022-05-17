@@ -38,8 +38,8 @@ type
     | AssignmentKind
     | JumpKind
     | JumpIfKind
-    | HaltKind
     | PushKind
+    | HaltKind
 
 
 type NodeKind
@@ -78,21 +78,74 @@ type
 --===UI===
 
 
-type Mode
-    = Moving
-    | EditingNode
+type InstructionMode
+    = TraversingInstructions NodeMode
     | InsertingInstruction
+
+
+type NodeMode
+    = TraversingNodes
+    | EditingNode
 
 
 type Instruction
     = Instruction InstructionKind (ZipList Node)
     | Halt
+      -- The only way to have a future instruction is when the user wishes to insert a completely new instruction.
+      -- Then we temporarily create the FutureInstruction until the user decides with which concerete instructio to replace it with.
+      -- But if the user presses Esc during his decision, the current FutureInstruction should be deleted.
+      -- After the deletion in which direction should we move to? Up or Down? That's why we have the VerticalDirection argument.
+    | FutureInstruction VerticalDirection
 
 
 type alias Model =
     { instructions : ZipList Instruction
-    , editingMode : Mode
+    , instructionMode : InstructionMode
     }
+
+
+emptyStaticNode =
+    Node Static ""
+
+
+emptyDynamicNode =
+    Node Dynamic ""
+
+
+initialInstruction : InstructionKind -> Instruction
+initialInstruction instructionKind =
+    case instructionKind of
+        LabelKind ->
+            -- label _
+            Instruction instructionKind
+                (ZipList.fromList emptyStaticNode [])
+
+        OperationApplicationKind ->
+            -- _ <- _(_)
+            Instruction instructionKind
+                (ZipList.fromList emptyStaticNode [ emptyStaticNode, emptyDynamicNode ])
+
+        AssignmentKind ->
+            -- _ <- _
+            Instruction instructionKind
+                (ZipList.fromList emptyStaticNode [ emptyStaticNode ])
+
+        JumpKind ->
+            -- jump _
+            Instruction instructionKind
+                (ZipList.fromList emptyStaticNode [])
+
+        JumpIfKind ->
+            -- if _ jump _
+            Instruction instructionKind
+                (ZipList.fromList emptyStaticNode [ emptyStaticNode ])
+
+        HaltKind ->
+            Halt
+
+        PushKind ->
+            Instruction instructionKind
+                (ZipList.fromList emptyStaticNode [])
 
 
 instruction0 : Instruction
@@ -114,7 +167,7 @@ init : InitContext Msg Model
 init =
     InitContext.setModelTo
         { instructions = ZipList.fromList instruction0 [ instruction1, instruction2, Halt ]
-        , editingMode = Moving
+        , instructionMode = TraversingInstructions TraversingNodes
         }
 
 
@@ -129,10 +182,11 @@ type VerticalDirection
 
 
 type Msg
-    = SetModeTo Mode
+    = SetModeTo InstructionMode
     | LineMovement VerticalDirection
     | LineEdit
     | LineInsertion VerticalDirection
+    | ChangeInstructionTo InstructionKind
     | NodeMovement HorizontalDirection
     | DeleteLine
     | NodeEdit String
@@ -153,34 +207,40 @@ moveLine direction model =
     }
 
 
+insertFutureInstruction : VerticalDirection -> Model -> Model
+insertFutureInstruction direction model =
+    { model
+        | instructions =
+            model.instructions
+                |> (case direction of
+                        Up ->
+                            ZipList.insertLeft (FutureInstruction Down)
+
+                        Down ->
+                            ZipList.insertRight (FutureInstruction Up)
+                   )
+    }
+
+
 moveNode : HorizontalDirection -> Model -> Model
 moveNode direction model =
     { model
         | instructions =
-            case direction of
-                Left ->
-                    model.instructions
-                        |> ZipList.updateCurrent
-                            (\instruction ->
-                                case instruction of
-                                    Instruction kind nodes ->
+            model.instructions
+                |> ZipList.updateCurrent
+                    (\instruction ->
+                        case instruction of
+                            Instruction kind nodes ->
+                                case direction of
+                                    Left ->
                                         Instruction kind (nodes |> ZipList.left)
 
-                                    Halt ->
-                                        instruction
-                            )
-
-                Right ->
-                    model.instructions
-                        |> ZipList.updateCurrent
-                            (\instruction ->
-                                case instruction of
-                                    Instruction kind nodes ->
+                                    Right ->
                                         Instruction kind (nodes |> ZipList.right)
 
-                                    Halt ->
-                                        instruction
-                            )
+                            _ ->
+                                instruction
+                    )
     }
 
 
@@ -201,7 +261,7 @@ updateCurrentNodes f =
                 Instruction instructionKind nodes ->
                     Instruction instructionKind (f nodes)
 
-                Halt ->
+                _ ->
                     instruction
         )
 
@@ -212,7 +272,7 @@ getCurrentNodes model =
         Instruction _ nodes ->
             Just nodes
 
-        Halt ->
+        _ ->
             Nothing
 
 
@@ -232,7 +292,7 @@ updateCurrentNode f =
                             |> ZipList.updateCurrent f
                         )
 
-                Halt ->
+                _ ->
                     instruction
         )
 
@@ -256,7 +316,7 @@ insertAndEditNode direction model =
                                         |> ZipList.insertRight (Node Dynamic "")
                                         |> ZipList.right
                             )
-                        |> setEditingMode
+                        |> setModeToEditing
 
                 _ ->
                     model
@@ -277,17 +337,53 @@ isCurrentNodeStatic nodes =
 
 deleteCurrentLine : Model -> Model
 deleteCurrentLine model =
-    { model | instructions = ZipList.delete model.instructions }
+    { model
+        | instructions =
+            case ZipList.current model.instructions of
+                FutureInstruction direction ->
+                    case direction of
+                        Up ->
+                            ZipList.deleteAndFocusLeft model.instructions
+
+                        Down ->
+                            ZipList.deleteAndFocusRight model.instructions
+
+                _ ->
+                    ZipList.deleteAndFocusRight model.instructions
+    }
 
 
-setEditingMode : Model -> Model
-setEditingMode model =
+setModeToEditing : Model -> Model
+setModeToEditing model =
     case ZipList.current model.instructions of
         Instruction _ _ ->
-            { model | editingMode = EditingNode }
+            { model | instructionMode = TraversingInstructions EditingNode }
 
-        Halt ->
+        _ ->
             model
+
+
+changeInstructionTo : InstructionKind -> Model -> Model
+changeInstructionTo instructionKind model =
+    model
+        |> updateCurrentInstruction (\_ -> initialInstruction instructionKind)
+        |> setModeToTraversing
+
+
+setModeToTraversing : Model -> Model
+setModeToTraversing model =
+    case ZipList.current model.instructions of
+        FutureInstruction direction ->
+            { model | instructionMode = TraversingInstructions TraversingNodes }
+                |> deleteCurrentLine
+
+        _ ->
+            { model | instructionMode = TraversingInstructions TraversingNodes }
+
+
+setModeToInsertInstruction : Model -> Model
+setModeToInsertInstruction model =
+    { model | instructionMode = InsertingInstruction }
 
 
 update : Msg -> Context rootMsg Msg Model
@@ -297,27 +393,32 @@ update msg =
             Context.update (moveLine direction)
 
         LineEdit ->
-            Debug.todo ""
+            Context.update setModeToInsertInstruction
 
         LineInsertion direction ->
-            Debug.todo ""
+            Context.update (insertFutureInstruction direction >> moveLine direction >> setModeToInsertInstruction)
+
+        ChangeInstructionTo instructionKind ->
+            Context.update (changeInstructionTo instructionKind)
 
         NodeMovement direction ->
             Context.update (moveNode direction)
 
         DeleteLine ->
-            Context.update (\model -> { model | instructions = ZipList.delete model.instructions })
+            Context.update (\model -> { model | instructions = ZipList.deleteAndFocusRight model.instructions })
 
-        SetModeTo mode ->
-            case mode of
-                Moving ->
-                    Context.update (\model -> { model | editingMode = Moving })
+        SetModeTo instructionMode ->
+            case instructionMode of
+                TraversingInstructions nodeMode ->
+                    case nodeMode of
+                        TraversingNodes ->
+                            Context.update setModeToTraversing
 
-                EditingNode ->
-                    Context.update setEditingMode
+                        EditingNode ->
+                            Context.update setModeToEditing
 
                 InsertingInstruction ->
-                    Debug.todo ""
+                    Context.update setModeToInsertInstruction
 
         NodeEdit str ->
             Context.update (updateCurrentNode (\(Node nodeKind _) -> Node nodeKind str))
@@ -336,25 +437,22 @@ update msg =
                             nodes
 
                         else
-                            ZipList.delete nodes
+                            ZipList.deleteAndFocusRight nodes
                     )
                 )
-
-
-editorId : String
-editorId =
-    "my-special-editor"
 
 
 view : Model -> Element Msg
 view ({ instructions } as model) =
     E.column []
-        [ case model.editingMode of
-            Moving ->
-                E.el [] (E.text "Moving")
+        [ case model.instructionMode of
+            TraversingInstructions nodeMode ->
+                case nodeMode of
+                    TraversingNodes ->
+                        E.el [] (E.text "Moving")
 
-            EditingNode ->
-                E.el [] (E.text "Editing")
+                    EditingNode ->
+                        E.el [] (E.text "Editing")
 
             InsertingInstruction ->
                 E.el [] (E.text "Inserting Instruction")
@@ -363,65 +461,130 @@ view ({ instructions } as model) =
                 |> ZipList.mapToList
                     { current =
                         \instruction ->
-                            E.el [ Background.color (E.rgb255 215 215 215) ] (viewInstruction True model.editingMode instruction)
+                            E.el [ Background.color (E.rgb255 215 215 215) ] (viewInstruction True model.instructionMode instruction)
                     , others =
                         \instruction ->
-                            E.el [] (viewInstruction False model.editingMode instruction)
+                            E.el [] (viewInstruction False model.instructionMode instruction)
                     }
             )
         ]
 
 
-viewInstruction : Bool -> Mode -> Instruction -> Element Msg
-viewInstruction isInstructionSelected editingMode instruction =
-    case instruction of
-        Halt ->
-            E.text "Halt"
-
-        Instruction kind nodes ->
-            case kind of
-                LabelKind ->
-                    E.row []
-                        [ E.text "label ", viewNode True isInstructionSelected editingMode (ZipList.current nodes), E.text ":" ]
-
-                OperationApplicationKind ->
-                    E.row []
-                        (case ZipList.mapToTaggedList nodes of
-                            ( isSourceSelected, source ) :: ( isOperationNameSelected, operationName ) :: arguments ->
-                                List.concat
-                                    [ [ viewNode isSourceSelected isInstructionSelected editingMode source
-                                      , E.text " <- "
-                                      , viewNode isOperationNameSelected isInstructionSelected editingMode operationName
-                                      , E.text "("
-                                      ]
-                                    , arguments
-                                        |> List.map (\( isArgSelected, arg ) -> viewNode isArgSelected isInstructionSelected editingMode arg)
-                                        |> List.intersperse (E.text ", ")
-                                    , [ E.text ")" ]
-                                    ]
-
-                            _ ->
-                                [ E.text "error when viewing OperationApplicationKind" ]
-                        )
-
-                AssignmentKind ->
-                    Debug.todo ""
-
-                JumpKind ->
-                    Debug.todo ""
-
-                JumpIfKind ->
-                    Debug.todo ""
-
-                HaltKind ->
-                    Debug.todo ""
-
-                PushKind ->
-                    Debug.todo ""
+viewKeyword : String -> Element Msg
+viewKeyword name =
+    E.el [ Font.heavy ] (E.text name)
 
 
-viewNode : Bool -> Bool -> Mode -> Node -> Element Msg
-viewNode isSelected isInstructionSelected editingMode (Node nodeKind str) =
+viewInstruction : Bool -> InstructionMode -> Instruction -> Element Msg
+viewInstruction isInstructionSelected instructionMode instruction =
+    let
+        viewBareInstruction : NodeMode -> Element Msg
+        viewBareInstruction nodeMode =
+            case instruction of
+                Halt ->
+                    viewKeyword "Halt"
+
+                FutureInstruction _ ->
+                    viewKeyword "---should not be ever displayed---"
+
+                Instruction kind nodes ->
+                    case kind of
+                        LabelKind ->
+                            E.row []
+                                [ viewKeyword "label ", viewNode True isInstructionSelected nodeMode (ZipList.current nodes), viewKeyword ":" ]
+
+                        OperationApplicationKind ->
+                            E.row []
+                                (case ZipList.mapToTaggedList nodes of
+                                    ( isSourceSelected, source ) :: ( isOperationNameSelected, operationName ) :: arguments ->
+                                        List.concat
+                                            [ [ viewNode isSourceSelected isInstructionSelected nodeMode source
+                                              , viewKeyword " <- "
+                                              , viewNode isOperationNameSelected isInstructionSelected nodeMode operationName
+                                              , viewKeyword "("
+                                              ]
+                                            , arguments
+                                                |> List.map (\( isArgSelected, arg ) -> viewNode isArgSelected isInstructionSelected nodeMode arg)
+                                                |> List.intersperse (viewKeyword ", ")
+                                            , [ viewKeyword ")" ]
+                                            ]
+
+                                    _ ->
+                                        [ E.text "error when viewing OperationApplicationKind" ]
+                                )
+
+                        AssignmentKind ->
+                            E.row []
+                                (case ZipList.mapToTaggedList nodes of
+                                    ( isSourceSelected, source ) :: ( isTargetSelected, target ) :: [] ->
+                                        [ viewNode isSourceSelected isInstructionSelected nodeMode source
+                                        , viewKeyword " <- "
+                                        , viewNode isTargetSelected isInstructionSelected nodeMode target
+                                        ]
+
+                                    _ ->
+                                        [ E.text "error when viewing AssignmentKind" ]
+                                )
+
+                        JumpKind ->
+                            E.row []
+                                (case ZipList.mapToTaggedList nodes of
+                                    ( isArgSelected, arg ) :: [] ->
+                                        [ viewKeyword "jump "
+                                        , viewNode isArgSelected isInstructionSelected nodeMode arg
+                                        ]
+
+                                    _ ->
+                                        [ E.text "error when viewing JumpKind" ]
+                                )
+
+                        JumpIfKind ->
+                            E.row []
+                                (case ZipList.mapToTaggedList nodes of
+                                    ( isTestSelected, test ) :: ( isArgSelected, arg ) :: [] ->
+                                        [ viewKeyword "if "
+                                        , viewNode isTestSelected isInstructionSelected nodeMode test
+                                        , viewKeyword " jump "
+                                        , viewNode isArgSelected isInstructionSelected nodeMode arg
+                                        ]
+
+                                    _ ->
+                                        [ E.text "error when viewing JumpIfKind" ]
+                                )
+
+                        HaltKind ->
+                            -- TODO: remove
+                            viewKeyword "Halt"
+
+                        PushKind ->
+                            E.row []
+                                (case ZipList.mapToTaggedList nodes of
+                                    ( isArgSelected, arg ) :: [] ->
+                                        [ viewKeyword "push "
+                                        , viewNode isArgSelected isInstructionSelected nodeMode arg
+                                        ]
+
+                                    _ ->
+                                        [ E.text "error when viewing JumpKind" ]
+                                )
+    in
+    case instructionMode of
+        InsertingInstruction ->
+            if isInstructionSelected then
+                E.row []
+                    ([ E.text "l:label", E.text "a:apply", E.text "<:assign", E.text "j:jump", E.text "i:if-jump", E.text "p:push", E.text "h:halt" ]
+                        |> List.intersperse (E.text " ")
+                    )
+
+            else
+                viewBareInstruction TraversingNodes
+
+        TraversingInstructions nodeMode ->
+            viewBareInstruction nodeMode
+
+
+viewNode : Bool -> Bool -> NodeMode -> Node -> Element Msg
+viewNode isSelected isInstructionSelected nodeMode (Node nodeKind str) =
     let
         viewStr str0 =
             if str == "" then
@@ -431,16 +594,12 @@ viewNode isSelected isInstructionSelected editingMode (Node nodeKind str) =
                 E.text str
     in
     if isSelected && isInstructionSelected then
-        case editingMode of
-            Moving ->
+        case nodeMode of
+            TraversingNodes ->
                 E.el [ Border.width 1, Border.solid ] (viewStr str)
 
             EditingNode ->
                 E.inputCell 19 str NodeEdit
-
-            InsertingInstruction ->
-                -- TODO: I think this should be an impossible state
-                Debug.todo ""
 
     else
         E.el [] (viewStr str)
@@ -486,60 +645,83 @@ subscriptions model =
                     --     wat =
                     --         Debug.log "key == " keyCode
                     -- in
-                    case model.editingMode of
-                        Moving ->
-                            case keyCode of
-                                "k" ->
-                                    Decode.succeed (LineMovement Up)
+                    case model.instructionMode of
+                        TraversingInstructions nodeMode ->
+                            case nodeMode of
+                                TraversingNodes ->
+                                    case keyCode of
+                                        "k" ->
+                                            Decode.succeed (LineMovement Up)
 
-                                "j" ->
-                                    Decode.succeed (LineMovement Down)
+                                        "j" ->
+                                            Decode.succeed (LineMovement Down)
 
-                                "," ->
-                                    Decode.succeed DeleteLine
+                                        "," ->
+                                            Decode.succeed DeleteLine
 
-                                "i" ->
-                                    Decode.succeed LineEdit
+                                        "i" ->
+                                            Decode.succeed LineEdit
 
-                                "h" ->
-                                    Decode.succeed (LineInsertion Down)
+                                        "h" ->
+                                            Decode.succeed (LineInsertion Down)
 
-                                "l" ->
-                                    Decode.succeed (LineInsertion Up)
+                                        "l" ->
+                                            Decode.succeed (LineInsertion Up)
 
-                                "s" ->
-                                    Decode.succeed (NodeMovement Left)
+                                        "s" ->
+                                            Decode.succeed (NodeMovement Left)
 
-                                "d" ->
-                                    Decode.succeed (NodeMovement Right)
+                                        "d" ->
+                                            Decode.succeed (NodeMovement Right)
 
-                                "e" ->
-                                    Decode.succeed (SetModeTo EditingNode)
+                                        "e" ->
+                                            Decode.succeed (SetModeTo (TraversingInstructions EditingNode))
 
-                                "a" ->
-                                    Decode.succeed (NodeInsertion Left)
+                                        "a" ->
+                                            Decode.succeed (NodeInsertion Left)
 
-                                "f" ->
-                                    Decode.succeed (NodeInsertion Right)
+                                        "f" ->
+                                            Decode.succeed (NodeInsertion Right)
 
-                                "x" ->
-                                    Decode.succeed DeleteNode
+                                        "x" ->
+                                            Decode.succeed DeleteNode
 
-                                _ ->
-                                    Decode.fail ""
+                                        _ ->
+                                            Decode.fail ""
 
-                        EditingNode ->
-                            case keyCode of
-                                "Escape" ->
-                                    Decode.succeed (SetModeTo Moving)
+                                EditingNode ->
+                                    case keyCode of
+                                        "Escape" ->
+                                            Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
 
-                                _ ->
-                                    Decode.fail ""
+                                        _ ->
+                                            Decode.fail ""
 
                         InsertingInstruction ->
                             case keyCode of
+                                "l" ->
+                                    Decode.succeed (ChangeInstructionTo LabelKind)
+
+                                "a" ->
+                                    Decode.succeed (ChangeInstructionTo OperationApplicationKind)
+
+                                "<" ->
+                                    Decode.succeed (ChangeInstructionTo AssignmentKind)
+
+                                "j" ->
+                                    Decode.succeed (ChangeInstructionTo JumpKind)
+
+                                "i" ->
+                                    Decode.succeed (ChangeInstructionTo JumpIfKind)
+
+                                "p" ->
+                                    Decode.succeed (ChangeInstructionTo PushKind)
+
+                                "h" ->
+                                    Decode.succeed (ChangeInstructionTo HaltKind)
+
                                 "Escape" ->
-                                    Decode.succeed (SetModeTo InsertingInstruction)
+                                    Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
 
                                 _ ->
                                     Decode.fail ""
