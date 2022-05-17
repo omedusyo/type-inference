@@ -2,6 +2,7 @@ module RegisterMachine.Ui.Editor exposing (..)
 
 import Browser.Dom as Dom
 import Browser.Events as BE
+import Dict exposing (Dict)
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -14,20 +15,6 @@ import Task
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.InputCell as E
-
-
-type WithHole a
-    = Hole
-    | Element a
-
-
-
--- type InputElement =
---     Closed
---   |
--- type LabelElement
---     = Closed
---     |
 
 
 type
@@ -104,10 +91,12 @@ type alias Model =
     }
 
 
+emptyStaticNode : Node
 emptyStaticNode =
     Node Static ""
 
 
+emptyDynamicNode : Node
 emptyDynamicNode =
     Node Dynamic ""
 
@@ -183,19 +172,21 @@ type VerticalDirection
 
 type Msg
     = SetModeTo InstructionMode
-    | LineMovement VerticalDirection
-    | LineEdit
-    | LineInsertion VerticalDirection
+      -- Instructions
+    | InstructionMovement VerticalDirection
+    | InstructionEdit
+    | InstructionInsertion VerticalDirection
     | ChangeInstructionTo InstructionKind
+    | DeleteInstruction
+      -- Nodes
     | NodeMovement HorizontalDirection
-    | DeleteLine
     | NodeEdit String
     | NodeInsertion HorizontalDirection
     | DeleteNode
 
 
-moveLine : VerticalDirection -> Model -> Model
-moveLine direction model =
+moveInstruction : VerticalDirection -> Model -> Model
+moveInstruction direction model =
     { model
         | instructions =
             case direction of
@@ -335,8 +326,8 @@ isCurrentNodeStatic nodes =
             False
 
 
-deleteCurrentLine : Model -> Model
-deleteCurrentLine model =
+deleteCurrentInstruction : Model -> Model
+deleteCurrentInstruction model =
     { model
         | instructions =
             case ZipList.current model.instructions of
@@ -375,7 +366,7 @@ setModeToTraversing model =
     case ZipList.current model.instructions of
         FutureInstruction direction ->
             { model | instructionMode = TraversingInstructions TraversingNodes }
-                |> deleteCurrentLine
+                |> deleteCurrentInstruction
 
         _ ->
             { model | instructionMode = TraversingInstructions TraversingNodes }
@@ -389,14 +380,14 @@ setModeToInsertInstruction model =
 update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
-        LineMovement direction ->
-            Context.update (moveLine direction)
+        InstructionMovement direction ->
+            Context.update (moveInstruction direction)
 
-        LineEdit ->
+        InstructionEdit ->
             Context.update setModeToInsertInstruction
 
-        LineInsertion direction ->
-            Context.update (insertFutureInstruction direction >> moveLine direction >> setModeToInsertInstruction)
+        InstructionInsertion direction ->
+            Context.update (insertFutureInstruction direction >> moveInstruction direction >> setModeToInsertInstruction)
 
         ChangeInstructionTo instructionKind ->
             Context.update (changeInstructionTo instructionKind)
@@ -404,7 +395,7 @@ update msg =
         NodeMovement direction ->
             Context.update (moveNode direction)
 
-        DeleteLine ->
+        DeleteInstruction ->
             Context.update (\model -> { model | instructions = ZipList.deleteAndFocusRight model.instructions })
 
         SetModeTo instructionMode ->
@@ -583,6 +574,7 @@ viewInstruction isInstructionSelected instructionMode instruction =
                         ([ E.row [] [ viewKeyword "a:", E.text "apply" ]
                          , E.row [] [ viewKeyword "s:", E.text "assign" ]
                          , E.row [] [ viewKeyword "d:", E.text "push" ]
+                         , E.row [] [ viewKeyword "f:", E.text "halt" ]
                          ]
                             |> List.intersperse (E.text " ")
                         )
@@ -647,6 +639,42 @@ viewHole =
         (E.text "")
 
 
+type alias KeyCode =
+    String
+
+
+traverseModeKeyBindings : Dict KeyCode Msg
+traverseModeKeyBindings =
+    Dict.fromList
+        [ ( "k", InstructionMovement Up )
+        , ( "j", InstructionMovement Down )
+        , ( ",", DeleteInstruction )
+        , ( "i", InstructionEdit )
+        , ( "h", InstructionInsertion Down )
+        , ( "l", InstructionInsertion Up )
+        , ( "s", NodeMovement Left )
+        , ( "d", NodeMovement Right )
+        , ( "e", SetModeTo (TraversingInstructions EditingNode) )
+        , ( "a", NodeInsertion Left )
+        , ( "f", NodeInsertion Right )
+        , ( "x", DeleteNode )
+        ]
+
+
+insertionModeKeyBindings : Dict KeyCode InstructionKind
+insertionModeKeyBindings =
+    Dict.fromList
+        [ ( "q", LabelKind )
+        , ( "l", LabelKind )
+        , ( "w", JumpKind )
+        , ( "e", JumpIfKind )
+        , ( "a", OperationApplicationKind )
+        , ( "s", AssignmentKind )
+        , ( "d", PushKind )
+        , ( "f", HaltKind )
+        ]
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     BE.onKeyUp
@@ -661,44 +689,11 @@ subscriptions model =
                         TraversingInstructions nodeMode ->
                             case nodeMode of
                                 TraversingNodes ->
-                                    case keyCode of
-                                        "k" ->
-                                            Decode.succeed (LineMovement Up)
+                                    case Dict.get keyCode traverseModeKeyBindings of
+                                        Just msg ->
+                                            Decode.succeed msg
 
-                                        "j" ->
-                                            Decode.succeed (LineMovement Down)
-
-                                        "," ->
-                                            Decode.succeed DeleteLine
-
-                                        "i" ->
-                                            Decode.succeed LineEdit
-
-                                        "h" ->
-                                            Decode.succeed (LineInsertion Down)
-
-                                        "l" ->
-                                            Decode.succeed (LineInsertion Up)
-
-                                        "s" ->
-                                            Decode.succeed (NodeMovement Left)
-
-                                        "d" ->
-                                            Decode.succeed (NodeMovement Right)
-
-                                        "e" ->
-                                            Decode.succeed (SetModeTo (TraversingInstructions EditingNode))
-
-                                        "a" ->
-                                            Decode.succeed (NodeInsertion Left)
-
-                                        "f" ->
-                                            Decode.succeed (NodeInsertion Right)
-
-                                        "x" ->
-                                            Decode.succeed DeleteNode
-
-                                        _ ->
+                                        Nothing ->
                                             Decode.fail ""
 
                                 EditingNode ->
@@ -710,35 +705,16 @@ subscriptions model =
                                             Decode.fail ""
 
                         InsertingInstruction ->
-                            case keyCode of
-                                "q" ->
-                                    Decode.succeed (ChangeInstructionTo LabelKind)
+                            case Dict.get keyCode insertionModeKeyBindings of
+                                Just instructionKind ->
+                                    Decode.succeed (ChangeInstructionTo instructionKind)
 
-                                "l" ->
-                                    Decode.succeed (ChangeInstructionTo LabelKind)
+                                Nothing ->
+                                    case keyCode of
+                                        "Escape" ->
+                                            Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
 
-                                "w" ->
-                                    Decode.succeed (ChangeInstructionTo JumpKind)
-
-                                "e" ->
-                                    Decode.succeed (ChangeInstructionTo JumpIfKind)
-
-                                "a" ->
-                                    Decode.succeed (ChangeInstructionTo OperationApplicationKind)
-
-                                "s" ->
-                                    Decode.succeed (ChangeInstructionTo AssignmentKind)
-
-                                "d" ->
-                                    Decode.succeed (ChangeInstructionTo PushKind)
-
-                                "f" ->
-                                    Decode.succeed (ChangeInstructionTo HaltKind)
-
-                                "Escape" ->
-                                    Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
-
-                                _ ->
-                                    Decode.fail ""
+                                        _ ->
+                                            Decode.fail ""
                 )
         )
