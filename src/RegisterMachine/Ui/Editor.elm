@@ -11,57 +11,25 @@ import Element.Font as Font
 import Element.Input as Input
 import Json.Decode as Decode
 import Lib.ZipList as ZipList exposing (ZipList)
+import RegisterMachine.Ui.Base as Base
+    exposing
+        ( HorizontalDirection(..)
+        , Instruction(..)
+        , InstructionKind(..)
+        , Node(..)
+        , NodeKind(..)
+        , VerticalDirection(..)
+        , initialInstruction
+        , initialInstructionValidity
+        )
+import RegisterMachine.Ui.Validation as Validation exposing (validatedInstruction)
 import Task
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.InputCell as E
 
 
-type
-    InstructionKind
-    -- contains only instruction kinds for instructions that have atleast one node
-    = LabelKind
-    | OperationApplicationKind
-    | AssignmentKind
-    | JumpKind
-    | JumpIfKind
-    | PushKind
-    | HaltKind
 
-
-type NodeKind
-    = Static
-    | Dynamic
-
-
-type Node
-    = Node NodeKind String
-
-
-type RegisterUse
-    = WAt1
-
-
-type ReturnsValue
-    = -- Register Use, Constant, Label
-      Wat2
-
-
-type ReturnsLabel
-    = -- RegisterUse (that contains a label) or a label
-      Wat
-
-
-type
-    Source
-    -- Register Use, Constant, Label
-    -- Operation Application
-    = NADA
-
-
-
--- type Value =
---   Label Constant Register
 --===UI===
 
 
@@ -75,81 +43,25 @@ type NodeMode
     | EditingNode
 
 
-type Instruction
-    = Instruction InstructionKind (ZipList Node)
-    | Halt
-      -- The only way to have a future instruction is when the user wishes to insert a completely new instruction.
-      -- Then we temporarily create the FutureInstruction until the user decides with which concerete instructio to replace it with.
-      -- But if the user presses Esc during his decision, the current FutureInstruction should be deleted.
-      -- After the deletion in which direction should we move to? Up or Down? That's why we have the VerticalDirection argument.
-    | FutureInstruction VerticalDirection
-
-
 type alias Model =
     { instructions : ZipList Instruction
     , instructionMode : InstructionMode
     }
 
 
-emptyStaticNode : Node
-emptyStaticNode =
-    Node Static ""
-
-
-emptyDynamicNode : Node
-emptyDynamicNode =
-    Node Dynamic ""
-
-
-initialInstruction : InstructionKind -> Instruction
-initialInstruction instructionKind =
-    case instructionKind of
-        LabelKind ->
-            -- label _
-            Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [])
-
-        OperationApplicationKind ->
-            -- _ <- _(_)
-            Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [ emptyStaticNode, emptyDynamicNode ])
-
-        AssignmentKind ->
-            -- _ <- _
-            Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [ emptyStaticNode ])
-
-        JumpKind ->
-            -- jump _
-            Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [])
-
-        JumpIfKind ->
-            -- if _ jump _
-            Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [ emptyStaticNode ])
-
-        HaltKind ->
-            Halt
-
-        PushKind ->
-            Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [])
-
-
 instruction0 : Instruction
 instruction0 =
-    Instruction OperationApplicationKind (ZipList.fromList (Node Static "") [ Node Static "", Node Dynamic "", Node Dynamic "", Node Dynamic "" ])
+    Instruction OperationApplicationKind (ZipList.fromList (Node Static "") [ Node Static "", Node Dynamic "", Node Dynamic "", Node Dynamic "" ]) initialInstructionValidity
 
 
 instruction1 : Instruction
 instruction1 =
-    Instruction OperationApplicationKind (ZipList.fromList (Node Static "") [ Node Static "", Node Dynamic "" ])
+    Instruction OperationApplicationKind (ZipList.fromList (Node Static "") [ Node Static "", Node Dynamic "" ]) initialInstructionValidity
 
 
 instruction2 : Instruction
 instruction2 =
-    Instruction LabelKind (ZipList.fromList (Node Static "") [])
+    Instruction LabelKind (ZipList.fromList (Node Static "") []) initialInstructionValidity
 
 
 init : InitContext Msg Model
@@ -158,16 +70,6 @@ init =
         { instructions = ZipList.fromList instruction0 [ instruction1, instruction2, Halt ]
         , instructionMode = TraversingInstructions TraversingNodes
         }
-
-
-type HorizontalDirection
-    = Left
-    | Right
-
-
-type VerticalDirection
-    = Up
-    | Down
 
 
 type Msg
@@ -236,13 +138,13 @@ moveNode direction model =
                 |> ZipList.updateCurrent
                     (\instruction ->
                         case instruction of
-                            Instruction kind nodes ->
+                            Instruction kind nodes _ ->
                                 case direction of
                                     Left ->
-                                        Instruction kind (nodes |> ZipList.left)
+                                        validatedInstruction kind (nodes |> ZipList.left)
 
                                     Right ->
-                                        Instruction kind (nodes |> ZipList.right)
+                                        validatedInstruction kind (nodes |> ZipList.right)
 
                             _ ->
                                 instruction
@@ -264,8 +166,9 @@ updateCurrentNodes f =
     updateCurrentInstruction
         (\instruction ->
             case instruction of
-                Instruction instructionKind nodes ->
-                    Instruction instructionKind (f nodes instruction)
+                -- TODO: Should I recompute validation here, or should I rely that it will get validated properly somewhere else?
+                Instruction instructionKind nodes validation ->
+                    Instruction instructionKind (f nodes instruction) validation
 
                 _ ->
                     instruction
@@ -275,7 +178,7 @@ updateCurrentNodes f =
 getCurrentNodes : Model -> Maybe (ZipList Node)
 getCurrentNodes model =
     case ZipList.current model.instructions of
-        Instruction _ nodes ->
+        Instruction _ nodes _ ->
             Just nodes
 
         _ ->
@@ -292,11 +195,13 @@ updateCurrentNode f =
     updateCurrentInstruction
         (\instruction ->
             case instruction of
-                Instruction instructionKind nodes ->
+                Instruction instructionKind nodes validation ->
+                    -- TODO: Should I validate the instruction? Or should I rely that it will get validated eventually?
                     Instruction instructionKind
                         (nodes
                             |> ZipList.updateCurrent f
                         )
+                        validation
 
                 _ ->
                     instruction
@@ -362,7 +267,7 @@ deleteCurrentInstruction model =
 setModeToEditing : Model -> Model
 setModeToEditing model =
     case ZipList.current model.instructions of
-        Instruction _ _ ->
+        Instruction _ _ _ ->
             { model | instructionMode = TraversingInstructions EditingNode }
 
         _ ->
@@ -384,6 +289,7 @@ setModeToTraversing model =
                 |> deleteCurrentInstruction
 
         _ ->
+            -- TODO: You need to validate the instruction
             { model | instructionMode = TraversingInstructions TraversingNodes }
 
 
@@ -436,6 +342,7 @@ update msg =
             Context.update (insertAndEditNode direction)
 
         DeleteNode ->
+            -- TODO: Don't forget to re-validate
             Context.update
                 (updateCurrentNodes
                     -- You can delete a dynamic node. You can't delete a static node.
@@ -445,7 +352,7 @@ update msg =
 
                         else
                             case currentInstruction of
-                                Instruction OperationApplicationKind _ ->
+                                Instruction OperationApplicationKind _ _ ->
                                     -- But you can't delete every dynamic node.
                                     -- If the current instruction is application, then we can't allow empty argument list
                                     if ZipList.length nodes <= 3 then
@@ -505,7 +412,8 @@ viewInstruction isInstructionSelected instructionMode instruction =
                 FutureInstruction _ ->
                     viewKeyword "---should not be ever displayed---"
 
-                Instruction kind nodes ->
+                Instruction kind nodes validation ->
+                    -- TODO: Display the validation information
                     case kind of
                         LabelKind ->
                             E.row []
@@ -664,6 +572,10 @@ viewHole =
         , Background.color (E.rgb255 183 183 183)
         ]
         (E.text "")
+
+
+
+-- ===Keybindings===
 
 
 type alias KeyCode =
