@@ -24,6 +24,7 @@ import RegisterMachine.Ui.Base as Base
         , initialInstruction
         , initialInstructionValidity
         )
+import RegisterMachine.Ui.Color as Color
 import RegisterMachine.Ui.Validation as Validation exposing (validatedInstruction)
 import Task
 import Ui.Control.Context as Context exposing (Config, Context)
@@ -574,14 +575,38 @@ viewInstruction isInstructionSelected instructionMode instruction =
 
 
 viewNode : Bool -> Bool -> NodeMode -> Node -> Element Msg
-viewNode isSelected isInstructionSelected nodeMode (Node nodeKind nodeValidation nodeExpectation str) =
+viewNode isSelected isInstructionSelected nodeMode (Node _ nodeValidation nodeExpectation str) =
     let
         viewStr str0 =
-            if str == "" then
-                viewHole
+            case nodeValidation of
+                UnfinishedNode ->
+                    viewHole
 
-            else
-                E.text str
+                ErrorNode ->
+                    E.el [ Background.color Color.error ] (E.text str0)
+
+                ValidNode entityKind ->
+                    case entityKind of
+                        Base.RegisterName ->
+                            E.el [ Font.color Color.register ] (E.text str0)
+
+                        Base.RegisterUse ->
+                            E.el [ Font.color Color.register ] (E.text str0)
+
+                        Base.Label ->
+                            E.el [ Font.color Color.label ] (E.text str0)
+
+                        Base.LabelUse ->
+                            E.el [ Font.color Color.label ] (E.text str0)
+
+                        Base.Integer ->
+                            E.el [] (E.text str0)
+
+                        Base.Nil ->
+                            E.el [] (E.text str0)
+
+                        Base.OperationName ->
+                            E.el [] (E.text str0)
     in
     if isSelected && isInstructionSelected then
         case nodeMode of
