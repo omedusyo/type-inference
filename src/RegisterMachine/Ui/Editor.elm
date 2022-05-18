@@ -130,21 +130,21 @@ insertFutureInstruction direction model =
     }
 
 
-moveNode : HorizontalDirection -> Model -> Model
-moveNode direction model =
+traverseNodes : HorizontalDirection -> Model -> Model
+traverseNodes direction model =
     { model
         | instructions =
             model.instructions
                 |> ZipList.updateCurrent
                     (\instruction ->
                         case instruction of
-                            Instruction kind nodes _ ->
+                            Instruction kind nodes validation ->
                                 case direction of
                                     Left ->
-                                        validatedInstruction kind (nodes |> ZipList.left)
+                                        Instruction kind (nodes |> ZipList.left) validation
 
                                     Right ->
-                                        validatedInstruction kind (nodes |> ZipList.right)
+                                        Instruction kind (nodes |> ZipList.right) validation
 
                             _ ->
                                 instruction
@@ -152,8 +152,8 @@ moveNode direction model =
     }
 
 
-updateCurrentInstruction : (Instruction -> Instruction) -> Model -> Model
-updateCurrentInstruction f model =
+updateCurrentInstructionWithoutValidation : (Instruction -> Instruction) -> Model -> Model
+updateCurrentInstructionWithoutValidation f model =
     { model
         | instructions =
             model.instructions
@@ -161,12 +161,11 @@ updateCurrentInstruction f model =
     }
 
 
-updateCurrentNodes : (ZipList Node -> Instruction -> ZipList Node) -> Model -> Model
-updateCurrentNodes f =
-    updateCurrentInstruction
+updateCurrentNodesWithoutValidation : (ZipList Node -> Instruction -> ZipList Node) -> Model -> Model
+updateCurrentNodesWithoutValidation f =
+    updateCurrentInstructionWithoutValidation
         (\instruction ->
             case instruction of
-                -- TODO: Should I recompute validation here, or should I rely that it will get validated properly somewhere else?
                 Instruction instructionKind nodes validation ->
                     Instruction instructionKind (f nodes instruction) validation
 
@@ -185,37 +184,32 @@ getCurrentNodes model =
             Nothing
 
 
-setCurrentNodes : ZipList Node -> Model -> Model
-setCurrentNodes nodes =
-    updateCurrentNodes (\_ _ -> nodes)
+setCurrentNodesWithoutValidation : ZipList Node -> Model -> Model
+setCurrentNodesWithoutValidation nodes =
+    updateCurrentNodesWithoutValidation (\_ _ -> nodes)
 
 
-updateCurrentNode : (Node -> Node) -> Model -> Model
-updateCurrentNode f =
-    updateCurrentInstruction
+updateCurrentNodeWithoutValidation : (Node -> Node) -> Model -> Model
+updateCurrentNodeWithoutValidation f =
+    updateCurrentInstructionWithoutValidation
         (\instruction ->
             case instruction of
                 Instruction instructionKind nodes validation ->
-                    -- TODO: Should I validate the instruction? Or should I rely that it will get validated eventually?
-                    Instruction instructionKind
-                        (nodes
-                            |> ZipList.updateCurrent f
-                        )
-                        validation
+                    Instruction instructionKind (nodes |> ZipList.updateCurrent f) validation
 
                 _ ->
                     instruction
         )
 
 
-insertAndEditNode : HorizontalDirection -> Model -> Model
-insertAndEditNode direction model =
+insertAndEditNodeWithoutValidation : HorizontalDirection -> Model -> Model
+insertAndEditNodeWithoutValidation direction model =
     case getCurrentNodes model of
         Just nodes ->
             case ZipList.current nodes of
                 Node Dynamic str ->
                     model
-                        |> setCurrentNodes
+                        |> setCurrentNodesWithoutValidation
                             (case direction of
                                 Left ->
                                     nodes
@@ -233,6 +227,36 @@ insertAndEditNode direction model =
                     model
 
         Nothing ->
+            model
+
+
+deleteCurrentNodeWithValidation : Model -> Model
+deleteCurrentNodeWithValidation model =
+    case ZipList.current model.instructions of
+        Instruction instructionKind nodes _ ->
+            -- You can delete a dynamic node. You can't delete a static node.
+            if isCurrentNodeStatic nodes then
+                model
+
+            else
+                case instructionKind of
+                    OperationApplicationKind ->
+                        if ZipList.length nodes <= 3 then
+                            model
+
+                        else
+                            -- But you can't delete every dynamic node.
+                            -- If the current instruction is application, then we can't allow empty argument list
+                            model
+                                |> setCurrentNodesWithoutValidation (ZipList.deleteAndFocusRight nodes)
+                                |> validateCurrentInstruction
+
+                    _ ->
+                        model
+                            |> setCurrentNodesWithoutValidation (ZipList.deleteAndFocusRight nodes)
+                            |> validateCurrentInstruction
+
+        _ ->
             model
 
 
@@ -274,10 +298,10 @@ setModeToEditing model =
             model
 
 
-changeInstructionTo : InstructionKind -> Model -> Model
-changeInstructionTo instructionKind model =
+changeInstructionWithoutValidationTo : InstructionKind -> Model -> Model
+changeInstructionWithoutValidationTo instructionKind model =
     model
-        |> updateCurrentInstruction (\_ -> initialInstruction instructionKind)
+        |> updateCurrentInstructionWithoutValidation (\_ -> initialInstruction instructionKind)
         |> setModeToTraversing
 
 
@@ -289,13 +313,38 @@ setModeToTraversing model =
                 |> deleteCurrentInstruction
 
         _ ->
-            -- TODO: You need to validate the instruction
-            { model | instructionMode = TraversingInstructions TraversingNodes }
+            case model.instructionMode of
+                InsertingInstruction ->
+                    { model | instructionMode = TraversingInstructions TraversingNodes }
+
+                _ ->
+                    { model | instructionMode = TraversingInstructions TraversingNodes }
+                        |> validateCurrentInstruction
 
 
 setModeToInsertInstruction : Model -> Model
 setModeToInsertInstruction model =
     { model | instructionMode = InsertingInstruction }
+
+
+validateCurrentInstruction : Model -> Model
+validateCurrentInstruction =
+    updateCurrentInstructionWithoutValidation
+        (\instruction ->
+            case instruction of
+                Instruction instructionKind nodes _ ->
+                    validatedInstruction instructionKind nodes
+
+                Halt ->
+                    instruction
+
+                FutureInstruction _ ->
+                    instruction
+        )
+
+
+
+-- TODO: INSTRUCTION or VALIDATED INSTRUCTION - THE LINE
 
 
 update : Msg -> Context rootMsg Msg Model
@@ -314,10 +363,10 @@ update msg =
             Context.update (insertFutureInstruction direction >> moveInstruction direction >> setModeToInsertInstruction)
 
         ChangeInstructionTo instructionKind ->
-            Context.update (changeInstructionTo instructionKind)
+            Context.update (changeInstructionWithoutValidationTo instructionKind >> validateCurrentInstruction)
 
         NodeMovement direction ->
-            Context.update (moveNode direction)
+            Context.update (traverseNodes direction)
 
         DeleteInstruction ->
             Context.update (\model -> { model | instructions = ZipList.deleteAndFocusRight model.instructions })
@@ -336,35 +385,13 @@ update msg =
                     Context.update setModeToInsertInstruction
 
         NodeEdit str ->
-            Context.update (updateCurrentNode (\(Node nodeKind _) -> Node nodeKind str))
+            Context.update (updateCurrentNodeWithoutValidation (\(Node nodeKind _) -> Node nodeKind str))
 
         NodeInsertion direction ->
-            Context.update (insertAndEditNode direction)
+            Context.update (insertAndEditNodeWithoutValidation direction)
 
         DeleteNode ->
-            -- TODO: Don't forget to re-validate
-            Context.update
-                (updateCurrentNodes
-                    -- You can delete a dynamic node. You can't delete a static node.
-                    (\nodes currentInstruction ->
-                        if isCurrentNodeStatic nodes then
-                            nodes
-
-                        else
-                            case currentInstruction of
-                                Instruction OperationApplicationKind _ _ ->
-                                    -- But you can't delete every dynamic node.
-                                    -- If the current instruction is application, then we can't allow empty argument list
-                                    if ZipList.length nodes <= 3 then
-                                        nodes
-
-                                    else
-                                        ZipList.deleteAndFocusRight nodes
-
-                                _ ->
-                                    ZipList.deleteAndFocusRight nodes
-                    )
-                )
+            Context.update deleteCurrentNodeWithValidation
 
 
 view : Model -> Element Msg
