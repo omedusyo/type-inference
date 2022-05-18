@@ -438,19 +438,16 @@ update msg =
         DeleteNode ->
             Context.update
                 (updateCurrentNodes
-                    -- TODO: Nope... you can delete a dynamic node. You can't delete a static node.
-                    -- But you can't delete every dynamic node.
-                    -- You can only delete a dynamic node whose left neighbour is dynamic
+                    -- You can delete a dynamic node. You can't delete a static node.
                     (\nodes currentInstruction ->
                         if isCurrentNodeStatic nodes then
                             nodes
 
                         else
-                            -- TODO: I need access to the current instruction
                             case currentInstruction of
                                 Instruction OperationApplicationKind _ ->
-                                    -- case ZipList.current nodes of
-                                    -- || ZipList.isSingleton nodes
+                                    -- But you can't delete every dynamic node.
+                                    -- If the current instruction is application, then we can't allow empty argument list
                                     if ZipList.length nodes <= 3 then
                                         nodes
 
