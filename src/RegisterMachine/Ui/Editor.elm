@@ -259,13 +259,13 @@ updateCurrentInstruction f model =
     }
 
 
-updateCurrentNodes : (ZipList Node -> ZipList Node) -> Model -> Model
+updateCurrentNodes : (ZipList Node -> Instruction -> ZipList Node) -> Model -> Model
 updateCurrentNodes f =
     updateCurrentInstruction
         (\instruction ->
             case instruction of
                 Instruction instructionKind nodes ->
-                    Instruction instructionKind (f nodes)
+                    Instruction instructionKind (f nodes instruction)
 
                 _ ->
                     instruction
@@ -284,7 +284,7 @@ getCurrentNodes model =
 
 setCurrentNodes : ZipList Node -> Model -> Model
 setCurrentNodes nodes =
-    updateCurrentNodes (\_ -> nodes)
+    updateCurrentNodes (\_ _ -> nodes)
 
 
 updateCurrentNode : (Node -> Node) -> Model -> Model
@@ -441,12 +441,24 @@ update msg =
                     -- TODO: Nope... you can delete a dynamic node. You can't delete a static node.
                     -- But you can't delete every dynamic node.
                     -- You can only delete a dynamic node whose left neighbour is dynamic
-                    (\nodes ->
-                        if isCurrentNodeStatic nodes || ZipList.isSingleton nodes then
+                    (\nodes currentInstruction ->
+                        if isCurrentNodeStatic nodes then
                             nodes
 
                         else
-                            ZipList.deleteAndFocusRight nodes
+                            -- TODO: I need access to the current instruction
+                            case currentInstruction of
+                                Instruction OperationApplicationKind _ ->
+                                    -- case ZipList.current nodes of
+                                    -- || ZipList.isSingleton nodes
+                                    if ZipList.length nodes <= 3 then
+                                        nodes
+
+                                    else
+                                        ZipList.deleteAndFocusRight nodes
+
+                                _ ->
+                                    ZipList.deleteAndFocusRight nodes
                     )
                 )
 

@@ -22,6 +22,11 @@ singleton a =
     ( [], a, [] )
 
 
+length : ZipList a -> Int
+length ( revLeft0, _, right0 ) =
+    List.length revLeft0 + List.length right0 + 1
+
+
 toList : ZipList a -> List a
 toList ( revLeft, x, right0 ) =
     List.reverse revLeft ++ (x :: right0)
