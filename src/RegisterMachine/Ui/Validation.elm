@@ -1,19 +1,25 @@
 module RegisterMachine.Ui.Validation exposing (validatedInstruction)
 
+import Lib.Break as Break
 import Lib.ZipList as ZipList exposing (ZipList)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import RegisterMachine.Ui.Base as Base
     exposing
         ( EntityKind(..)
-        , Expectations
         , ExpectedArity(..)
         , Instruction(..)
         , InstructionKind(..)
         , InstructionValidity(..)
         , Node(..)
-        , NodePosition
-        , NodeValidation(..)
+        , NodeExpectations
+        , NodeValidity(..)
         )
+
+
+setNodeValidity : NodeValidity -> Node -> Node
+setNodeValidity nodeValidity (Node nodeKind _ nodeExpectation text) =
+    Node nodeKind nodeValidity nodeExpectation text
 
 
 wrongArity : ExpectedArity -> Int -> InstructionValidity
@@ -21,24 +27,32 @@ wrongArity expected received =
     WrongArity { expected = expected, received = received }
 
 
-validateNode : NodePosition -> String -> Expectations -> NodeValidation
-validateNode position text expectations0 =
+validatedNode : Node -> Node
+validatedNode ((Node _ _ allExpectations text) as node) =
+    let
+        loop : EntityKind -> NodeExpectations -> Node
+        loop entityKind0 expectations0 =
+            if hasEntityKind text entityKind0 then
+                node |> setNodeValidity (ValidNode entityKind0)
+
+            else
+                case expectations0 of
+                    [] ->
+                        node |> setNodeValidity ErrorNode
+
+                    entityKind1 :: expectations1 ->
+                        loop entityKind1 expectations1
+    in
     if isEmpty text then
-        NodeIsUnfinished position
+        node |> setNodeValidity UnfinishedNode
 
     else
-        case expectations0 of
-            ( entityKind, entities0 ) ->
-                if hasEntityKind text entityKind then
-                    NodeIsValid
+        case allExpectations of
+            [] ->
+                Debug.todo "This should never get triggered assuming someone doesn't create empty node-expectation"
 
-                else
-                    case entities0 of
-                        [] ->
-                            NodeIsInvalid position expectations0
-
-                        entityKind1 :: entities1 ->
-                            validateNode position text ( entityKind1, entities1 )
+            entityKind :: expectations0 ->
+                loop entityKind expectations0
 
 
 isEmpty : String -> Bool
@@ -93,13 +107,45 @@ hasEntityKind text entityKind =
             True
 
 
-instructionValidity : List NodeValidation -> InstructionValidity
-instructionValidity nodesValidation =
-    if List.isEmpty nodesValidation then
-        Finished
+nodesToInstructionValidity : List Node -> InstructionValidity
+nodesToInstructionValidity nodes =
+    let
+        nonValidNodes : List Node
+        nonValidNodes =
+            nodes
+                |> List.filter
+                    (\(Node _ nodeValidity _ _) ->
+                        case nodeValidity of
+                            ValidNode _ ->
+                                False
+
+                            _ ->
+                                True
+                    )
+    in
+    if List.isEmpty nonValidNodes then
+        EveryNodeIsValid
 
     else
-        InvalidOrUnfinishedNodes nodesValidation
+        let
+            containsErrorNode : Bool
+            containsErrorNode =
+                nonValidNodes
+                    |> List.any
+                        (\(Node _ nodeValidity _ _) ->
+                            case nodeValidity of
+                                ErrorNode ->
+                                    True
+
+                                _ ->
+                                    False
+                        )
+        in
+        if containsErrorNode then
+            ContainsErrorNodes
+
+        else
+            ContainsUnfinishedNodes
 
 
 
@@ -108,78 +154,71 @@ instructionValidity nodesValidation =
 
 validatedInstruction : InstructionKind -> ZipList Node -> Instruction
 validatedInstruction instructionKind nodes =
-    Instruction instructionKind nodes (validateInstruction instructionKind nodes)
+    let
+        ( validatedNodes, instructionValidity ) =
+            validateInstruction instructionKind nodes
+
+        _ =
+            -- TODO: remove
+            Debug.log "" ( instructionValidity, validatedNodes |> ZipList.toList )
+    in
+    Instruction instructionKind validatedNodes instructionValidity
 
 
-validateInstruction : InstructionKind -> ZipList Node -> InstructionValidity
+validateInstruction : InstructionKind -> ZipList Node -> ( ZipList Node, InstructionValidity )
 validateInstruction instructionKind nodes =
     let
-        wat =
-            Debug.log "performing validation" ""
-    in
-    case instructionKind of
-        LabelKind ->
-            case ZipList.current nodes of
-                Node _ label ->
-                    instructionValidity
-                        [ validateNode 0 label ( Label, [] ) ]
+        numOfNodes : Int
+        numOfNodes =
+            ZipList.length nodes
 
-        OperationApplicationKind ->
-            let
-                argExpectation : Expectations
-                argExpectation =
-                    ( RegisterUse, [ LabelUse, Integer, Nil ] )
-            in
-            case ZipList.toList nodes of
-                (Node _ source) :: (Node _ opName) :: argNodes ->
-                    if List.length argNodes > 0 then
+        validatedNodes : ZipList Node
+        validatedNodes =
+            nodes |> ZipList.map validatedNode
+
+        instructionValidity : InstructionValidity
+        instructionValidity =
+            nodesToInstructionValidity (ZipList.toList validatedNodes)
+
+        checkArity : ExpectedArity -> InstructionValidity
+        checkArity expectedArity =
+            case expectedArity of
+                Atleast expectedNumOfNodes ->
+                    if numOfNodes >= expectedNumOfNodes then
                         instructionValidity
-                            ([ validateNode 0 source ( RegisterName, [] )
-                             , validateNode 1 opName ( OperationName, [] )
-                             ]
-                                ++ (argNodes |> List.indexedMap (\i (Node _ arg) -> validateNode (i + 2) arg argExpectation))
-                            )
 
                     else
-                        wrongArity (Atleast 3) (ZipList.length nodes)
+                        wrongArity (Atleast expectedNumOfNodes) numOfNodes
 
-                _ ->
-                    wrongArity (Atleast 3) (ZipList.length nodes)
+                Exactly expectedNumOfNodes ->
+                    if numOfNodes == expectedNumOfNodes then
+                        instructionValidity
 
-        AssignmentKind ->
-            case ZipList.toList nodes of
-                (Node _ source) :: (Node _ arg) :: [] ->
-                    instructionValidity
-                        [ validateNode 0 source ( RegisterName, [] )
-                        , validateNode 1 arg ( RegisterUse, [ LabelUse, Integer, Nil ] )
-                        ]
+                    else
+                        wrongArity (Exactly expectedNumOfNodes) numOfNodes
+    in
+    ( validatedNodes
+    , checkArity
+        (case instructionKind of
+            LabelKind ->
+                Exactly 1
 
-                _ ->
-                    wrongArity (Exactly 2) (ZipList.length nodes)
+            OperationApplicationKind ->
+                Atleast 3
 
-        JumpKind ->
-            case ZipList.current nodes of
-                Node _ arg ->
-                    instructionValidity
-                        [ validateNode 0 arg ( RegisterUse, [ LabelUse ] ) ]
+            AssignmentKind ->
+                Exactly 2
 
-        JumpIfKind ->
-            case ZipList.toList nodes of
-                (Node _ test) :: (Node _ arg) :: [] ->
-                    instructionValidity
-                        [ validateNode 0 arg ( RegisterUse, [] )
-                        , validateNode 1 arg ( RegisterUse, [ LabelUse ] )
-                        ]
+            JumpKind ->
+                Exactly 1
 
-                _ ->
-                    wrongArity (Exactly 2) (ZipList.length nodes)
+            JumpIfKind ->
+                Exactly 2
 
-        PushKind ->
-            case ZipList.current nodes of
-                Node _ arg ->
-                    instructionValidity
-                        [ validateNode 0 arg ( RegisterUse, [ LabelUse, Integer, Nil ] ) ]
+            PushKind ->
+                Exactly 1
 
-        HaltKind ->
-            -- TODO: You should remove HaltKind from the InstructionKind
-            Debug.todo ""
+            HaltKind ->
+                Exactly 0
+        )
+    )

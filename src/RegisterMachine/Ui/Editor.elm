@@ -18,7 +18,9 @@ import RegisterMachine.Ui.Base as Base
         , InstructionKind(..)
         , Node(..)
         , NodeKind(..)
+        , NodeValidity(..)
         , VerticalDirection(..)
+        , emptyNode
         , initialInstruction
         , initialInstructionValidity
         )
@@ -49,19 +51,39 @@ type alias Model =
     }
 
 
+
+-- TODO: Delete the below test instructions/functions
+
+
+src =
+    emptyNode Static Base.registerExpectation
+
+
+opName =
+    emptyNode Static Base.operationNameExpectation
+
+
+argDyn =
+    emptyNode Dynamic Base.argExpectation
+
+
+lbl =
+    emptyNode Static Base.labelExpectation
+
+
 instruction0 : Instruction
 instruction0 =
-    Instruction OperationApplicationKind (ZipList.fromList (Node Static "") [ Node Static "", Node Dynamic "", Node Dynamic "", Node Dynamic "" ]) initialInstructionValidity
+    Instruction OperationApplicationKind (ZipList.fromList src [ opName, argDyn, argDyn, argDyn ]) initialInstructionValidity
 
 
 instruction1 : Instruction
 instruction1 =
-    Instruction OperationApplicationKind (ZipList.fromList (Node Static "") [ Node Static "", Node Dynamic "" ]) initialInstructionValidity
+    Instruction OperationApplicationKind (ZipList.fromList src [ opName, argDyn ]) initialInstructionValidity
 
 
 instruction2 : Instruction
 instruction2 =
-    Instruction LabelKind (ZipList.fromList (Node Static "") []) initialInstructionValidity
+    Instruction LabelKind (ZipList.fromList lbl []) initialInstructionValidity
 
 
 init : InitContext Msg Model
@@ -202,23 +224,28 @@ updateCurrentNodeWithoutValidation f =
         )
 
 
+
+-- TODO: rename this to insertion of arguments
+
+
 insertAndEditNodeWithoutValidation : HorizontalDirection -> Model -> Model
 insertAndEditNodeWithoutValidation direction model =
     case getCurrentNodes model of
         Just nodes ->
             case ZipList.current nodes of
-                Node Dynamic str ->
+                -- TODO: Node validation
+                Node Dynamic _ _ _ ->
                     model
                         |> setCurrentNodesWithoutValidation
                             (case direction of
                                 Left ->
                                     nodes
-                                        |> ZipList.insertLeft (Node Dynamic "")
+                                        |> ZipList.insertLeft (Node Dynamic UnfinishedNode Base.argExpectation "")
                                         |> ZipList.left
 
                                 Right ->
                                     nodes
-                                        |> ZipList.insertRight (Node Dynamic "")
+                                        |> ZipList.insertRight (Node Dynamic UnfinishedNode Base.argExpectation "")
                                         |> ZipList.right
                             )
                         |> setModeToEditing
@@ -263,7 +290,7 @@ deleteCurrentNodeWithValidation model =
 isCurrentNodeStatic : ZipList Node -> Bool
 isCurrentNodeStatic nodes =
     case ZipList.current nodes of
-        Node Static _ ->
+        Node Static _ _ _ ->
             True
 
         _ ->
@@ -343,10 +370,6 @@ validateCurrentInstruction =
         )
 
 
-
--- TODO: INSTRUCTION or VALIDATED INSTRUCTION - THE LINE
-
-
 update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
@@ -385,7 +408,8 @@ update msg =
                     Context.update setModeToInsertInstruction
 
         NodeEdit str ->
-            Context.update (updateCurrentNodeWithoutValidation (\(Node nodeKind _) -> Node nodeKind str))
+            -- TODO: Node validation
+            Context.update (updateCurrentNodeWithoutValidation (\(Node nodeKind nodeValidation nodeExpectation _) -> Node nodeKind nodeValidation nodeExpectation str))
 
         NodeInsertion direction ->
             Context.update (insertAndEditNodeWithoutValidation direction)
@@ -550,7 +574,7 @@ viewInstruction isInstructionSelected instructionMode instruction =
 
 
 viewNode : Bool -> Bool -> NodeMode -> Node -> Element Msg
-viewNode isSelected isInstructionSelected nodeMode (Node nodeKind str) =
+viewNode isSelected isInstructionSelected nodeMode (Node nodeKind nodeValidation nodeExpectation str) =
     let
         viewStr str0 =
             if str == "" then

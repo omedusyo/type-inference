@@ -53,7 +53,7 @@ type NodeKind
 
 
 type Node
-    = Node NodeKind String
+    = Node NodeKind NodeValidity NodeExpectations String
 
 
 
@@ -66,31 +66,31 @@ initialInstruction instructionKind =
         LabelKind ->
             -- label _
             Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [])
+                (ZipList.fromList (emptyNode Static labelExpectation) [])
                 initialInstructionValidity
 
         OperationApplicationKind ->
             -- _ <- _(_)
             Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [ emptyStaticNode, emptyDynamicNode ])
+                (ZipList.fromList (emptyNode Static registerExpectation) [ emptyNode Static argExpectation, emptyNode Dynamic argExpectation ])
                 initialInstructionValidity
 
         AssignmentKind ->
             -- _ <- _
             Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [ emptyStaticNode ])
+                (ZipList.fromList (emptyNode Static registerExpectation) [ emptyNode Static argExpectation ])
                 initialInstructionValidity
 
         JumpKind ->
             -- jump _
             Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [])
+                (ZipList.fromList (emptyNode Static jumpArgExpectation) [])
                 initialInstructionValidity
 
         JumpIfKind ->
             -- if _ jump _
             Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [ emptyStaticNode ])
+                (ZipList.fromList (emptyNode Static registerUseExpectation) [ emptyNode Static jumpArgExpectation ])
                 initialInstructionValidity
 
         HaltKind ->
@@ -98,7 +98,7 @@ initialInstruction instructionKind =
 
         PushKind ->
             Instruction instructionKind
-                (ZipList.fromList emptyStaticNode [])
+                (ZipList.fromList (emptyNode Static argExpectation) [])
                 initialInstructionValidity
 
 
@@ -106,14 +106,9 @@ initialInstruction instructionKind =
 -- ===Nodes===
 
 
-emptyStaticNode : Node
-emptyStaticNode =
-    Node Static ""
-
-
-emptyDynamicNode : Node
-emptyDynamicNode =
-    Node Dynamic ""
+emptyNode : NodeKind -> NodeExpectations -> Node
+emptyNode nodeKind nodeExpectation =
+    Node nodeKind UnfinishedNode nodeExpectation ""
 
 
 
@@ -122,40 +117,65 @@ emptyDynamicNode =
 -- The problem is that I want to include InstructoinValidity as a component of Instruction
 
 
+type NodeValidity
+    = UnfinishedNode
+    | ErrorNode
+    | ValidNode EntityKind
+
+
+type alias NodeExpectations =
+    List EntityKind
+
+
+
+-- TODO: Maybe I should put these into a separate definition?
+
+
+labelExpectation : NodeExpectations
+labelExpectation =
+    [ Label ]
+
+
+argExpectation : NodeExpectations
+argExpectation =
+    [ RegisterUse, LabelUse, Integer, Nil ]
+
+
+registerExpectation : NodeExpectations
+registerExpectation =
+    [ RegisterName ]
+
+
+registerUseExpectation : NodeExpectations
+registerUseExpectation =
+    [ RegisterUse ]
+
+
+operationNameExpectation : NodeExpectations
+operationNameExpectation =
+    [ OperationName ]
+
+
+jumpArgExpectation : NodeExpectations
+jumpArgExpectation =
+    [ RegisterUse, LabelUse ]
+
+
 type InstructionValidity
-    = Finished
-    | InvalidOrUnfinishedNodes (List NodeValidation)
+    = EveryNodeIsValid
+    | ContainsErrorNodes
+    | ContainsUnfinishedNodes
     | WrongArity { expected : ExpectedArity, received : Int }
 
 
 initialInstructionValidity : InstructionValidity
 initialInstructionValidity =
-    InvalidOrUnfinishedNodes []
+    ContainsUnfinishedNodes
 
 
 type ExpectedArity
     = Atleast Int
     | Exactly Int
-
-
-type NodeValidation
-    = NodeIsInvalid NodePosition Expectations
-    | NodeIsUnfinished NodePosition
-    | NodeIsValid
-
-
-type alias NodePosition =
-    Int
-
-
-type alias Expectations =
-    -- This is just a non-empty list of entity kinds
-    ( EntityKind, List EntityKind )
-
-
-expectationsToList : Expectations -> List EntityKind
-expectationsToList ( entityKind, entityKinds ) =
-    entityKind :: entityKinds
 
 
 type EntityKind
