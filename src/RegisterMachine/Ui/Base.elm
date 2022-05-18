@@ -72,7 +72,7 @@ initialInstruction instructionKind =
         OperationApplicationKind ->
             -- _ <- _(_)
             Instruction instructionKind
-                (ZipList.fromList (emptyNode Static registerExpectation) [ emptyNode Static argExpectation, emptyNode Dynamic argExpectation ])
+                (ZipList.fromList (emptyNode Static registerExpectation) [ emptyNode Static operationNameExpectation, emptyNode Dynamic argExpectation ])
                 initialInstructionValidity
 
         AssignmentKind ->

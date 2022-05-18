@@ -667,13 +667,13 @@ traverseModeKeyBindings =
         , ( "J", SwapInstruction Down )
         , ( ",", DeleteInstruction )
         , ( "i", InstructionEdit )
-        , ( "h", InstructionInsertion Down )
-        , ( "l", InstructionInsertion Up )
+        , ( "o", InstructionInsertion Down )
+        , ( "O", InstructionInsertion Up )
         , ( "s", NodeMovement Left )
         , ( "d", NodeMovement Right )
         , ( "e", SetModeTo (TraversingInstructions EditingNode) )
-        , ( "a", NodeInsertion Left )
-        , ( "f", NodeInsertion Right )
+        , ( "W", NodeInsertion Left )
+        , ( "w", NodeInsertion Right )
         , ( "x", DeleteNode )
         ]
 
