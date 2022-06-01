@@ -9,14 +9,12 @@ module Ui.Control.Context exposing
     , mapCmd
     , none
     , performCmd
-    , performCmd0
     , performMsg
-    , performMsg0
     , setModelTo
     , update
+    , updateWithCommand
     )
 
-import Lib.State.StatefulReader as Stateful exposing (StatefulReader)
 import Task
 
 
@@ -35,8 +33,8 @@ type alias State model =
     }
 
 
-type alias Context model msg =
-    StatefulReader Config (State model) (Cmd msg)
+type alias Context rootMsg msg model =
+    Config -> (msg -> rootMsg) -> State model -> ( State model, Cmd rootMsg )
 
 
 embedModelIntoState : model -> State model
@@ -46,43 +44,42 @@ embedModelIntoState model =
     }
 
 
-getConfig : (Config -> Context model msg) -> Context model msg
+getConfig : (Config -> Context rootMsg msg model) -> Context rootMsg msg model
 getConfig f =
-    Stateful.make <|
-        \config state ->
-            Stateful.run (f config) config state
+    \config ->
+        f config config
 
 
-update : (model -> model) -> Context model msg
-update nextModel =
-    Stateful.make <|
-        \_ state ->
-            ( { state | model = nextModel state.model }, Cmd.none )
+update : (model -> model) -> Context rootMsg msg model
+update f =
+    \_ _ state ->
+        ( { state | model = f state.model }, Cmd.none )
 
 
-performCmd : Cmd msg -> Context model msg -> Context model msg
+updateWithCommand : (model -> ( model, Cmd msg )) -> Context rootMsg msg model
+updateWithCommand f =
+    \_ liftMsg state ->
+        let
+            ( newModel, cmd ) =
+                f state.model
+        in
+        ( { state | model = newModel }, Cmd.map liftMsg cmd )
+
+
+performCmd : Cmd msg -> Context rootMsg msg model -> Context rootMsg msg model
 performCmd cmd1 context0 =
-    Stateful.make <|
-        \config state0 ->
-            let
-                ( state1, cmd0 ) =
-                    Stateful.run context0 config state0
-            in
-            ( state1, Cmd.batch [ cmd0, cmd1 ] )
+    \config liftMsg state0 ->
+        let
+            ( state1, cmd0 ) =
+                context0 config liftMsg state0
+        in
+        ( state1, Cmd.batch [ cmd0, cmd1 |> Cmd.map liftMsg ] )
 
 
-performCmd0 : Cmd msg -> Context model msg
-performCmd0 cmd =
-    Stateful.make <|
-        \_ state ->
-            ( state, cmd )
-
-
-none : Context model msg
+none : Context rootMsg msg model
 none =
-    Stateful.make <|
-        \_ state ->
-            ( state, Cmd.none )
+    \_ _ state ->
+        ( state, Cmd.none )
 
 
 msgToCmd : msg -> Cmd msg
@@ -90,43 +87,41 @@ msgToCmd msg =
     Task.perform identity (Task.succeed msg)
 
 
-performMsg : msg -> Context model msg -> Context model msg
+performMsg : msg -> Context rootMsg msg model -> Context rootMsg msg model
 performMsg msg =
     performCmd (msgToCmd msg)
 
 
-performMsg0 : msg -> Context model msg
-performMsg0 msg =
-    performCmd0 (msgToCmd msg)
-
-
-setModelTo : model -> Context model msg
+setModelTo : model -> Context rootMsg msg model
 setModelTo model =
-    Stateful.make <|
-        \config state ->
-            ( { state | model = model }, Cmd.none )
+    \_ _ state ->
+        ( { state | model = model }, Cmd.none )
 
 
-mapCmd : (msg0 -> msg1) -> Context model msg0 -> Context model msg1
+mapCmd : (msg0 -> msg1) -> Context rootMsg msg0 model -> Context rootMsg msg1 model
 mapCmd f context0 =
-    Stateful.make <|
-        \config state0 ->
-            let
-                ( state1, cmd1 ) =
-                    Stateful.run context0 config state0
-            in
-            ( state1, Cmd.map f cmd1 )
+    \config liftMsg1 state0 ->
+        let
+            ( state1, cmd1 ) =
+                context0 config (liftMsg1 << f) state0
+        in
+        ( state1, cmd1 )
 
 
-embed : (parentModel -> childModel) -> (parentModel -> childModel -> parentModel) -> Context childModel msg -> Context parentModel msg
-embed projectParentToChild embedChildIntoParent child_context =
-    Stateful.make <|
-        \config state ->
-            let
-                ( fullSubModel, subCmd ) =
-                    Stateful.run child_context config (mapModelInState projectParentToChild state)
-            in
-            ( mapModelInState (embedChildIntoParent state.model) fullSubModel, subCmd )
+embed : (childMsg -> parentMsg) -> (parentModel -> childModel) -> (parentModel -> childModel -> parentModel) -> Context rootMsg childMsg childModel -> Context rootMsg parentMsg parentModel
+embed liftChildToParentMsg projectParentToChild embedChildIntoParent child_context =
+    \config liftMsg state ->
+        let
+            ( fullSubModel, subCmd ) =
+                child_context config (liftMsg << liftChildToParentMsg) (mapModelInState projectParentToChild state)
+        in
+        ( mapModelInState (embedChildIntoParent state.model) fullSubModel, subCmd )
+
+
+lift : ((msg -> rootMsg) -> Context rootMsg msg model) -> Context rootMsg msg model
+lift f =
+    \config liftMsg ->
+        f liftMsg config liftMsg
 
 
 

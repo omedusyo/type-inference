@@ -9,13 +9,15 @@ What is implemented so far:
 * Custom parsing combinator library for the syntax
 * Basic (pretty user hostile) syntax and a Parser for it
 * Evaluator
+* Custom register machine simulator (adapting last chapter of [SICP](https://mitpress.mit.edu/sites/default/files/sicp/full-text/book/book.html))
+* Garbage Collection from scratch in the register machine language
 
 In progress:
-* Custom register machine simulator (adapting last chapter of [SICP](https://mitpress.mit.edu/sites/default/files/sicp/full-text/book/book.html))
 * Designing user defined inductive data types
 * Designing a more powerful module system (trying to steal as much as possible from SML/OCaml)
+* Structure Editor for the machine language (preparation for Structure Editor for the calculus)
 
 Future:
-* Implementing Garbage Collection/Compiler from scratch to the register machine language (maybe web assembly)
-* Structure Editor
+* Compiler of the high level calculus into the register machine (maybe web assembly)
+* Structure Editor for the calculus
 * Exploring Small Talk Image way of doing things

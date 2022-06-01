@@ -81,6 +81,7 @@ type
     -- if $a jump :foo
     -- if $a jump $b // is a register that contains a labelb
     -- halt
+    -- push constant
     -- push $a
     -- a <- stack
     --

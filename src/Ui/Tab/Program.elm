@@ -49,7 +49,7 @@ type alias Model =
     Binding
 
 
-init : InitContext Model Msg
+init : InitContext Msg Model
 init =
     InitContext.setModelTo
         exampleBinding
@@ -138,7 +138,7 @@ type Msg
     | RunButtonClicked
 
 
-update : Msg -> Context Model msg
+update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
         InputChanged input ->

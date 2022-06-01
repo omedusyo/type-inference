@@ -1,4 +1,4 @@
-module Ui.Tab.RegisterMachine exposing (Model, Msg, init, update, view)
+module Ui.Tab.RegisterMachine exposing (Model, Msg, init, subscriptions, update, view)
 
 import Array exposing (Array)
 import Array.Extra as Array
@@ -15,6 +15,7 @@ import RegisterMachine.GarbageCollector as GarbageCollector
 import RegisterMachine.Machine as RegisterMachine exposing (Controller, Machine, RuntimeError(..), TranslationError)
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
+import RegisterMachine.Ui.Editor as Editor
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.Style.Button as Button
@@ -26,10 +27,13 @@ type alias Model =
     , maybeRuntime : Maybe (Result RuntimeError Machine)
     , memoryView : MemoryView
     , currentlyHighlightedCell : MemoryAddress
+
+    -- editor
+    , editorModel : Editor.Model
     }
 
 
-init : InitContext Model Msg
+init : InitContext Msg Model
 init =
     let
         boolToInt : Bool -> Int
@@ -109,26 +113,30 @@ init =
             -- Controllers.controller7_fibonacci_recursive
             -- Controllers.controller8_memory_test
             -- Controllers.controller9_range
-            -- Controllers.controller10_append
-            GarbageCollector.controller
+            Controllers.controller10_append
 
+        -- GarbageCollector.controller
         parsedMachine : Result TranslationError Machine
         parsedMachine =
             RegisterMachine.makeMachine controller env operationEnv
     in
     InitContext.setModelTo
-        { controller = controller
-        , parsedMachine = parsedMachine
-        , maybeRuntime =
-            case parsedMachine of
-                Ok machine ->
-                    Just (Ok machine)
+        (\editorModel ->
+            { controller = controller
+            , parsedMachine = parsedMachine
+            , maybeRuntime =
+                case parsedMachine of
+                    Ok machine ->
+                        Just (Ok machine)
 
-                Err _ ->
-                    Nothing
-        , memoryView = initMemoryView
-        , currentlyHighlightedCell = centerOfMemoryView initMemoryView
-        }
+                    Err _ ->
+                        Nothing
+            , memoryView = initMemoryView
+            , currentlyHighlightedCell = centerOfMemoryView initMemoryView
+            , editorModel = editorModel
+            }
+        )
+        |> InitContext.ooo (Editor.init |> InitContext.mapCmd EditorMsg)
 
 
 type alias MemoryView =
@@ -186,9 +194,11 @@ type Msg
     | RunOneStep
     | MemoryAddressClicked MemoryAddress
     | ShiftMemoryViewBy Int
+      -- editor
+    | EditorMsg Editor.Msg
 
 
-update : Msg -> Context Model msg
+update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
         Reset ->
@@ -244,13 +254,21 @@ update msg =
                     }
                 )
 
+        EditorMsg editorMsg ->
+            Editor.update editorMsg
+                |> Context.embed
+                    EditorMsg
+                    .editorModel
+                    (\model editorModel -> { model | editorModel = editorModel })
+
 
 view : Config -> Model -> Element Msg
 view config model =
     -- 1. I need to display all the registers
     -- 2. I need to display the instruction block with labels
     E.column [ E.width E.fill ]
-        [ E.row []
+        [ Editor.view model.editorModel |> E.map EditorMsg
+        , E.row []
             [ Input.button Button.buttonStyle
                 { onPress =
                     Just Reset
@@ -625,3 +643,9 @@ viewMemoryAddress p =
 viewInstructionAddress : InstructionAddress -> Element Msg
 viewInstructionAddress pointer =
     E.text (String.concat [ ":", String.fromInt pointer ])
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Editor.subscriptions model.editorModel
+        |> Sub.map EditorMsg

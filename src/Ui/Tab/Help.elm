@@ -9,7 +9,7 @@ type alias Model =
     {}
 
 
-init : InitContext Model Msg
+init : InitContext Msg Model
 init =
     InitContext.setModelTo
         {}
@@ -19,7 +19,7 @@ type Msg
     = Wat
 
 
-update : Msg -> Context Model msg
+update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
         Wat ->
