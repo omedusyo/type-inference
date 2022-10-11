@@ -56,7 +56,6 @@ type Node
     = Node NodeKind NodeValidity NodeExpectations String
 
 
-
 -- ===Instructions===
 
 
@@ -110,6 +109,10 @@ emptyNode : NodeKind -> NodeExpectations -> Node
 emptyNode nodeKind nodeExpectation =
     Node nodeKind UnfinishedNode nodeExpectation ""
 
+
+argNode : Node
+argNode =
+    emptyNode Dynamic argExpectation
 
 
 -- ===Instruction Validation===

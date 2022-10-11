@@ -11,6 +11,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Json.Decode as Decode
 import Lib.ZipList as ZipList exposing (ZipList)
+import Ui.Style.Button as Button
 import RegisterMachine.Ui.Base as Base
     exposing
         ( HorizontalDirection(..)
@@ -49,7 +50,18 @@ type NodeMode
 type alias Model =
     { instructions : ZipList Instruction
     , instructionMode : InstructionMode
+    , debugConsole : DebugConsole
     }
+
+
+type alias DebugConsole =
+    { instructionsRev : List Instruction
+    }
+
+
+initDebugConsole : DebugConsole
+initDebugConsole =
+    { instructionsRev = [] }
 
 
 
@@ -92,6 +104,7 @@ init =
     InitContext.setModelTo
         { instructions = ZipList.fromList instruction0 [ instruction1, instruction2, Halt ]
         , instructionMode = TraversingInstructions TraversingNodes
+        , debugConsole = initDebugConsole
         }
 
 
@@ -104,6 +117,9 @@ type Msg
     | InstructionInsertion VerticalDirection
     | ChangeInstructionTo InstructionKind
     | DeleteInstruction
+    | ConvertAssignmentToOperation
+    | DebugCurrentInstruction
+    | ResetDebugConsole
       -- Nodes
     | NodeMovement HorizontalDirection
     | NodeEdit String
@@ -205,6 +221,11 @@ getCurrentNodes model =
 
         _ ->
             Nothing
+
+
+getCurrentInstruction : Model -> Instruction
+getCurrentInstruction model =
+    ZipList.current model.instructions
 
 
 setCurrentNodesWithoutValidation : ZipList Node -> Model -> Model
@@ -395,6 +416,39 @@ update msg =
         DeleteInstruction ->
             Context.update (\model -> { model | instructions = ZipList.deleteAndFocusRight model.instructions })
 
+        ConvertAssignmentToOperation ->
+            Context.update (
+                updateCurrentInstructionWithoutValidation (\instruction ->
+                  let newInstruction = 
+                        case instruction of
+                          Instruction AssignmentKind nodes validity ->
+                              -- 1. What can I assume about nodes?
+                              -- x <- fsjjkafjdsalfkjal
+                              -- I need to get the destination and the source
+                              -- Convert the source into operation application
+                              -- TODO: Seems like I only need to add a new empty node at the end
+                              -- TODO: I need to change the `AssignmentKind`'s argument node expectation to operation name
+                               Debug.log "new-instruction"
+                                   (Instruction OperationApplicationKind (nodes |> ZipList.updateLast Validation.setNodeToOperationNameNode |> ZipList.insertAtEnd Base.argNode) validity)
+                          _ ->
+                              instruction
+                  in
+                  newInstruction
+                )
+                >> validateCurrentInstruction
+            )
+        DebugCurrentInstruction ->
+            Context.update (\({ debugConsole } as model) ->
+                let
+                    currentInstruction = getCurrentInstruction model
+
+                    _ = Debug.log "CURRENT-INSTRUCTION" currentInstruction
+                in
+                { model | debugConsole = { debugConsole | instructionsRev = currentInstruction :: debugConsole.instructionsRev } }
+            )
+        ResetDebugConsole ->
+            Context.update (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } } )
+
         SetModeTo instructionMode ->
             case instructionMode of
                 TraversingInstructions nodeMode ->
@@ -444,8 +498,132 @@ view ({ instructions } as model) =
                             E.el [] (viewInstruction False model.instructionMode instruction)
                     }
             )
+        -- Debugging
+        , E.el [] (E.text "===Debugging===")
+        , viewDebuggingConsole model
         ]
 
+viewDebuggingConsole : Model -> Element Msg
+viewDebuggingConsole model =
+    E.column []
+        [ Input.button Button.buttonStyle
+                { onPress =
+                    Just ResetDebugConsole
+                , label = E.text "reset"
+                }
+        , E.column []
+                (model.debugConsole.instructionsRev
+                    |> List.reverse
+                    |> List.map (\instruction ->
+                        case instruction of
+                            Base.Instruction instructionKind ( revLeftNodes, selectedNode, rightNodes ) instructionValidity ->
+                              let viewDebuggedNode : Bool -> Node -> Element Msg
+                                  viewDebuggedNode isSelected ((Node nodeKind nodeValidity nodeExpectations text) as node) =
+                                      E.row [ E.spacing 5 ]
+                                          [ E.el [ Font.bold ] (E.text "Node[")
+                                          , E.text <|
+                                                case nodeKind of
+                                                    Static ->
+                                                        "Static"
+
+                                                    Dynamic ->
+                                                        "Dynamic"
+
+                                          , -- This shows node's validity already
+                                            viewNode isSelected True TraversingNodes node
+                                            -- TODO: Do I need to look at this?
+                                             -- Base.EveryNodeIsValid ->
+                                             --     Debug.todo ""
+
+                                             -- Base.ContainsErrorNodes ->
+                                             --     Debug.todo ""
+
+                                             -- Base.ContainsUnfinishedNodes ->
+                                             --     Debug.todo ""
+
+                                             -- -- WrongArity { expected : ExpectedArity, received : Int } ->
+                                             -- Base.WrongArity { expected , received } ->
+                                             --     Debug.todo ""
+                                          , E.row []
+                                              [ E.el [ Font.color (E.rgb 0 0 1) ] (E.text "E(")
+                                              , E.row []
+                                                  (nodeExpectations
+                                                      |> List.map (\nodeExpectation ->
+                                                           E.text <|
+                                                               case nodeExpectation of
+                                                                   Base.RegisterName ->
+                                                                       "register-name"
+
+                                                                   Base.RegisterUse ->
+                                                                       "register-use"
+
+                                                                   Base.Label ->
+                                                                       "label"
+
+                                                                   Base.LabelUse ->
+                                                                       "label-use"
+
+                                                                   Base.Integer ->
+                                                                       "int"
+
+                                                                   Base.Nil ->
+                                                                       "nil"
+
+                                                                   Base.OperationName ->
+                                                                       "op-name"
+                                                         )
+                                                        |> List.intersperse (E.text ", ")
+                                                   )
+                                                , E.text ")"
+                                                ]
+
+                                          , E.el [ Font.bold ] (E.text "]")
+                                          ]
+
+                              in
+                                E.row [ E.spacing 8 ]
+                                    [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] <| E.text <|
+                                        case instructionKind of
+                                            LabelKind ->
+                                                "Label"
+
+                                            OperationApplicationKind ->
+                                                "OperationApplication"
+
+                                            AssignmentKind ->
+                                                "Assignment"
+
+                                            JumpKind ->
+                                                "Jump"
+
+                                            JumpIfKind ->
+                                                "JumpIf"
+
+                                            PushKind ->
+                                                "Push"
+
+                                            HaltKind ->
+                                                "Halt"
+                                    , E.row [ E.spacing 3 ]
+                                        (List.concat
+                                            [ revLeftNodes
+                                                |> List.reverse 
+                                                |> List.map (viewDebuggedNode False)
+                                            , [ viewDebuggedNode True selectedNode ]
+                                            , rightNodes
+                                                |> List.map (viewDebuggedNode False)
+                                            ]
+                                        )
+                                    ]
+
+                            Base.Halt ->
+                              Debug.todo ""
+
+                            Base.FutureInstruction verticalDirection ->
+                              Debug.todo ""
+                    )
+                )
+          ]
 
 viewKeyword : String -> Element Msg
 viewKeyword name =
@@ -675,6 +853,8 @@ traverseModeKeyBindings =
         , ( ",", NodeInsertion Right )
         , ( "X", DeleteInstruction )
         , ( "x", DeleteNode )
+        , ( "(", ConvertAssignmentToOperation )
+        , ( "?", DebugCurrentInstruction )
         ]
 
 

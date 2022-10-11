@@ -145,6 +145,28 @@ swapWithLeft (( revLeft0, x0, right0 ) as zipList) =
             ( x0 :: revLeft1, x1, right0 )
 
 
+insertAtEnd : a -> ZipList a  -> ZipList a
+insertAtEnd x (revLeft0, x0, right0) =
+  (revLeft0, x0, right0 ++ [x])
+
+
+updateLast : (a -> a) -> ZipList a -> ZipList a
+updateLast f (revLeft0, x0, right0) =
+  let updateLastInList : List a -> List a
+      updateLastInList xs0 =
+        case xs0 of
+          [] ->
+              []
+
+          [ x ] ->
+              [ f x ]
+
+          x :: xs1 ->
+              x :: updateLastInList xs1
+  in
+  (revLeft0, x0, updateLastInList right0)
+
+
 swapWithRight : ZipList a -> ZipList a
 swapWithRight (( revLeft0, x0, right0 ) as zipList) =
     case right0 of

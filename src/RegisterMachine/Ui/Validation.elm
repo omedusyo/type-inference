@@ -1,4 +1,4 @@
-module RegisterMachine.Ui.Validation exposing (validatedInstruction)
+module RegisterMachine.Ui.Validation exposing (validatedInstruction, setNodeToOperationNameNode)
 
 import Lib.Break as Break
 import Lib.ZipList as ZipList exposing (ZipList)
@@ -157,10 +157,6 @@ validatedInstruction instructionKind nodes =
     let
         ( validatedNodes, instructionValidity ) =
             validateInstruction instructionKind nodes
-
-        _ =
-            -- TODO: remove
-            Debug.log "" ( instructionValidity, validatedNodes |> ZipList.toList )
     in
     Instruction instructionKind validatedNodes instructionValidity
 
@@ -222,3 +218,9 @@ validateInstruction instructionKind nodes =
                 Exactly 0
         )
     )
+
+
+
+setNodeToOperationNameNode : Node -> Node
+setNodeToOperationNameNode (Node nodeKind nodeValidity nodeExpectations text) =
+    validatedNode (Node nodeKind nodeValidity Base.operationNameExpectation text)
