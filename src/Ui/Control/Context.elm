@@ -55,7 +55,6 @@ update f =
     \_ _ state ->
         ( { state | model = f state.model }, Cmd.none )
 
-
 updateWithCommand : (model -> ( model, Cmd msg )) -> Context rootMsg msg model
 updateWithCommand f =
     \_ liftMsg state ->

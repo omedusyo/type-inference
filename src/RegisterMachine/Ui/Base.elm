@@ -37,7 +37,7 @@ type Instruction
     = Instruction InstructionKind (ZipList Node) InstructionValidity
     | Halt
       -- The only way to have a future instruction is when the user wishes to insert a completely new instruction.
-      -- Then we temporarily create the FutureInstruction until the user decides with which concerete instructio to replace it with.
+      -- Then we temporarily create the FutureInstruction until the user decides with which concrete instruction to replace it with.
       -- But if the user presses Esc during his decision, the current FutureInstruction should be deleted.
       -- After the deletion in which direction should we move to? Up or Down? That's why we have the VerticalDirection argument.
     | FutureInstruction VerticalDirection
