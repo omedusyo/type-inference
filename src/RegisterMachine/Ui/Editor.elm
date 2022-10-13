@@ -520,15 +520,15 @@ viewDebuggingConsole model =
                               let viewDebuggedNode : Bool -> Node -> Element Msg
                                   viewDebuggedNode isSelected ((Node nodeKind nodeValidity nodeExpectations text) as node) =
                                       E.row [ E.spacing 5 ]
-                                          [ E.el [ Font.bold ] (E.text "Node[")
+                                          [ E.el [ Font.bold ] (E.text "Node")
                                           , E.text <|
                                                 case nodeKind of
                                                     Static ->
-                                                        "Static"
+                                                        "S"
 
                                                     Dynamic ->
-                                                        "Dynamic"
-
+                                                        "D"
+                                          , E.el [ Font.bold ] (E.text "[ ")
                                           , -- This shows node's validity already
                                             viewNode isSelected True TraversingNodes node
                                             -- TODO: Do I need to look at this?
@@ -545,17 +545,17 @@ viewDebuggingConsole model =
                                              -- Base.WrongArity { expected , received } ->
                                              --     Debug.todo ""
                                           , E.row []
-                                              [ E.el [ Font.color (E.rgb 0 0 1) ] (E.text "E(")
+                                              [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] (E.text ": {")
                                               , E.row []
                                                   (nodeExpectations
                                                       |> List.map (\nodeExpectation ->
                                                            E.text <|
                                                                case nodeExpectation of
                                                                    Base.RegisterName ->
-                                                                       "register-name"
+                                                                       "reg-name"
 
                                                                    Base.RegisterUse ->
-                                                                       "register-use"
+                                                                       "reg-use"
 
                                                                    Base.Label ->
                                                                        "label"
@@ -570,18 +570,18 @@ viewDebuggingConsole model =
                                                                        "nil"
 
                                                                    Base.OperationName ->
-                                                                       "op-name"
+                                                                       "op"
                                                          )
                                                         |> List.intersperse (E.text ", ")
                                                    )
-                                                , E.text ")"
+                                                , E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] (E.text "}")
                                                 ]
 
                                           , E.el [ Font.bold ] (E.text "]")
                                           ]
 
                               in
-                                E.row [ E.spacing 8 ]
+                                E.row [ E.spacing 10 ]
                                     [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] <| E.text <|
                                         case instructionKind of
                                             LabelKind ->
@@ -604,7 +604,7 @@ viewDebuggingConsole model =
 
                                             HaltKind ->
                                                 "Halt"
-                                    , E.row [ E.spacing 3 ]
+                                    , E.row [ E.spacing 10 ]
                                         (List.concat
                                             [ revLeftNodes
                                                 |> List.reverse 
@@ -613,6 +613,7 @@ viewDebuggingConsole model =
                                             , rightNodes
                                                 |> List.map (viewDebuggedNode False)
                                             ]
+                                            |> List.intersperse (E.el [] (E.text ","))
                                         )
                                     ]
 
