@@ -531,19 +531,6 @@ viewDebuggingConsole model =
                                           , E.el [ Font.bold ] (E.text "[ ")
                                           , -- This shows node's validity already
                                             viewNode isSelected True TraversingNodes node
-                                            -- TODO: Do I need to look at this?
-                                             -- Base.EveryNodeIsValid ->
-                                             --     Debug.todo ""
-
-                                             -- Base.ContainsErrorNodes ->
-                                             --     Debug.todo ""
-
-                                             -- Base.ContainsUnfinishedNodes ->
-                                             --     Debug.todo ""
-
-                                             -- -- WrongArity { expected : ExpectedArity, received : Int } ->
-                                             -- Base.WrongArity { expected , received } ->
-                                             --     Debug.todo ""
                                           , E.row []
                                               [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] (E.text ": {")
                                               , E.row []
@@ -604,6 +591,28 @@ viewDebuggingConsole model =
 
                                             HaltKind ->
                                                 "Halt"
+                                    , case instructionValidity of
+                                          Base.EveryNodeIsValid ->
+                                              E.el [ Font.color (E.rgb 0 1 0) ] (E.text "all-valid")
+
+                                          Base.ContainsErrorNodes ->
+                                              E.el [ Font.color (E.rgb 1 0 0) ] (E.text "has-errors")
+
+                                          Base.ContainsUnfinishedNodes ->
+                                              E.text "unfinished"
+
+                                          -- WrongArity { expected : ExpectedArity, received : Int } ->
+                                          Base.WrongArity { expected , received } ->
+                                              E.text <| String.concat
+                                                  [ "wrong-arity(expected "
+                                                  , case expected of
+                                                        Base.Atleast x -> "atleast" ++ String.fromInt x
+
+                                                        Base.Exactly x -> "exactly" ++ String.fromInt x
+                                                  , " received "
+                                                  , String.fromInt received
+                                                  , ")"
+                                                  ]
                                     , E.row [ E.spacing 10 ]
                                         (List.concat
                                             [ revLeftNodes
