@@ -164,7 +164,11 @@ updateLast f (revLeft0, x0, right0) =
           x :: xs1 ->
               x :: updateLastInList xs1
   in
-  (revLeft0, x0, updateLastInList right0)
+  case right0 of
+      [] -> 
+          (revLeft0, f x0, [])
+      _ ->
+          (revLeft0, x0, updateLastInList right0)
 
 
 swapWithRight : ZipList a -> ZipList a

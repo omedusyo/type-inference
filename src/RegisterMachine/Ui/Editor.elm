@@ -422,14 +422,10 @@ update msg =
                   let newInstruction = 
                         case instruction of
                           Instruction AssignmentKind nodes validity ->
-                              -- 1. What can I assume about nodes?
-                              -- x <- fsjjkafjdsalfkjal
-                              -- I need to get the destination and the source
-                              -- Convert the source into operation application
-                              -- TODO: Seems like I only need to add a new empty node at the end
-                              -- TODO: I need to change the `AssignmentKind`'s argument node expectation to operation name
-                               Debug.log "new-instruction"
-                                   (Instruction OperationApplicationKind (nodes |> ZipList.updateLast Validation.setNodeToOperationNameNode |> ZipList.insertAtEnd Base.argNode) validity)
+                              Instruction
+                                  OperationApplicationKind
+                                  ((nodes |> ZipList.updateLast Validation.setNodeToOperationNameNode) |> ZipList.insertAtEnd Base.argNode)
+                                  validity
                           _ ->
                               instruction
                   in
