@@ -10,6 +10,7 @@ import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import Json.Decode as Decode
+import List.Nonempty as NonemptyList
 import Lib.ZipList as ZipList exposing (ZipList)
 import Ui.Style.Button as Button
 import RegisterMachine.Ui.Base as Base
@@ -50,20 +51,52 @@ type NodeMode
 type alias Model =
     { instructions : ZipList Instruction
     , instructionMode : InstructionMode
+    , fragmentBoard : FragmentBoard
     , debugConsole : DebugConsole
     }
+
+
+-- This is used for copy/pasting
+type FragmentBoard = 
+      EmptyBoard
+    | NonemptyBoard (ZipList Fragment)
+
+
+type alias Fragment = 
+    NonemptyList.Nonempty Instruction
 
 
 type alias DebugConsole =
     { instructionsRev : List Instruction
     }
 
+-- ===Fragment Board===
+
+initFragmentBoard : FragmentBoard
+initFragmentBoard = EmptyBoard
+
+
+pushFragment : Fragment -> Model -> Model
+pushFragment fragment model =
+    { model
+    | fragmentBoard =
+        case model.fragmentBoard of
+            EmptyBoard ->
+                NonemptyBoard (ZipList.singleton fragment)
+
+            NonemptyBoard fragments ->
+                NonemptyBoard (fragments |> ZipList.cons fragment)
+    }
+
+
+-- ===Debug Console===
 
 initDebugConsole : DebugConsole
 initDebugConsole =
     { instructionsRev = [] }
 
 
+-- ===Instructions/Nodes===
 
 -- TODO: Delete the below test instructions/functions
 
@@ -104,6 +137,7 @@ init =
     InitContext.setModelTo
         { instructions = ZipList.fromList instruction0 [ instruction1, instruction2, Halt ]
         , instructionMode = TraversingInstructions TraversingNodes
+        , fragmentBoard = initFragmentBoard
         , debugConsole = initDebugConsole
         }
 
@@ -126,6 +160,8 @@ type Msg
     | NodeInsertion HorizontalDirection
     | JumpToBoundaryNode HorizontalDirection
     | DeleteNode
+      -- Fragment Board
+    | PushFragment
       -- Debugging
     | DebugCurrentInstruction
     | ResetDebugConsole
@@ -502,6 +538,17 @@ update msg =
         DeleteNode ->
             Context.update deleteCurrentNodeWithValidation
 
+        PushFragment ->
+            -- 1. Get the current instruction
+            -- 2. Put it into a singleton fragment
+            -- 3. Store the fragment in the fragment board
+            Context.update (\model ->
+                let
+                    currentInstruction = getCurrentInstruction model
+                in
+                model |> pushFragment (NonemptyList.singleton currentInstruction)
+            )
+
         JumpToBoundaryNode direction ->
             Context.update (jumpToBoundaryNode direction)
 
@@ -544,10 +591,42 @@ view ({ instructions } as model) =
                             E.el [] (viewInstruction False model.instructionMode instruction)
                     }
             )
+        -- Fragment Board
+        , E.el [] (E.text "===Fragment Board===")
+        , viewFragmentBoard model
         -- Debugging
         , E.el [] (E.text "===Debugging===")
         , viewDebuggingConsole model
         ]
+
+
+viewFragmentBoard : Model -> Element Msg
+viewFragmentBoard { fragmentBoard } =
+    let viewFragment : Fragment -> Element Msg
+        viewFragment fragment =
+            E.column []
+              (fragment
+                |> NonemptyList.toList 
+                |> List.map (viewInstruction False (TraversingInstructions TraversingNodes))
+              )
+    in
+    case fragmentBoard of
+        EmptyBoard ->
+            E.text ""
+
+        NonemptyBoard fragments ->
+            E.column [ E.spacing 15 ]
+              (fragments
+                  |> ZipList.mapToList
+                      { current =
+                          \currentFragment ->
+                              E.el [ Border.solid, Border.widthEach { left = 1, bottom = 0, right = 0, top = 0 } ] (viewFragment currentFragment)
+                      , others =
+                          \fragment ->
+                              E.el [] (viewFragment fragment)
+                      }
+              )
+
 
 viewDebuggingConsole : Model -> Element Msg
 viewDebuggingConsole model =
@@ -912,10 +991,11 @@ traverseModeKeyBindings =
         , ( "(", ConvertAssignmentToOperation )
         , ( "f", DuplicateInstruction Down )
         , ( "F", DuplicateInstruction Up )
-        , ( "3", JumpToBoundaryNode Left )
-        , ( "4", JumpToBoundaryNode Right )
-        , ( "#", JumpToBoundaryInstruction Up )
-        , ( "$", JumpToBoundaryInstruction Down )
+        , ( "#", JumpToBoundaryNode Left )
+        , ( "$", JumpToBoundaryNode Right )
+        , ( "3", JumpToBoundaryInstruction Up )
+        , ( "4", JumpToBoundaryInstruction Down )
+        , ( "c", PushFragment )
         , ( "?", DebugCurrentInstruction )
         ]
 

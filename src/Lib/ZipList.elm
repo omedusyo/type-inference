@@ -209,3 +209,9 @@ jumpStart ( revLeft0, x0, right0 ) =
 
       x1 :: revLeft1 ->
           jumpStart ( revLeft1, x1, x0 :: right0 )
+
+
+cons : a -> ZipList a -> ZipList a
+cons x ( revLeft0, x0, right0 ) =
+    -- Not very efficient
+    ( revLeft0 ++ [ x ] , x0, right0 )
