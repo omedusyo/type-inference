@@ -190,3 +190,22 @@ duplicateLeft : ZipList a -> ZipList a
 duplicateLeft ( revLeft0, x0, right0 ) =
     ( x0 :: revLeft0, x0, right0 )
 
+
+jumpEnd : ZipList a -> ZipList a
+jumpEnd ( revLeft0, x0, right0 ) =
+  case right0 of
+      [] ->
+          ( revLeft0, x0, [] )
+
+      x1 :: right1 ->
+          jumpEnd ( x0 :: revLeft0, x1, right1 )
+
+
+jumpStart : ZipList a -> ZipList a
+jumpStart ( revLeft0, x0, right0 ) =
+  case revLeft0 of
+      [] ->
+          ( [], x0, right0 )
+
+      x1 :: revLeft1 ->
+          jumpStart ( revLeft1, x1, x0 :: right0 )

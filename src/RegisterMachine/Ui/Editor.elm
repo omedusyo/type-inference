@@ -119,10 +119,12 @@ type Msg
     | DeleteInstruction
     | ConvertAssignmentToOperation
     | DuplicateInstruction VerticalDirection
+    | JumpToBoundaryInstruction VerticalDirection
       -- Nodes
     | NodeMovement HorizontalDirection
     | NodeEdit String
     | NodeInsertion HorizontalDirection
+    | JumpToBoundaryNode HorizontalDirection
     | DeleteNode
       -- Debugging
     | DebugCurrentInstruction
@@ -155,13 +157,26 @@ swapInstruction direction model =
     }
         |> moveInstruction direction
 
+
 duplicateInstruction : VerticalDirection -> Model -> Model
 duplicateInstruction direction model =
     case direction of
         Up ->
           { model | instructions = ZipList.duplicateLeft model.instructions }
+
         Down ->
           { model | instructions = ZipList.duplicateRight model.instructions }
+
+
+jumpToBoundaryInstruction : VerticalDirection -> Model -> Model
+jumpToBoundaryInstruction direction model =
+    case direction of
+        Up ->
+          { model | instructions = ZipList.jumpStart model.instructions }
+
+        Down ->
+          { model | instructions = ZipList.jumpEnd model.instructions }
+
 
 insertFutureInstruction : VerticalDirection -> Model -> Model
 insertFutureInstruction direction model =
@@ -179,25 +194,13 @@ insertFutureInstruction direction model =
 
 
 traverseNodes : HorizontalDirection -> Model -> Model
-traverseNodes direction model =
-    { model
-        | instructions =
-            model.instructions
-                |> ZipList.updateCurrent
-                    (\instruction ->
-                        case instruction of
-                            Instruction kind nodes validation ->
-                                case direction of
-                                    Left ->
-                                        Instruction kind (nodes |> ZipList.left) validation
+traverseNodes direction =
+    case direction of
+        Left ->
+            updateNodesOfCurrentInstructionWithoutValidation ZipList.left
 
-                                    Right ->
-                                        Instruction kind (nodes |> ZipList.right) validation
-
-                            _ ->
-                                instruction
-                    )
-    }
+        Right ->
+            updateNodesOfCurrentInstructionWithoutValidation ZipList.right
 
 
 updateCurrentInstructionWithoutValidation : (Instruction -> Instruction) -> Model -> Model
@@ -253,6 +256,23 @@ updateCurrentNodeWithoutValidation f =
                 _ ->
                     instruction
         )
+
+updateNodesOfCurrentInstructionWithoutValidation : (ZipList Node -> ZipList Node) -> Model -> Model
+updateNodesOfCurrentInstructionWithoutValidation f model =
+    { model
+        | instructions =
+            model.instructions
+                |> ZipList.updateCurrent
+                    (\instruction ->
+                        case instruction of
+                            Instruction kind nodes validation ->
+                                Instruction kind (f nodes) validation
+
+                            _ ->
+                                instruction
+                    )
+    }
+
 
 
 
@@ -316,6 +336,16 @@ deleteCurrentNodeWithValidation model =
 
         _ ->
             model
+
+
+jumpToBoundaryNode : HorizontalDirection -> Model -> Model
+jumpToBoundaryNode direction =
+    case direction of
+        Left ->
+            updateNodesOfCurrentInstructionWithoutValidation ZipList.jumpStart
+
+        Right ->
+            updateNodesOfCurrentInstructionWithoutValidation ZipList.jumpEnd
 
 
 isCurrentNodeStatic : ZipList Node -> Bool
@@ -446,6 +476,9 @@ update msg =
         DuplicateInstruction direction ->
             Context.update (duplicateInstruction direction >> moveInstruction direction)
 
+        JumpToBoundaryInstruction direction ->
+            Context.update (jumpToBoundaryInstruction direction)
+
         SetModeTo instructionMode ->
             case instructionMode of
                 TraversingInstructions nodeMode ->
@@ -468,6 +501,9 @@ update msg =
 
         DeleteNode ->
             Context.update deleteCurrentNodeWithValidation
+
+        JumpToBoundaryNode direction ->
+            Context.update (jumpToBoundaryNode direction)
 
         DebugCurrentInstruction ->
             Context.update (\({ debugConsole } as model) ->
@@ -876,6 +912,10 @@ traverseModeKeyBindings =
         , ( "(", ConvertAssignmentToOperation )
         , ( "f", DuplicateInstruction Down )
         , ( "F", DuplicateInstruction Up )
+        , ( "3", JumpToBoundaryNode Left )
+        , ( "4", JumpToBoundaryNode Right )
+        , ( "#", JumpToBoundaryInstruction Up )
+        , ( "$", JumpToBoundaryInstruction Down )
         , ( "?", DebugCurrentInstruction )
         ]
 
