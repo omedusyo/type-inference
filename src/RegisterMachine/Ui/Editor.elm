@@ -118,13 +118,15 @@ type Msg
     | ChangeInstructionTo InstructionKind
     | DeleteInstruction
     | ConvertAssignmentToOperation
-    | DebugCurrentInstruction
-    | ResetDebugConsole
+    | DuplicateInstruction VerticalDirection
       -- Nodes
     | NodeMovement HorizontalDirection
     | NodeEdit String
     | NodeInsertion HorizontalDirection
     | DeleteNode
+      -- Debugging
+    | DebugCurrentInstruction
+    | ResetDebugConsole
 
 
 moveInstruction : VerticalDirection -> Model -> Model
@@ -153,6 +155,13 @@ swapInstruction direction model =
     }
         |> moveInstruction direction
 
+duplicateInstruction : VerticalDirection -> Model -> Model
+duplicateInstruction direction model =
+    case direction of
+        Up ->
+          { model | instructions = ZipList.duplicateLeft model.instructions }
+        Down ->
+          { model | instructions = ZipList.duplicateRight model.instructions }
 
 insertFutureInstruction : VerticalDirection -> Model -> Model
 insertFutureInstruction direction model =
@@ -433,17 +442,9 @@ update msg =
                 )
                 >> validateCurrentInstruction
             )
-        DebugCurrentInstruction ->
-            Context.update (\({ debugConsole } as model) ->
-                let
-                    currentInstruction = getCurrentInstruction model
 
-                    _ = Debug.log "CURRENT-INSTRUCTION" currentInstruction
-                in
-                { model | debugConsole = { debugConsole | instructionsRev = currentInstruction :: debugConsole.instructionsRev } }
-            )
-        ResetDebugConsole ->
-            Context.update (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } } )
+        DuplicateInstruction direction ->
+            Context.update (duplicateInstruction direction >> moveInstruction direction)
 
         SetModeTo instructionMode ->
             case instructionMode of
@@ -467,6 +468,19 @@ update msg =
 
         DeleteNode ->
             Context.update deleteCurrentNodeWithValidation
+
+        DebugCurrentInstruction ->
+            Context.update (\({ debugConsole } as model) ->
+                let
+                    currentInstruction = getCurrentInstruction model
+
+                    _ = Debug.log "CURRENT-INSTRUCTION" currentInstruction
+                in
+                { model | debugConsole = { debugConsole | instructionsRev = currentInstruction :: debugConsole.instructionsRev } }
+            )
+        ResetDebugConsole ->
+            Context.update (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } } )
+
 
 
 view : Model -> Element Msg
@@ -860,6 +874,8 @@ traverseModeKeyBindings =
         , ( "X", DeleteInstruction )
         , ( "x", DeleteNode )
         , ( "(", ConvertAssignmentToOperation )
+        , ( "f", DuplicateInstruction Down )
+        , ( "F", DuplicateInstruction Up )
         , ( "?", DebugCurrentInstruction )
         ]
 

@@ -179,3 +179,14 @@ swapWithRight (( revLeft0, x0, right0 ) as zipList) =
 
         x1 :: right1 ->
             ( revLeft0, x1, x0 :: right1 )
+
+
+duplicateRight : ZipList a -> ZipList a
+duplicateRight ( revLeft0, x0, right0 ) =
+    ( revLeft0, x0, x0 :: right0 )
+
+
+duplicateLeft : ZipList a -> ZipList a
+duplicateLeft ( revLeft0, x0, right0 ) =
+    ( x0 :: revLeft0, x0, right0 )
+
