@@ -126,6 +126,24 @@ pasteFragment direction ({ fragmentBoard, instructions } as model) =
             }
 
 
+moveFragment : VerticalDirection -> Model -> Model
+moveFragment direction ({ fragmentBoard } as model) =
+    { model
+        | fragmentBoard =
+          case fragmentBoard of
+              EmptyBoard ->
+                  EmptyBoard
+
+              NonemptyBoard fragments ->
+                  case direction of
+                      Up ->
+                          NonemptyBoard (fragments |> ZipList.left)
+
+                      Down ->
+                          NonemptyBoard (fragments |> ZipList.right)
+    }
+
+
 -- ===Debug Console===
 
 initDebugConsole : DebugConsole
@@ -201,6 +219,7 @@ type Msg
     | PushFragment
     | PasteFragment VerticalDirection
     | PasteAndPopFragment VerticalDirection
+    | FragmentMovement VerticalDirection
       -- Debugging
     | DebugCurrentInstruction
     | ResetDebugConsole
@@ -590,6 +609,9 @@ update msg =
 
         PasteAndPopFragment direction ->
             Context.update (pasteAndPopFragment direction)
+
+        FragmentMovement direction ->
+            Context.update (moveFragment direction)
 
         JumpToBoundaryNode direction ->
             Context.update (jumpToBoundaryNode direction)
@@ -1016,13 +1038,19 @@ type alias KeyCode =
 traverseModeKeyBindings : Dict KeyCode Msg
 traverseModeKeyBindings =
     Dict.fromList
-        [ ( "k", InstructionMovement Up )
+        [ -- ===Instructions===
+          ( "k", InstructionMovement Up )
         , ( "j", InstructionMovement Down )
         , ( "K", SwapInstruction Up )
         , ( "J", SwapInstruction Down )
         , ( "i", InstructionEdit )
         , ( "o", InstructionInsertion Down )
         , ( "O", InstructionInsertion Up )
+        , ( "f", DuplicateInstruction Down )
+        , ( "F", DuplicateInstruction Up )
+        , ( "3", JumpToBoundaryInstruction Up )
+        , ( "4", JumpToBoundaryInstruction Down )
+        -- ===Nodes===
         , ( "s", NodeMovement Left )
         , ( "d", NodeMovement Right )
         , ( "e", SetModeTo (TraversingInstructions EditingNode) )
@@ -1031,17 +1059,18 @@ traverseModeKeyBindings =
         , ( "X", DeleteInstruction )
         , ( "x", DeleteNode )
         , ( "(", ConvertAssignmentToOperation )
-        , ( "f", DuplicateInstruction Down )
-        , ( "F", DuplicateInstruction Up )
         , ( "#", JumpToBoundaryNode Left )
         , ( "$", JumpToBoundaryNode Right )
-        , ( "3", JumpToBoundaryInstruction Up )
-        , ( "4", JumpToBoundaryInstruction Down )
+        -- ===Fragment Board===
         , ( "c", PushFragment )
         , ( "p", PasteFragment Down )
         , ( "P", PasteFragment Up )
         , ( "v", PasteAndPopFragment Down )
         , ( "V", PasteAndPopFragment Up )
+        -- Terrible keybindings
+        , ( "5", FragmentMovement Down )
+        , ( "6", FragmentMovement Up )
+        -- ===Debugger===
         , ( "?", DebugCurrentInstruction )
         ]
 
