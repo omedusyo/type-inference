@@ -130,6 +130,16 @@ insertRight y ( revLeft0, x0, right0 ) =
     ( revLeft0, x0, y :: right0 )
 
 
+insertListLeft : List a -> ZipList a -> ZipList a
+insertListLeft xs ( revLeft0, x0, right0 ) =
+    ( List.reverse xs ++ revLeft0, x0, right0 )
+
+
+insertListRight : List a -> ZipList a -> ZipList a
+insertListRight xs ( revLeft0, x0, right0 ) =
+    ( revLeft0, x0, xs ++ right0 )
+
+
 isSingleton : ZipList a -> Bool
 isSingleton ( revLeft0, x0, right0 ) =
     List.isEmpty revLeft0 && List.isEmpty right0

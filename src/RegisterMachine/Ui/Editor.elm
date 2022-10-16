@@ -89,6 +89,43 @@ pushFragment fragment model =
     }
 
 
+pasteAndPopFragment : VerticalDirection -> Model -> Model
+pasteAndPopFragment direction =
+    pasteFragment direction >> popFragment
+
+
+popFragment : Model -> Model
+popFragment ({ fragmentBoard } as model) =
+    case fragmentBoard of
+        EmptyBoard ->
+            model
+
+        NonemptyBoard fragments ->
+            { model
+            | fragmentBoard =
+                if ZipList.isSingleton fragments then
+                    EmptyBoard
+                else
+                    NonemptyBoard (fragments |> ZipList.deleteAndFocusLeft)
+            }
+
+pasteFragment : VerticalDirection -> Model -> Model
+pasteFragment direction ({ fragmentBoard, instructions } as model) =
+    case fragmentBoard of
+        EmptyBoard ->
+            model
+
+        NonemptyBoard fragments ->
+            { model
+            | instructions =
+                case direction of
+                    Up ->
+                        instructions |> ZipList.insertListLeft  (ZipList.current fragments |> NonemptyList.toList)
+                    Down ->
+                        instructions |> ZipList.insertListRight  (ZipList.current fragments |> NonemptyList.toList)
+            }
+
+
 -- ===Debug Console===
 
 initDebugConsole : DebugConsole
@@ -162,6 +199,8 @@ type Msg
     | DeleteNode
       -- Fragment Board
     | PushFragment
+    | PasteFragment VerticalDirection
+    | PasteAndPopFragment VerticalDirection
       -- Debugging
     | DebugCurrentInstruction
     | ResetDebugConsole
@@ -539,15 +578,18 @@ update msg =
             Context.update deleteCurrentNodeWithValidation
 
         PushFragment ->
-            -- 1. Get the current instruction
-            -- 2. Put it into a singleton fragment
-            -- 3. Store the fragment in the fragment board
             Context.update (\model ->
                 let
                     currentInstruction = getCurrentInstruction model
                 in
                 model |> pushFragment (NonemptyList.singleton currentInstruction)
             )
+
+        PasteFragment direction ->
+            Context.update (pasteFragment direction)
+
+        PasteAndPopFragment direction ->
+            Context.update (pasteAndPopFragment direction)
 
         JumpToBoundaryNode direction ->
             Context.update (jumpToBoundaryNode direction)
@@ -996,6 +1038,10 @@ traverseModeKeyBindings =
         , ( "3", JumpToBoundaryInstruction Up )
         , ( "4", JumpToBoundaryInstruction Down )
         , ( "c", PushFragment )
+        , ( "p", PasteFragment Down )
+        , ( "P", PasteFragment Up )
+        , ( "v", PasteAndPopFragment Down )
+        , ( "V", PasteAndPopFragment Up )
         , ( "?", DebugCurrentInstruction )
         ]
 
