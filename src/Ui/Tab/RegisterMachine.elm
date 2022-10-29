@@ -325,9 +325,9 @@ view : Config -> Model -> Element Msg
 view config model =
     -- 1. I need to display all the registers
     -- 2. I need to display the instruction block with labels
-    E.column [ E.width E.fill ]
+    E.column [ E.width E.fill, E.spacing 15 ]
         [ if shouldDisplayEditor then
-            Editor.view model.editorModel |> E.map EditorMsg
+            E.el [ Border.width 1, E.width E.fill ] (Editor.view model.editorModel |> E.map EditorMsg)
 
           else
             E.text ""
