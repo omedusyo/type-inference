@@ -13,6 +13,7 @@ import Json.Decode as Decode
 import List.Nonempty as NonemptyList
 import Lib.ZipList as ZipList exposing (ZipList)
 import Ui.Style.Button as Button
+import Lib.ZipListSelection as ZipListSelection exposing (ZipListSelection)
 import RegisterMachine.Ui.Base as Base
     exposing
         ( HorizontalDirection(..)
@@ -41,6 +42,7 @@ import Ui.InputCell as E
 type InstructionMode
     = TraversingInstructions NodeMode
     | InsertingInstruction
+    | SelectingInstructions
 
 
 type NodeMode
@@ -49,9 +51,12 @@ type NodeMode
 
 
 type alias Model =
+    -- TODO: This is wrong... it should be a sum of three models, one for each instruction...
     { instructions : ZipList Instruction
     , instructionMode : InstructionMode
     , fragmentBoard : FragmentBoard
+    -- TODO: Abstract the inner type into a ZipList selection...
+    , selectedInstructions : Maybe (ZipListSelection Instruction) -- TODO: Damn... I need a special ZipList a b 
     , debugConsole : DebugConsole
     }
 
@@ -143,6 +148,25 @@ moveFragment direction ({ fragmentBoard } as model) =
                           NonemptyBoard (fragments |> ZipList.right)
     }
 
+-- ===Selection Mode===
+
+setModeToSelectInstructions : Model -> Model
+setModeToSelectInstructions model =
+    { model
+    | instructionMode = SelectingInstructions
+    , selectedInstructions = Just (ZipListSelection.fromZipList model.instructions)
+    }
+
+
+selectionMovement : VerticalDirection -> Model -> Model
+selectionMovement direction model =
+    case direction of
+        Up ->
+            { model | selectedInstructions = model.selectedInstructions |> Maybe.map ZipListSelection.up }
+
+        Down ->
+            { model | selectedInstructions = model.selectedInstructions |> Maybe.map ZipListSelection.down }
+
 
 -- ===Debug Console===
 
@@ -172,27 +196,28 @@ lbl =
     emptyNode Static Base.labelExpectation
 
 
-instruction0 : Instruction
-instruction0 =
+exampleInstruction0 : Instruction
+exampleInstruction0 =
     Instruction OperationApplicationKind (ZipList.fromList src [ opName, argDyn, argDyn, argDyn ]) initialInstructionValidity
 
 
-instruction1 : Instruction
-instruction1 =
+exampleInstruction1 : Instruction
+exampleInstruction1 =
     Instruction OperationApplicationKind (ZipList.fromList src [ opName, argDyn ]) initialInstructionValidity
 
 
-instruction2 : Instruction
-instruction2 =
+exampleInstruction2 : Instruction
+exampleInstruction2 =
     Instruction LabelKind (ZipList.fromList lbl []) initialInstructionValidity
 
 
 init : InitContext Msg Model
 init =
     InitContext.setModelTo
-        { instructions = ZipList.fromList instruction0 [ instruction1, instruction2, Halt ]
+        { instructions = ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
         , instructionMode = TraversingInstructions TraversingNodes
         , fragmentBoard = initFragmentBoard
+        , selectedInstructions = Nothing
         , debugConsole = initDebugConsole
         }
 
@@ -220,6 +245,8 @@ type Msg
     | PasteFragment VerticalDirection
     | PasteAndPopFragment VerticalDirection
     | FragmentMovement VerticalDirection
+      -- Selection
+    | SelectionMovement VerticalDirection
       -- Debugging
     | DebugCurrentInstruction
     | ResetDebugConsole
@@ -586,6 +613,9 @@ update msg =
                 InsertingInstruction ->
                     Context.update setModeToInsertInstruction
 
+                SelectingInstructions ->
+                    Context.update setModeToSelectInstructions
+
         NodeEdit str ->
             -- TODO: Node validation
             Context.update (updateCurrentNodeWithoutValidation (\(Node nodeKind nodeValidation nodeExpectation _) -> Node nodeKind nodeValidation nodeExpectation str))
@@ -612,6 +642,9 @@ update msg =
 
         FragmentMovement direction ->
             Context.update (moveFragment direction)
+
+        SelectionMovement direction ->
+            Context.update (selectionMovement direction)
 
         JumpToBoundaryNode direction ->
             Context.update (jumpToBoundaryNode direction)
@@ -643,17 +676,43 @@ view ({ instructions } as model) =
                         E.el [] (E.text "Editing")
 
             InsertingInstruction ->
-                E.el [] (E.text "Inserting Instruction")
+                E.el [] (E.text "Inserting")
+
+            SelectingInstructions ->
+                E.el [] (E.text "Selecting")
+
         , E.column []
-            (instructions
-                |> ZipList.mapToList
-                    { current =
-                        \instruction ->
-                            E.el [ Background.color (E.rgb255 215 215 215) ] (viewInstruction True model.instructionMode instruction)
-                    , others =
-                        \instruction ->
-                            E.el [] (viewInstruction False model.instructionMode instruction)
-                    }
+            (let
+                bgColor = (E.rgb255 215 215 215)
+             in
+             case model.instructionMode of
+               SelectingInstructions ->
+                   case model.selectedInstructions of 
+                       Just instructionSelection ->
+                           instructionSelection
+                              |> ZipListSelection.mapToList
+                                 { current =
+                                     \instruction ->
+                                         E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = False } model.instructionMode instruction)
+                                 , others =
+                                     \instruction ->
+                                         E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
+                                 }
+
+
+                       Nothing ->
+                           [ viewKeyword "---should not be ever displayed---" ]
+
+               _ ->
+                   instructions
+                       |> ZipList.mapToList
+                           { current =
+                               \instruction ->
+                                     E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = True } model.instructionMode instruction)
+                           , others =
+                               \instruction ->
+                                   E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
+                           }
             )
         -- Fragment Board
         , E.el [] (E.text "===Fragment Board===")
@@ -671,7 +730,7 @@ viewFragmentBoard { fragmentBoard } =
             E.column []
               (fragment
                 |> NonemptyList.toList 
-                |> List.map (viewInstruction False (TraversingInstructions TraversingNodes))
+                |> List.map (viewInstruction { isInstructionSelected = False, isNodeSelected = False } (TraversingInstructions TraversingNodes))
               )
     in
     case fragmentBoard of
@@ -829,8 +888,8 @@ viewKeyword name =
     E.el [ Font.heavy ] (E.text name)
 
 
-viewInstruction : Bool -> InstructionMode -> Instruction -> Element Msg
-viewInstruction isInstructionSelected instructionMode instruction =
+viewInstruction : { isInstructionSelected : Bool, isNodeSelected : Bool } -> InstructionMode -> Instruction -> Element Msg
+viewInstruction { isInstructionSelected, isNodeSelected } instructionMode instruction =
     let
         viewBareInstruction : NodeMode -> Element Msg
         viewBareInstruction nodeMode =
@@ -846,20 +905,20 @@ viewInstruction isInstructionSelected instructionMode instruction =
                     case kind of
                         LabelKind ->
                             E.row []
-                                [ viewKeyword "label ", viewNode True isInstructionSelected nodeMode (ZipList.current nodes), viewKeyword ":" ]
+                                [ viewKeyword "label ", viewNode isNodeSelected isInstructionSelected nodeMode (ZipList.current nodes), viewKeyword ":" ]
 
                         OperationApplicationKind ->
                             E.row []
                                 (case ZipList.mapToTaggedList nodes of
                                     ( isSourceSelected, source ) :: ( isOperationNameSelected, operationName ) :: arguments ->
                                         List.concat
-                                            [ [ viewNode isSourceSelected isInstructionSelected nodeMode source
+                                            [ [ viewNode (isSourceSelected && isNodeSelected) isInstructionSelected nodeMode source
                                               , viewKeyword " <- "
-                                              , viewNode isOperationNameSelected isInstructionSelected nodeMode operationName
+                                              , viewNode (isOperationNameSelected && isNodeSelected) isInstructionSelected nodeMode operationName
                                               , viewKeyword "("
                                               ]
                                             , arguments
-                                                |> List.map (\( isArgSelected, arg ) -> viewNode isArgSelected isInstructionSelected nodeMode arg)
+                                                |> List.map (\( isArgSelected, arg ) -> viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg)
                                                 |> List.intersperse (viewKeyword ", ")
                                             , [ viewKeyword ")" ]
                                             ]
@@ -872,9 +931,9 @@ viewInstruction isInstructionSelected instructionMode instruction =
                             E.row []
                                 (case ZipList.mapToTaggedList nodes of
                                     ( isSourceSelected, source ) :: ( isTargetSelected, target ) :: [] ->
-                                        [ viewNode isSourceSelected isInstructionSelected nodeMode source
+                                        [ viewNode (isSourceSelected && isNodeSelected) isInstructionSelected nodeMode source
                                         , viewKeyword " <- "
-                                        , viewNode isTargetSelected isInstructionSelected nodeMode target
+                                        , viewNode (isTargetSelected && isNodeSelected) isInstructionSelected nodeMode target
                                         ]
 
                                     _ ->
@@ -886,7 +945,7 @@ viewInstruction isInstructionSelected instructionMode instruction =
                                 (case ZipList.mapToTaggedList nodes of
                                     ( isArgSelected, arg ) :: [] ->
                                         [ viewKeyword "jump "
-                                        , viewNode isArgSelected isInstructionSelected nodeMode arg
+                                        , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
                                         ]
 
                                     _ ->
@@ -898,9 +957,9 @@ viewInstruction isInstructionSelected instructionMode instruction =
                                 (case ZipList.mapToTaggedList nodes of
                                     ( isTestSelected, test ) :: ( isArgSelected, arg ) :: [] ->
                                         [ viewKeyword "if "
-                                        , viewNode isTestSelected isInstructionSelected nodeMode test
+                                        , viewNode (isTestSelected && isNodeSelected) isInstructionSelected nodeMode test
                                         , viewKeyword " jump "
-                                        , viewNode isArgSelected isInstructionSelected nodeMode arg
+                                        , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
                                         ]
 
                                     _ ->
@@ -916,7 +975,7 @@ viewInstruction isInstructionSelected instructionMode instruction =
                                 (case ZipList.mapToTaggedList nodes of
                                     ( isArgSelected, arg ) :: [] ->
                                         [ viewKeyword "push "
-                                        , viewNode isArgSelected isInstructionSelected nodeMode arg
+                                        , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
                                         ]
 
                                     _ ->
@@ -949,6 +1008,9 @@ viewInstruction isInstructionSelected instructionMode instruction =
 
         TraversingInstructions nodeMode ->
             viewBareInstruction nodeMode
+
+        SelectingInstructions ->
+            viewBareInstruction TraversingNodes
 
 
 viewNode : Bool -> Bool -> NodeMode -> Node -> Element Msg
@@ -1070,6 +1132,8 @@ traverseModeKeyBindings =
         -- Terrible keybindings
         , ( "5", FragmentMovement Down )
         , ( "6", FragmentMovement Up )
+        -- ===Selection===
+        , ( "m", SetModeTo SelectingInstructions )
         -- ===Debugger===
         , ( "?", DebugCurrentInstruction )
         ]
@@ -1088,6 +1152,15 @@ insertionModeKeyBindings =
         , ( "f", HaltKind )
         ]
 
+
+selectionModeKeyBindings : Dict KeyCode Msg
+selectionModeKeyBindings =
+    Dict.fromList
+      [ ( "k", SelectionMovement Up )
+      , ( "j", SelectionMovement Down )
+      -- TODO: X delete
+      -- TODO: c copy
+      ]
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
@@ -1122,6 +1195,19 @@ subscriptions model =
                             case Dict.get keyCode insertionModeKeyBindings of
                                 Just instructionKind ->
                                     Decode.succeed (ChangeInstructionTo instructionKind)
+
+                                Nothing ->
+                                    case keyCode of
+                                        "Escape" ->
+                                            Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
+
+                                        _ ->
+                                            Decode.fail ""
+
+                        SelectingInstructions ->
+                            case Dict.get keyCode selectionModeKeyBindings of
+                                Just msg ->
+                                    Decode.succeed msg
 
                                 Nothing ->
                                     case keyCode of
