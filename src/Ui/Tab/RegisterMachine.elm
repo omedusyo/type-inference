@@ -10,6 +10,7 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
+import Element.Region as Region
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionAddress, MemoryAddress, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
@@ -38,7 +39,7 @@ type alias Model =
 
 shouldDisplayEditor : Bool
 shouldDisplayEditor =
-    True
+    False
 
 
 operationEnv : RegisterMachine.OperationEnvironment
@@ -129,7 +130,7 @@ init =
             ]
 
         defaultSelectedController =
-            Controllers.controller8_memory_test
+            Controllers.controller7_fibonacci_recursive
 
         parsedMachine : Result TranslationError Machine
         parsedMachine =
@@ -321,6 +322,16 @@ update msg =
                     (\model editorModel -> { model | editorModel = editorModel })
 
 
+headingSize : Int
+headingSize =
+    20
+
+
+heading : String -> Element a
+heading str =
+    E.el [ Font.size headingSize, Font.bold ] (E.text str)
+
+
 view : Config -> Model -> Element Msg
 view config model =
     -- 1. I need to display all the registers
@@ -345,7 +356,10 @@ view config model =
                     Just (Ok machine) ->
                         case model.selectedController of
                             Just controllerExample ->
-                                viewInstructions machine.instructionPointer controllerExample.controller.instructions
+                                E.column []
+                                    [ heading "Controller"
+                                    , viewInstructions machine.instructionPointer controllerExample.controller.instructions
+                                    ]
 
                             Nothing ->
                                 E.text ""
@@ -376,13 +390,23 @@ view config model =
                         E.text (runTimeErrorToString runtimeError)
 
                     Just (Ok machine) ->
-                        E.column [ E.width E.fill ]
-                            [ E.row [ E.width E.fill ]
-                                [ viewRegisters (machine.env |> Dict.toList) model
+                        E.column [ E.width E.fill, E.spacing 20 ]
+                            [ E.column []
+                                [ heading "Registers"
+                                , viewRegisters (machine.env |> Dict.toList) model
                                 ]
-                            , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
-                            , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
-                            , viewStack machine.stack model
+                            , E.column []
+                                [ heading "Memory"
+                                , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                                ]
+                            , E.column []
+                                [ heading "Dual Memory"
+                                , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                                ]
+                            , E.column []
+                                [ heading "Stack"
+                                , viewStack machine.stack model
+                                ]
                             ]
                 ]
             ]
@@ -673,13 +697,15 @@ viewRegisters registers model =
 
 viewStack : Stack -> Model -> Element Msg
 viewStack stack model =
-    E.column [ E.width E.fill, E.spacing 5 ]
+    E.column [ E.width E.fill ]
         (stack
             |> Stack.toList
             |> List.reverse
             |> List.map
                 (\val ->
-                    viewValue val model
+                    E.column [ Border.width 1, Border.solid, E.paddingXY 0 15, E.width (E.px 50) ]
+                        [ E.el [ E.centerX, E.width E.fill ] (viewValue val model)
+                        ]
                 )
         )
 
@@ -699,8 +725,7 @@ viewMemoryState memoryState model =
                 )
     in
     E.column [ E.width E.fill ]
-        [ E.text "Memory"
-        , E.row [] [ E.text "Next free address: ", viewMemoryAddress memoryState.nextFreePointer ]
+        [ E.row [] [ E.text "Next free address: ", viewMemoryAddress memoryState.nextFreePointer ]
         , E.row []
             [ Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy -1), label = E.text "-1" }
             , Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy 1), label = E.text "+1" }
