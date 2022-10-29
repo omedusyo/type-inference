@@ -3,6 +3,7 @@ module Ui.Tab.RegisterMachine exposing (Model, Msg, init, subscriptions, update,
 import Array exposing (Array)
 import Array.Extra as Array
 import Dict exposing (Dict)
+import Dropdown
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -12,7 +13,7 @@ import Element.Input as Input
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionAddress, MemoryAddress, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
-import RegisterMachine.Machine as RegisterMachine exposing (Controller, Machine, RuntimeError(..), TranslationError)
+import RegisterMachine.Machine as RegisterMachine exposing (Controller, ControllerExample, Machine, RegisterEnvironment, RuntimeError(..), TranslationError)
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import RegisterMachine.Ui.Editor as Editor
@@ -22,7 +23,9 @@ import Ui.Style.Button as Button
 
 
 type alias Model =
-    { controller : Controller
+    { controllers : List ControllerExample
+    , controllerDropdownModel : Dropdown.State ControllerExample
+    , selectedController : Maybe ControllerExample
     , parsedMachine : Result TranslationError Machine
     , maybeRuntime : Maybe (Result RuntimeError Machine)
     , memoryView : MemoryView
@@ -33,8 +36,13 @@ type alias Model =
     }
 
 
-init : InitContext Msg Model
-init =
+shouldDisplayEditor : Bool
+shouldDisplayEditor =
+    True
+
+
+operationEnv : RegisterMachine.OperationEnvironment
+operationEnv =
     let
         boolToInt : Bool -> Int
         boolToInt b =
@@ -43,86 +51,95 @@ init =
 
             else
                 0
+    in
+    Dict.fromList
+        [ ( "sub", RegisterMachine.makeNumOperation2 (\x y -> x - y) )
+        , ( "less-than?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x < y)) )
+        , ( "add", RegisterMachine.makeNumOperation2 (\x y -> x + y) )
+        , ( "mul", RegisterMachine.makeNumOperation2 (\x y -> x * y) )
+        , ( "zero?", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
+        , ( "eq?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x == y)) )
+        , ( "not", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
+        , ( "decrement", RegisterMachine.makeNumOperation1 (\x -> x - 1) )
+        , ( "increment", RegisterMachine.makeNumOperation1 (\x -> x + 1) )
+        , ( "remainder", RegisterMachine.makeNumOperation2 (\x y -> remainderBy y x) )
+        , ( "pair?"
+          , RegisterMachine.makeOperation1
+                (\val ->
+                    case val of
+                        Pair _ ->
+                            Ok (ConstantValue (Num 1))
 
-        operationEnv : RegisterMachine.OperationEnvironment
-        operationEnv =
-            Dict.fromList
-                [ ( "sub", RegisterMachine.makeNumOperation2 (\x y -> x - y) )
-                , ( "less-than?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x < y)) )
-                , ( "add", RegisterMachine.makeNumOperation2 (\x y -> x + y) )
-                , ( "mul", RegisterMachine.makeNumOperation2 (\x y -> x * y) )
-                , ( "zero?", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
-                , ( "eq?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x == y)) )
-                , ( "not", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
-                , ( "decrement", RegisterMachine.makeNumOperation1 (\x -> x - 1) )
-                , ( "increment", RegisterMachine.makeNumOperation1 (\x -> x + 1) )
-                , ( "remainder", RegisterMachine.makeNumOperation2 (\x y -> remainderBy y x) )
-                , ( "pair?"
-                  , RegisterMachine.makeOperation1
-                        (\val ->
-                            case val of
-                                Pair _ ->
-                                    Ok (ConstantValue (Num 1))
+                        _ ->
+                            Ok (ConstantValue (Num 0))
+                )
+          )
+        , ( "nil?"
+          , RegisterMachine.makeOperation1
+                (\val ->
+                    case val of
+                        ConstantValue Nil ->
+                            Ok (ConstantValue (Num 1))
 
-                                _ ->
-                                    Ok (ConstantValue (Num 0))
-                        )
-                  )
-                , ( "nil?"
-                  , RegisterMachine.makeOperation1
-                        (\val ->
-                            case val of
-                                ConstantValue Nil ->
-                                    Ok (ConstantValue (Num 1))
+                        _ ->
+                            Ok (ConstantValue (Num 0))
+                )
+          )
+        , ( "num?"
+          , RegisterMachine.makeOperation1
+                (\val ->
+                    case val of
+                        ConstantValue (Num _) ->
+                            Ok (ConstantValue (Num 1))
 
-                                _ ->
-                                    Ok (ConstantValue (Num 0))
-                        )
-                  )
-                , ( "num?"
-                  , RegisterMachine.makeOperation1
-                        (\val ->
-                            case val of
-                                ConstantValue (Num _) ->
-                                    Ok (ConstantValue (Num 1))
+                        _ ->
+                            Ok (ConstantValue (Num 0))
+                )
+          )
+        , ( "moved?"
+          , RegisterMachine.makeOperation1
+                (\val ->
+                    case val of
+                        Moved ->
+                            Ok (ConstantValue (Num 1))
 
-                                _ ->
-                                    Ok (ConstantValue (Num 0))
-                        )
-                  )
-                , ( "moved?"
-                  , RegisterMachine.makeOperation1
-                        (\val ->
-                            case val of
-                                Moved ->
-                                    Ok (ConstantValue (Num 1))
+                        _ ->
+                            Ok (ConstantValue (Num 0))
+                )
+          )
+        ]
 
-                                _ ->
-                                    Ok (ConstantValue (Num 0))
-                        )
-                  )
-                ]
 
-        ( controller, env ) =
-            -- Controllers.controller0_gcd
-            -- Controllers.controller1_remainder
-            -- Controllers.controller2_fct_iterative
-            -- Controllers.controller3_gcd_with_inlined_remainder
-            -- Controllers.controller4_gcd_with_inlined_remainder_using_jump
-            -- Controllers.controller6_fct_recursive
-            -- Controllers.controller7_fibonacci_recursive
-            -- Controllers.controller8_memory_test
-            -- Controllers.controller9_range
-            Controllers.controller10_append
+init : InitContext Msg Model
+init =
+    let
+        controllers : List ControllerExample
+        controllers =
+            [ Controllers.controller0_gcd
+            , Controllers.controller1_remainder
+            , Controllers.controller2_fct_iterative
+            , Controllers.controller3_gcd_with_inlined_remainder
+            , Controllers.controller4_gcd_with_inlined_remainder_using_jump
+            , Controllers.controller6_fct_recursive
+            , Controllers.controller7_fibonacci_recursive
+            , Controllers.controller8_memory_test
+            , Controllers.controller9_range
+            , Controllers.controller10_append
+            , GarbageCollector.controller
+            ]
 
-        -- GarbageCollector.controller
+        defaultSelectedController =
+            Controllers.controller8_memory_test
+
         parsedMachine : Result TranslationError Machine
         parsedMachine =
-            RegisterMachine.makeMachine controller env operationEnv
+            RegisterMachine.makeMachine defaultSelectedController.controller defaultSelectedController.initialRegisterEnvironment operationEnv
     in
     InitContext.setModelTo
         (\editorModel ->
-            { controller = controller
+            { controllers = controllers
+            , controllerDropdownModel = Dropdown.init "controllers"
+            , selectedController = Just defaultSelectedController
             , parsedMachine = parsedMachine
             , maybeRuntime =
                 case parsedMachine of
@@ -175,6 +192,32 @@ centerAt p memoryView =
     memoryView |> shiftBy (p - oldCenter)
 
 
+reset : Model -> Model
+reset model =
+    case model.selectedController of
+        Just controllerExample ->
+            let
+                parsedMachine =
+                    RegisterMachine.makeMachine controllerExample.controller controllerExample.initialRegisterEnvironment operationEnv
+            in
+            case parsedMachine of
+                Ok machine ->
+                    -- Just (Ok machine)
+                    { model
+                        | maybeRuntime = Just (Ok machine)
+                        , memoryView = initMemoryView
+                    }
+
+                Err _ ->
+                    { model
+                        | maybeRuntime = Nothing
+                        , memoryView = initMemoryView
+                    }
+
+        Nothing ->
+            model
+
+
 resetRuntime : Model -> Model
 resetRuntime model =
     { model
@@ -194,6 +237,9 @@ type Msg
     | RunOneStep
     | MemoryAddressClicked MemoryAddress
     | ShiftMemoryViewBy Int
+      -- ===Controllers Dropdown===
+    | ControllerPicked (Maybe ControllerExample)
+    | ControllersDropdownMsg (Dropdown.Msg ControllerExample)
       -- editor
     | EditorMsg Editor.Msg
 
@@ -254,6 +300,19 @@ update msg =
                     }
                 )
 
+        ControllerPicked maybeControllerExample ->
+            Context.update (\model -> { model | selectedController = maybeControllerExample } |> reset)
+
+        ControllersDropdownMsg dropdownMsg ->
+            Context.updateWithCommand
+                (\model ->
+                    let
+                        ( newDropdownModel, cmd ) =
+                            Dropdown.update dropdownConfig dropdownMsg model model.controllerDropdownModel
+                    in
+                    ( { model | controllerDropdownModel = newDropdownModel }, cmd )
+                )
+
         EditorMsg editorMsg ->
             Editor.update editorMsg
                 |> Context.embed
@@ -267,43 +326,111 @@ view config model =
     -- 1. I need to display all the registers
     -- 2. I need to display the instruction block with labels
     E.column [ E.width E.fill ]
-        [ Editor.view model.editorModel |> E.map EditorMsg
-        , E.row []
-            [ Input.button Button.buttonStyle
-                { onPress =
-                    Just Reset
-                , label = E.text "Reset"
-                }
-            , Input.button Button.buttonStyle
-                { onPress =
-                    Just Start
-                , label = E.text "Start"
-                }
-            , Input.button Button.buttonStyle
-                { onPress =
-                    Just RunOneStep
-                , label = E.text "Run one step"
-                }
-            ]
-        , case model.maybeRuntime of
-            Nothing ->
-                E.text ""
+        [ if shouldDisplayEditor then
+            Editor.view model.editorModel |> E.map EditorMsg
 
-            Just (Err runtimeError) ->
-                E.text (runTimeErrorToString runtimeError)
+          else
+            E.text ""
+        , Dropdown.view dropdownConfig model model.controllerDropdownModel
+        , E.row [ E.width E.fill, E.spacing 30 ]
+            [ -- ===Instructions===
+              E.column [ E.width E.fill, E.alignTop ]
+                [ case model.maybeRuntime of
+                    Nothing ->
+                        E.text ""
 
-            Just (Ok machine) ->
-                E.column [ E.width E.fill ]
-                    [ E.row [ E.width E.fill ]
-                        [ viewRegisters (machine.env |> Dict.toList) model
-                        , viewStack machine.stack model
-                        , -- instructions
-                          viewInstructions machine.instructionPointer model.controller.instructions
-                        ]
-                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
-                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                    Just (Err runtimeError) ->
+                        E.text (runTimeErrorToString runtimeError)
+
+                    Just (Ok machine) ->
+                        case model.selectedController of
+                            Just controllerExample ->
+                                viewInstructions machine.instructionPointer controllerExample.controller.instructions
+
+                            Nothing ->
+                                E.text ""
+                ]
+            , E.column [ E.width E.fill, E.alignTop ]
+                [ E.row []
+                    [ Input.button Button.buttonStyle
+                        { onPress =
+                            Just Reset
+                        , label = E.text "Reset"
+                        }
+                    , Input.button Button.buttonStyle
+                        { onPress =
+                            Just Start
+                        , label = E.text "Start"
+                        }
+                    , Input.button Button.buttonStyle
+                        { onPress =
+                            Just RunOneStep
+                        , label = E.text "Run one step"
+                        }
                     ]
+                , case model.maybeRuntime of
+                    Nothing ->
+                        E.text ""
+
+                    Just (Err runtimeError) ->
+                        E.text (runTimeErrorToString runtimeError)
+
+                    Just (Ok machine) ->
+                        E.column [ E.width E.fill ]
+                            [ E.row [ E.width E.fill ]
+                                [ viewRegisters (machine.env |> Dict.toList) model
+                                ]
+                            , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                            , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                            , viewStack machine.stack model
+                            ]
+                ]
+            ]
         ]
+
+
+
+-- ===Controller Dropdown===
+
+
+dropdownConfig : Dropdown.Config ControllerExample Msg Model
+dropdownConfig =
+    Dropdown.basic
+        { itemsFromModel = \model -> model.controllers
+        , selectionFromModel = \model -> model.selectedController
+        , dropdownMsg = ControllersDropdownMsg
+        , onSelectMsg = ControllerPicked
+        , itemToPrompt =
+            \controllerExample ->
+                E.text controllerExample.name
+        , itemToElement =
+            \selected highlighted controllerExample ->
+                let
+                    bgColor =
+                        if selected then
+                            E.rgb255 100 100 100
+
+                        else
+                            E.rgb255 255 255 255
+                in
+                E.row
+                    [ Background.color bgColor
+                    , E.padding 8
+                    , E.spacing 10
+                    , E.width E.fill
+                    ]
+                    [ E.el [ Font.size 16 ] (E.text controllerExample.name)
+                    ]
+        }
+        |> Dropdown.withContainerAttributes
+            [ E.width (E.px 400) ]
+        |> Dropdown.withSelectAttributes
+            [ Border.width 1, Border.rounded 5, E.paddingXY 16 8, E.spacing 10, E.width E.fill ]
+        |> Dropdown.withListAttributes
+            [ Border.width 1
+            , Border.roundEach { topLeft = 0, topRight = 0, bottomLeft = 5, bottomRight = 5 }
+            , E.width E.fill
+            ]
 
 
 runTimeErrorToString : RuntimeError -> String
@@ -584,19 +711,20 @@ viewMemoryState memoryState model =
 
 viewMemoryCell : MemoryAddress -> MemoryCell -> Model -> Element Msg
 viewMemoryCell memoryAddress ( a, b ) model =
-    E.column [ Border.solid, Border.width 1, E.width (E.px 100) ]
-        [ E.column [ E.centerX, E.paddingXY 0 15, E.height (E.px 80) ]
+    E.column [ Border.solid, Border.width 1, E.width (E.px 70) ]
+        [ E.column [ E.centerX, E.paddingXY 0 15, E.height (E.px 50), E.width E.fill ]
             [ viewValue a model
             , viewValue b model
             ]
         , E.el
             (List.concat
-                [ [ E.centerX, E.paddingXY 0 5 ]
+                -- [ [ E.centerX, E.paddingXY 0 5, Background.color (E.rgb 64 52 235) ]
+                [ [ E.centerX, Background.color (E.rgb 0 0 0), E.width E.fill ]
                 , if model.currentlyHighlightedCell == memoryAddress then
                     [ Font.color (E.rgb255 255 0 0) ]
 
                   else
-                    []
+                    [ Font.color (E.rgb255 255 255 255) ]
                 ]
             )
             (E.text (String.concat [ "#", String.fromInt memoryAddress ]))

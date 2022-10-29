@@ -9,6 +9,13 @@ import RegisterMachine.Stack as Stack exposing (Stack)
 import Set exposing (Set)
 
 
+type alias ControllerExample =
+    { name : String
+    , controller : Controller
+    , initialRegisterEnvironment : RegisterEnvironment
+    }
+
+
 type alias Machine =
     { env : RegisterEnvironment
     , stack : Stack

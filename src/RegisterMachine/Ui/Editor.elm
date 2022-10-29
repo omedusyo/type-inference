@@ -3,6 +3,7 @@ module RegisterMachine.Ui.Editor exposing (..)
 import Browser.Dom as Dom
 import Browser.Events as BE
 import Dict exposing (Dict)
+import Dropdown
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -10,10 +11,9 @@ import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import Json.Decode as Decode
-import List.Nonempty as NonemptyList
 import Lib.ZipList as ZipList exposing (ZipList)
-import Ui.Style.Button as Button
 import Lib.ZipListSelection as ZipListSelection exposing (ZipListSelection)
+import List.Nonempty as NonemptyList
 import RegisterMachine.Ui.Base as Base
     exposing
         ( HorizontalDirection(..)
@@ -29,10 +29,10 @@ import RegisterMachine.Ui.Base as Base
         )
 import RegisterMachine.Ui.Color as Color
 import RegisterMachine.Ui.Validation as Validation exposing (validatedInstruction)
-import Task
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.InputCell as E
+import Ui.Style.Button as Button
 
 
 
@@ -55,19 +55,25 @@ type alias Model =
     { instructions : ZipList Instruction
     , instructionMode : InstructionMode
     , fragmentBoard : FragmentBoard
-    -- TODO: Abstract the inner type into a ZipList selection...
-    , selectedInstructions : Maybe (ZipListSelection Instruction) -- TODO: Damn... I need a special ZipList a b 
+    , selectedInstructions : Maybe (ZipListSelection Instruction)
     , debugConsole : DebugConsole
+
+    -- ===dropdown test===
+    , dropdownModel : Dropdown.State Int
+    , selectedOption : Maybe Int
     }
 
 
+
 -- This is used for copy/pasting
-type FragmentBoard = 
-      EmptyBoard
+
+
+type FragmentBoard
+    = EmptyBoard
     | NonemptyBoard (ZipList Fragment)
 
 
-type alias Fragment = 
+type alias Fragment =
     NonemptyList.Nonempty Instruction
 
 
@@ -75,22 +81,26 @@ type alias DebugConsole =
     { instructionsRev : List Instruction
     }
 
+
+
 -- ===Fragment Board===
 
+
 initFragmentBoard : FragmentBoard
-initFragmentBoard = EmptyBoard
+initFragmentBoard =
+    EmptyBoard
 
 
 pushFragment : Fragment -> Model -> Model
 pushFragment fragment model =
     { model
-    | fragmentBoard =
-        case model.fragmentBoard of
-            EmptyBoard ->
-                NonemptyBoard (ZipList.singleton fragment)
+        | fragmentBoard =
+            case model.fragmentBoard of
+                EmptyBoard ->
+                    NonemptyBoard (ZipList.singleton fragment)
 
-            NonemptyBoard fragments ->
-                NonemptyBoard (fragments |> ZipList.cons fragment)
+                NonemptyBoard fragments ->
+                    NonemptyBoard (fragments |> ZipList.cons fragment)
     }
 
 
@@ -107,12 +117,14 @@ popFragment ({ fragmentBoard } as model) =
 
         NonemptyBoard fragments ->
             { model
-            | fragmentBoard =
-                if ZipList.isSingleton fragments then
-                    EmptyBoard
-                else
-                    NonemptyBoard (fragments |> ZipList.deleteAndFocusLeft)
+                | fragmentBoard =
+                    if ZipList.isSingleton fragments then
+                        EmptyBoard
+
+                    else
+                        NonemptyBoard (fragments |> ZipList.deleteAndFocusLeft)
             }
+
 
 pasteFragment : VerticalDirection -> Model -> Model
 pasteFragment direction ({ fragmentBoard, instructions } as model) =
@@ -122,12 +134,13 @@ pasteFragment direction ({ fragmentBoard, instructions } as model) =
 
         NonemptyBoard fragments ->
             { model
-            | instructions =
-                case direction of
-                    Up ->
-                        instructions |> ZipList.insertListLeft  (ZipList.current fragments |> NonemptyList.toList)
-                    Down ->
-                        instructions |> ZipList.insertListRight  (ZipList.current fragments |> NonemptyList.toList)
+                | instructions =
+                    case direction of
+                        Up ->
+                            instructions |> ZipList.insertListLeft (ZipList.current fragments |> NonemptyList.toList)
+
+                        Down ->
+                            instructions |> ZipList.insertListRight (ZipList.current fragments |> NonemptyList.toList)
             }
 
 
@@ -135,26 +148,29 @@ moveFragment : VerticalDirection -> Model -> Model
 moveFragment direction ({ fragmentBoard } as model) =
     { model
         | fragmentBoard =
-          case fragmentBoard of
-              EmptyBoard ->
-                  EmptyBoard
+            case fragmentBoard of
+                EmptyBoard ->
+                    EmptyBoard
 
-              NonemptyBoard fragments ->
-                  case direction of
-                      Up ->
-                          NonemptyBoard (fragments |> ZipList.left)
+                NonemptyBoard fragments ->
+                    case direction of
+                        Up ->
+                            NonemptyBoard (fragments |> ZipList.left)
 
-                      Down ->
-                          NonemptyBoard (fragments |> ZipList.right)
+                        Down ->
+                            NonemptyBoard (fragments |> ZipList.right)
     }
 
+
+
 -- ===Selection Mode===
+
 
 setModeToSelectInstructions : Model -> Model
 setModeToSelectInstructions model =
     { model
-    | instructionMode = SelectingInstructions
-    , selectedInstructions = Just (ZipListSelection.fromZipList model.instructions)
+        | instructionMode = SelectingInstructions
+        , selectedInstructions = Just (ZipListSelection.fromZipList model.instructions)
     }
 
 
@@ -168,15 +184,17 @@ selectionMovement direction model =
             { model | selectedInstructions = model.selectedInstructions |> Maybe.map ZipListSelection.down }
 
 
+
 -- ===Debug Console===
+
 
 initDebugConsole : DebugConsole
 initDebugConsole =
     { instructionsRev = [] }
 
 
--- ===Instructions/Nodes===
 
+-- ===Instructions/Nodes===
 -- TODO: Delete the below test instructions/functions
 
 
@@ -219,6 +237,8 @@ init =
         , fragmentBoard = initFragmentBoard
         , selectedInstructions = Nothing
         , debugConsole = initDebugConsole
+        , dropdownModel = Dropdown.init "dropdown"
+        , selectedOption = Nothing
         }
 
 
@@ -283,20 +303,20 @@ duplicateInstruction : VerticalDirection -> Model -> Model
 duplicateInstruction direction model =
     case direction of
         Up ->
-          { model | instructions = ZipList.duplicateLeft model.instructions }
+            { model | instructions = ZipList.duplicateLeft model.instructions }
 
         Down ->
-          { model | instructions = ZipList.duplicateRight model.instructions }
+            { model | instructions = ZipList.duplicateRight model.instructions }
 
 
 jumpToBoundaryInstruction : VerticalDirection -> Model -> Model
 jumpToBoundaryInstruction direction model =
     case direction of
         Up ->
-          { model | instructions = ZipList.jumpStart model.instructions }
+            { model | instructions = ZipList.jumpStart model.instructions }
 
         Down ->
-          { model | instructions = ZipList.jumpEnd model.instructions }
+            { model | instructions = ZipList.jumpEnd model.instructions }
 
 
 insertFutureInstruction : VerticalDirection -> Model -> Model
@@ -378,6 +398,7 @@ updateCurrentNodeWithoutValidation f =
                     instruction
         )
 
+
 updateNodesOfCurrentInstructionWithoutValidation : (ZipList Node -> ZipList Node) -> Model -> Model
 updateNodesOfCurrentInstructionWithoutValidation f model =
     { model
@@ -393,7 +414,6 @@ updateNodesOfCurrentInstructionWithoutValidation f model =
                                 instruction
                     )
     }
-
 
 
 
@@ -577,22 +597,25 @@ update msg =
             Context.update (\model -> { model | instructions = ZipList.deleteAndFocusRight model.instructions })
 
         ConvertAssignmentToOperation ->
-            Context.update (
-                updateCurrentInstructionWithoutValidation (\instruction ->
-                  let newInstruction = 
-                        case instruction of
-                          Instruction AssignmentKind nodes validity ->
-                              Instruction
-                                  OperationApplicationKind
-                                  ((nodes |> ZipList.updateLast Validation.setNodeToOperationNameNode) |> ZipList.insertAtEnd Base.argNode)
-                                  validity
-                          _ ->
-                              instruction
-                  in
-                  newInstruction
+            Context.update
+                (updateCurrentInstructionWithoutValidation
+                    (\instruction ->
+                        let
+                            newInstruction =
+                                case instruction of
+                                    Instruction AssignmentKind nodes validity ->
+                                        Instruction
+                                            OperationApplicationKind
+                                            ((nodes |> ZipList.updateLast Validation.setNodeToOperationNameNode) |> ZipList.insertAtEnd Base.argNode)
+                                            validity
+
+                                    _ ->
+                                        instruction
+                        in
+                        newInstruction
+                    )
+                    >> validateCurrentInstruction
                 )
-                >> validateCurrentInstruction
-            )
 
         DuplicateInstruction direction ->
             Context.update (duplicateInstruction direction >> moveInstruction direction)
@@ -627,12 +650,14 @@ update msg =
             Context.update deleteCurrentNodeWithValidation
 
         PushFragment ->
-            Context.update (\model ->
-                let
-                    currentInstruction = getCurrentInstruction model
-                in
-                model |> pushFragment (NonemptyList.singleton currentInstruction)
-            )
+            Context.update
+                (\model ->
+                    let
+                        currentInstruction =
+                            getCurrentInstruction model
+                    in
+                    model |> pushFragment (NonemptyList.singleton currentInstruction)
+                )
 
         PasteFragment direction ->
             Context.update (pasteFragment direction)
@@ -650,17 +675,20 @@ update msg =
             Context.update (jumpToBoundaryNode direction)
 
         DebugCurrentInstruction ->
-            Context.update (\({ debugConsole } as model) ->
-                let
-                    currentInstruction = getCurrentInstruction model
+            Context.update
+                (\({ debugConsole } as model) ->
+                    let
+                        currentInstruction =
+                            getCurrentInstruction model
 
-                    _ = Debug.log "CURRENT-INSTRUCTION" currentInstruction
-                in
-                { model | debugConsole = { debugConsole | instructionsRev = currentInstruction :: debugConsole.instructionsRev } }
-            )
+                        _ =
+                            Debug.log "CURRENT-INSTRUCTION" currentInstruction
+                    in
+                    { model | debugConsole = { debugConsole | instructionsRev = currentInstruction :: debugConsole.instructionsRev } }
+                )
+
         ResetDebugConsole ->
-            Context.update (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } } )
-
+            Context.update (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } })
 
 
 view : Model -> Element Msg
@@ -680,43 +708,44 @@ view ({ instructions } as model) =
 
             SelectingInstructions ->
                 E.el [] (E.text "Selecting")
-
         , E.column []
             (let
-                bgColor = (E.rgb255 215 215 215)
+                bgColor =
+                    E.rgb255 215 215 215
              in
              case model.instructionMode of
-               SelectingInstructions ->
-                   case model.selectedInstructions of 
-                       Just instructionSelection ->
-                           instructionSelection
-                              |> ZipListSelection.mapToList
-                                 { current =
-                                     \instruction ->
-                                         E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = False } model.instructionMode instruction)
-                                 , others =
-                                     \instruction ->
-                                         E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
-                                 }
+                SelectingInstructions ->
+                    case model.selectedInstructions of
+                        Just instructionSelection ->
+                            instructionSelection
+                                |> ZipListSelection.mapToList
+                                    { current =
+                                        \instruction ->
+                                            E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = False } model.instructionMode instruction)
+                                    , others =
+                                        \instruction ->
+                                            E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
+                                    }
 
+                        Nothing ->
+                            [ viewKeyword "---should not be ever displayed---" ]
 
-                       Nothing ->
-                           [ viewKeyword "---should not be ever displayed---" ]
-
-               _ ->
-                   instructions
-                       |> ZipList.mapToList
-                           { current =
-                               \instruction ->
-                                     E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = True } model.instructionMode instruction)
-                           , others =
-                               \instruction ->
-                                   E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
-                           }
+                _ ->
+                    instructions
+                        |> ZipList.mapToList
+                            { current =
+                                \instruction ->
+                                    E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = True } model.instructionMode instruction)
+                            , others =
+                                \instruction ->
+                                    E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
+                            }
             )
+
         -- Fragment Board
         , E.el [] (E.text "===Fragment Board===")
         , viewFragmentBoard model
+
         -- Debugging
         , E.el [] (E.text "===Debugging===")
         , viewDebuggingConsole model
@@ -725,13 +754,14 @@ view ({ instructions } as model) =
 
 viewFragmentBoard : Model -> Element Msg
 viewFragmentBoard { fragmentBoard } =
-    let viewFragment : Fragment -> Element Msg
+    let
+        viewFragment : Fragment -> Element Msg
         viewFragment fragment =
             E.column []
-              (fragment
-                |> NonemptyList.toList 
-                |> List.map (viewInstruction { isInstructionSelected = False, isNodeSelected = False } (TraversingInstructions TraversingNodes))
-              )
+                (fragment
+                    |> NonemptyList.toList
+                    |> List.map (viewInstruction { isInstructionSelected = False, isNodeSelected = False } (TraversingInstructions TraversingNodes))
+                )
     in
     case fragmentBoard of
         EmptyBoard ->
@@ -739,132 +769,137 @@ viewFragmentBoard { fragmentBoard } =
 
         NonemptyBoard fragments ->
             E.column [ E.spacing 15 ]
-              (fragments
-                  |> ZipList.mapToList
-                      { current =
-                          \currentFragment ->
-                              E.el [ Border.solid, Border.widthEach { left = 1, bottom = 0, right = 0, top = 0 } ] (viewFragment currentFragment)
-                      , others =
-                          \fragment ->
-                              E.el [] (viewFragment fragment)
-                      }
-              )
+                (fragments
+                    |> ZipList.mapToList
+                        { current =
+                            \currentFragment ->
+                                E.el [ Border.solid, Border.widthEach { left = 1, bottom = 0, right = 0, top = 0 } ] (viewFragment currentFragment)
+                        , others =
+                            \fragment ->
+                                E.el [] (viewFragment fragment)
+                        }
+                )
 
 
 viewDebuggingConsole : Model -> Element Msg
 viewDebuggingConsole model =
     E.column []
         [ Input.button Button.buttonStyle
-                { onPress =
-                    Just ResetDebugConsole
-                , label = E.text "reset"
-                }
+            { onPress =
+                Just ResetDebugConsole
+            , label = E.text "reset"
+            }
         , E.column []
-                (model.debugConsole.instructionsRev
-                    |> List.reverse
-                    |> List.map (\instruction ->
+            (model.debugConsole.instructionsRev
+                |> List.reverse
+                |> List.map
+                    (\instruction ->
                         case instruction of
                             Base.Instruction instructionKind ( revLeftNodes, selectedNode, rightNodes ) instructionValidity ->
-                              let viewDebuggedNode : Bool -> Node -> Element Msg
-                                  viewDebuggedNode isSelected ((Node nodeKind nodeValidity nodeExpectations text) as node) =
-                                      E.row [ E.spacing 5 ]
-                                          [ E.el [ Font.bold ] (E.text "Node")
-                                          , E.text <|
+                                let
+                                    viewDebuggedNode : Bool -> Node -> Element Msg
+                                    viewDebuggedNode isSelected ((Node nodeKind nodeValidity nodeExpectations text) as node) =
+                                        E.row [ E.spacing 5 ]
+                                            [ E.el [ Font.bold ] (E.text "Node")
+                                            , E.text <|
                                                 case nodeKind of
                                                     Static ->
                                                         "S"
 
                                                     Dynamic ->
                                                         "D"
-                                          , E.el [ Font.bold ] (E.text "[ ")
-                                          , -- This shows node's validity already
-                                            viewNode isSelected True TraversingNodes node
-                                          , E.row []
-                                              [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] (E.text ": {")
-                                              , E.row []
-                                                  (nodeExpectations
-                                                      |> List.map (\nodeExpectation ->
-                                                           E.text <|
-                                                               case nodeExpectation of
-                                                                   Base.RegisterName ->
-                                                                       "reg-name"
+                                            , E.el [ Font.bold ] (E.text "[ ")
+                                            , -- This shows node's validity already
+                                              viewNode isSelected True TraversingNodes node
+                                            , E.row []
+                                                [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] (E.text ": {")
+                                                , E.row []
+                                                    (nodeExpectations
+                                                        |> List.map
+                                                            (\nodeExpectation ->
+                                                                E.text <|
+                                                                    case nodeExpectation of
+                                                                        Base.RegisterName ->
+                                                                            "reg-name"
 
-                                                                   Base.RegisterUse ->
-                                                                       "reg-use"
+                                                                        Base.RegisterUse ->
+                                                                            "reg-use"
 
-                                                                   Base.Label ->
-                                                                       "label"
+                                                                        Base.Label ->
+                                                                            "label"
 
-                                                                   Base.LabelUse ->
-                                                                       "label-use"
+                                                                        Base.LabelUse ->
+                                                                            "label-use"
 
-                                                                   Base.Integer ->
-                                                                       "int"
+                                                                        Base.Integer ->
+                                                                            "int"
 
-                                                                   Base.Nil ->
-                                                                       "nil"
+                                                                        Base.Nil ->
+                                                                            "nil"
 
-                                                                   Base.OperationName ->
-                                                                       "op"
-                                                         )
+                                                                        Base.OperationName ->
+                                                                            "op"
+                                                            )
                                                         |> List.intersperse (E.text ", ")
-                                                   )
+                                                    )
                                                 , E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] (E.text "}")
                                                 ]
-
-                                          , E.el [ Font.bold ] (E.text "]")
-                                          ]
-
-                              in
+                                            , E.el [ Font.bold ] (E.text "]")
+                                            ]
+                                in
                                 E.row [ E.spacing 10 ]
-                                    [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] <| E.text <|
-                                        case instructionKind of
-                                            LabelKind ->
-                                                "Label"
+                                    [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] <|
+                                        E.text <|
+                                            case instructionKind of
+                                                LabelKind ->
+                                                    "Label"
 
-                                            OperationApplicationKind ->
-                                                "OperationApplication"
+                                                OperationApplicationKind ->
+                                                    "OperationApplication"
 
-                                            AssignmentKind ->
-                                                "Assignment"
+                                                AssignmentKind ->
+                                                    "Assignment"
 
-                                            JumpKind ->
-                                                "Jump"
+                                                JumpKind ->
+                                                    "Jump"
 
-                                            JumpIfKind ->
-                                                "JumpIf"
+                                                JumpIfKind ->
+                                                    "JumpIf"
 
-                                            PushKind ->
-                                                "Push"
+                                                PushKind ->
+                                                    "Push"
 
-                                            HaltKind ->
-                                                "Halt"
+                                                HaltKind ->
+                                                    "Halt"
                                     , case instructionValidity of
-                                          Base.EveryNodeIsValid ->
-                                              E.el [ Font.color (E.rgb 0 1 0) ] (E.text "all-valid")
+                                        Base.EveryNodeIsValid ->
+                                            E.el [ Font.color (E.rgb 0 1 0) ] (E.text "all-valid")
 
-                                          Base.ContainsErrorNodes ->
-                                              E.el [ Font.color (E.rgb 1 0 0) ] (E.text "has-errors")
+                                        Base.ContainsErrorNodes ->
+                                            E.el [ Font.color (E.rgb 1 0 0) ] (E.text "has-errors")
 
-                                          Base.ContainsUnfinishedNodes ->
-                                              E.text "unfinished"
+                                        Base.ContainsUnfinishedNodes ->
+                                            E.text "unfinished"
 
-                                          -- WrongArity { expected : ExpectedArity, received : Int } ->
-                                          Base.WrongArity { expected , received } ->
-                                              E.text <| String.concat
-                                                  [ "wrong-arity(expected "
-                                                  , case expected of
-                                                        Base.Atleast x -> "atleast" ++ String.fromInt x
+                                        -- WrongArity { expected : ExpectedArity, received : Int } ->
+                                        Base.WrongArity { expected, received } ->
+                                            E.text <|
+                                                String.concat
+                                                    [ "wrong-arity(expected "
+                                                    , case expected of
+                                                        Base.Atleast x ->
+                                                            "atleast" ++ String.fromInt x
 
-                                                        Base.Exactly x -> "exactly" ++ String.fromInt x
-                                                  , " received "
-                                                  , String.fromInt received
-                                                  , ")"
-                                                  ]
+                                                        Base.Exactly x ->
+                                                            "exactly" ++ String.fromInt x
+                                                    , " received "
+                                                    , String.fromInt received
+                                                    , ")"
+                                                    ]
                                     , E.row [ E.spacing 10 ]
                                         (List.concat
                                             [ revLeftNodes
-                                                |> List.reverse 
+                                                |> List.reverse
                                                 |> List.map (viewDebuggedNode False)
                                             , [ viewDebuggedNode True selectedNode ]
                                             , rightNodes
@@ -875,13 +910,14 @@ viewDebuggingConsole model =
                                     ]
 
                             Base.Halt ->
-                              Debug.todo ""
+                                Debug.todo ""
 
                             Base.FutureInstruction verticalDirection ->
-                              Debug.todo ""
+                                Debug.todo ""
                     )
-                )
-          ]
+            )
+        ]
+
 
 viewKeyword : String -> Element Msg
 viewKeyword name =
@@ -1112,6 +1148,7 @@ traverseModeKeyBindings =
         , ( "F", DuplicateInstruction Up )
         , ( "3", JumpToBoundaryInstruction Up )
         , ( "4", JumpToBoundaryInstruction Down )
+
         -- ===Nodes===
         , ( "s", NodeMovement Left )
         , ( "d", NodeMovement Right )
@@ -1123,17 +1160,21 @@ traverseModeKeyBindings =
         , ( "(", ConvertAssignmentToOperation )
         , ( "#", JumpToBoundaryNode Left )
         , ( "$", JumpToBoundaryNode Right )
+
         -- ===Fragment Board===
         , ( "c", PushFragment )
         , ( "p", PasteFragment Down )
         , ( "P", PasteFragment Up )
         , ( "v", PasteAndPopFragment Down )
         , ( "V", PasteAndPopFragment Up )
+
         -- Terrible keybindings
         , ( "5", FragmentMovement Down )
         , ( "6", FragmentMovement Up )
+
         -- ===Selection===
         , ( "m", SetModeTo SelectingInstructions )
+
         -- ===Debugger===
         , ( "?", DebugCurrentInstruction )
         ]
@@ -1156,11 +1197,13 @@ insertionModeKeyBindings =
 selectionModeKeyBindings : Dict KeyCode Msg
 selectionModeKeyBindings =
     Dict.fromList
-      [ ( "k", SelectionMovement Up )
-      , ( "j", SelectionMovement Down )
-      -- TODO: X delete
-      -- TODO: c copy
-      ]
+        [ ( "k", SelectionMovement Up )
+        , ( "j", SelectionMovement Down )
+
+        -- TODO: X delete
+        -- TODO: c copy
+        ]
+
 
 subscriptions : Model -> Sub Msg
 subscriptions model =

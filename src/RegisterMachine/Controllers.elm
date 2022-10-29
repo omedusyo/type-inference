@@ -1,6 +1,6 @@
 module RegisterMachine.Controllers exposing (..)
 
-import Dict exposing (Dict)
+import Dict
 import RegisterMachine.Base as RegisterMachine
     exposing
         ( Constant(..)
@@ -11,19 +11,21 @@ import RegisterMachine.Base as RegisterMachine
         , Register
         , Value(..)
         )
-import RegisterMachine.Machine as RegisterMachine exposing (Controller, InstructionBlock, LabelOrInstruction(..), RegisterEnvironment)
-import Set exposing (Set)
+import RegisterMachine.Machine as RegisterMachine exposing (ControllerExample, LabelOrInstruction(..))
+import Set
 
 
+num : Int -> Value
 num x =
     ConstantValue (Num x)
 
 
+nil : Value
 nil =
     ConstantValue Nil
 
 
-controller0_gcd : ( Controller, RegisterEnvironment )
+controller0_gcd : ControllerExample
 controller0_gcd =
     -- registers: a : Int, b : Int, tmp : Int, is-zero-b? : Bool
     -- labels: loop, done
@@ -46,8 +48,24 @@ controller0_gcd =
     --   5: jump loop
     --   6: halt
     --
-    ( { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?", "label-test" ]
-      , instructions =
+    let
+        a =
+            [ 3, 5, 7 ]
+
+        b =
+            [ 3, 5, 11 ]
+    in
+    { name =
+        String.concat
+            [ "gcd("
+            , a |> List.map String.fromInt |> String.join "*"
+            , ", "
+            , b |> List.map String.fromInt |> String.join "*"
+            , ")"
+            ]
+    , controller =
+        { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?", "label-test" ]
+        , instructions =
             [ Label "loop"
             , Perform (AssignOperation "is-b-zero?" (Operation "zero?" [ Register "b" ]))
             , Perform (JumpToLabelIf "is-b-zero?" "done")
@@ -58,12 +76,13 @@ controller0_gcd =
             , Label "done"
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "a", num (3 * 5 * 7) ), ( "b", num (3 * 5 * 5) ), ( "tmp", num 0 ), ( "is-b-zero?", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "a", num (List.product a) ), ( "b", num (List.product b) ), ( "tmp", num 0 ), ( "is-b-zero?", num 0 ) ]
+    }
 
 
-controller1_remainder : ( Controller, RegisterEnvironment )
+controller1_remainder : ControllerExample
 controller1_remainder =
     -- What's the algorithm?
     -- subtract $b from $a and assign it into $a, until $a <- $b is true. Then halt. The result is in the register $a.
@@ -76,8 +95,10 @@ controller1_remainder =
     --   jump $start
     -- done:
     --   halt
-    ( { registers = Set.fromList [ "a", "b", "is-finished?" ]
-      , instructions =
+    { name = "remainder"
+    , controller =
+        { registers = Set.fromList [ "a", "b", "is-finished?" ]
+        , instructions =
             [ Perform (AssignConstant "a" (Num 16))
             , Perform (AssignConstant "b" (Num 3))
             , Label "start"
@@ -88,11 +109,13 @@ controller1_remainder =
             , Label "done"
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "a", num 0 ), ( "b", num 15 ), ( "done?", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "a", num 0 ), ( "b", num 15 ), ( "done?", num 0 ) ]
+    }
 
 
+controller2_fct_iterative : ControllerExample
 controller2_fct_iterative =
     -- registers: counter, state, done?
     --   counter <- 5
@@ -105,8 +128,10 @@ controller2_fct_iterative =
     --   jump :loop
     -- label done
     --   halt
-    ( { registers = Set.fromList [ "counter", "state", "done?" ]
-      , instructions =
+    { name = "fct-iterative"
+    , controller =
+        { registers = Set.fromList [ "counter", "state", "done?" ]
+        , instructions =
             [ Perform (AssignConstant "counter" (Num 5))
             , Perform (AssignConstant "state" (Num 1))
             , Label "loop"
@@ -118,11 +143,13 @@ controller2_fct_iterative =
             , Label "done"
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "counter", num 0 ), ( "state", num 0 ), ( "done?", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "counter", num 0 ), ( "state", num 0 ), ( "done?", num 0 ) ]
+    }
 
 
+controller3_gcd_with_inlined_remainder : ControllerExample
 controller3_gcd_with_inlined_remainder =
     -- gcd: a, b, remainder-result, done?, remainder-done?
     --   // I don't really need the `remainder-done?` register, I could reuse `done?`
@@ -145,8 +172,10 @@ controller3_gcd_with_inlined_remainder =
     --   jump :remainder
     -- done:
     --   halt
-    ( { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?" ]
-      , instructions =
+    { name = "gcd-with-inlined-remainder"
+    , controller =
+        { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?" ]
+        , instructions =
             [ Perform (AssignConstant "a" (Num (3 * 5 * 7)))
             , Perform (AssignConstant "b" (Num (3 * 5 * 5)))
             , Label "gcd-loop"
@@ -172,11 +201,13 @@ controller3_gcd_with_inlined_remainder =
             , Label "done"
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ) ]
+    }
 
 
+controller4_gcd_with_inlined_remainder_using_jump : ControllerExample
 controller4_gcd_with_inlined_remainder_using_jump =
     -- gcd registers: a, b, remainder-result, done?, remainder-done?, continue
     --   a <- 15
@@ -197,8 +228,10 @@ controller4_gcd_with_inlined_remainder_using_jump =
     --   jump :remainder
     -- done:
     --   halt
-    ( { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
-      , instructions =
+    { name = "gcd-with-inlined-remainder-using-jump"
+    , controller =
+        { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
+        , instructions =
             [ Perform (AssignConstant "a" (Num (3 * 5 * 7)))
             , Perform (AssignConstant "b" (Num (3 * 5 * 5)))
             , Label "gcd-loop"
@@ -223,9 +256,10 @@ controller4_gcd_with_inlined_remainder_using_jump =
             , Label "done"
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ), ( "continue", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ), ( "continue", num 0 ) ]
+    }
 
 
 controller5_sqrt =
@@ -263,6 +297,7 @@ controller5_sqrt =
     }
 
 
+controller6_fct_recursive : ControllerExample
 controller6_fct_recursive =
     -- fct:
     --   done? <- $n == 0
@@ -278,8 +313,10 @@ controller6_fct_recursive =
     -- done:
     --   result <- 1
     --   jump $continue
-    ( { registers = Set.fromList [ "n", "result", "done?" ]
-      , instructions =
+    { name = "fct-recursive"
+    , controller =
+        { registers = Set.fromList [ "n", "result", "done?" ]
+        , instructions =
             [ Perform (AssignConstant "n" (Num 5))
             , Perform (AssignCallAtLabel "continue" "fct")
             , Perform Halt
@@ -298,11 +335,13 @@ controller6_fct_recursive =
             , Perform (AssignConstant "result" (Num 1))
             , Perform (JumpToLabelAtRegister "continue")
             ]
-      }
-    , Dict.fromList [ ( "n", num 0 ), ( "result", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "n", num 0 ), ( "result", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
+    }
 
 
+controller7_fibonacci_recursive : ControllerExample
 controller7_fibonacci_recursive =
     -- registers: n, result, tmp, done?, continue
     --
@@ -326,8 +365,10 @@ controller7_fibonacci_recursive =
     -- done:
     --   result <- $n
     --   jump $continue
-    ( { registers = Set.fromList [ "n", "result", "tmp", "done?", "continue" ]
-      , instructions =
+    { name = "fibonacci-recursive"
+    , controller =
+        { registers = Set.fromList [ "n", "result", "tmp", "done?", "continue" ]
+        , instructions =
             [ Perform (AssignConstant "n" (Num 8))
             , Perform (AssignCallAtLabel "continue" "fib")
             , Perform Halt
@@ -360,14 +401,18 @@ controller7_fibonacci_recursive =
             , Perform (AssignRegister "result" "n")
             , Perform (JumpToLabelAtRegister "continue")
             ]
-      }
-    , Dict.fromList [ ( "n", num 0 ), ( "result", num 0 ), ( "tmp", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "n", num 0 ), ( "result", num 0 ), ( "tmp", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
+    }
 
 
+controller8_memory_test : ControllerExample
 controller8_memory_test =
-    ( { registers = Set.fromList [ "p", "a", "b", "test" ]
-      , instructions =
+    { name = "memory-test"
+    , controller =
+        { registers = Set.fromList [ "p", "a", "b", "test" ]
+        , instructions =
             [ Label "memory_test"
             , Perform (ConstructPair "p" (Constant (Num 16)) (Constant (Num 32)))
             , Perform (First "a" "p")
@@ -377,14 +422,18 @@ controller8_memory_test =
             , Perform (AssignOperation "test" (Operation "pair?" [ Register "p" ]))
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "p", nil ), ( "a", num 0 ), ( "b", num 0 ), ( "test", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "p", nil ), ( "a", num 0 ), ( "b", num 0 ), ( "test", num 0 ) ]
+    }
 
 
+controller9_range : ControllerExample
 controller9_range =
-    ( { registers = Set.fromList [ "xs", "n", "done?" ]
-      , instructions =
+    { name = "range"
+    , controller =
+        { registers = Set.fromList [ "xs", "n", "done?" ]
+        , instructions =
             [ Label "start"
             , Perform (AssignOperation "done?" (Operation "zero?" [ Register "n" ]))
             , Perform (JumpToLabelIf "done?" "done")
@@ -394,11 +443,13 @@ controller9_range =
             , Label "done"
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "xs", nil ), ( "n", num 5 ), ( "done?", num 0 ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "xs", nil ), ( "n", num 5 ), ( "done?", num 0 ) ]
+    }
 
 
+controller10_append : ControllerExample
 controller10_append =
     -- xs <- pair 40 nil
     -- xs <- pair 30 xs
@@ -424,8 +475,10 @@ controller10_append =
     --   jump $continue
     -- :done
     --   halt
-    ( { registers = Set.fromList [ "xs", "ys", "x", "done?", "continue" ]
-      , instructions =
+    { name = "append"
+    , controller =
+        { registers = Set.fromList [ "xs", "ys", "x", "done?", "continue" ]
+        , instructions =
             [ -- xs <- list(10, 20, 30, 40)
               Perform (ConstructPair "xs" (Constant (Num 40)) (Constant Nil))
             , Perform (ConstructPair "xs" (Constant (Num 30)) (Register "xs"))
@@ -455,6 +508,7 @@ controller10_append =
             , Label "done"
             , Perform Halt
             ]
-      }
-    , Dict.fromList [ ( "continue", Uninitialized ), ( "xs", Uninitialized ), ( "ys", Uninitialized ), ( "x", Uninitialized ), ( "done?", Uninitialized ) ]
-    )
+        }
+    , initialRegisterEnvironment =
+        Dict.fromList [ ( "continue", Uninitialized ), ( "xs", Uninitialized ), ( "ys", Uninitialized ), ( "x", Uninitialized ), ( "done?", Uninitialized ) ]
+    }

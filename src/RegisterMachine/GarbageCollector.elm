@@ -1,6 +1,6 @@
 module RegisterMachine.GarbageCollector exposing (..)
 
-import Dict exposing (Dict)
+import Dict
 import RegisterMachine.Base as RegisterMachine
     exposing
         ( Constant(..)
@@ -11,21 +11,25 @@ import RegisterMachine.Base as RegisterMachine
         , Register
         , Value(..)
         )
-import RegisterMachine.Machine as RegisterMachine exposing (Controller, InstructionBlock, LabelOrInstruction(..), RegisterEnvironment)
-import Set exposing (Set)
+import RegisterMachine.Machine as RegisterMachine exposing (ControllerExample, InstructionBlock, LabelOrInstruction(..))
+import Set
 
 
-init : List Register -> InstructionBlock -> ( Controller, RegisterEnvironment )
-init registers instructions =
-    ( { registers = Set.fromList registers
-      , instructions = instructions
-      }
-    , Dict.fromList (List.map (\register -> ( register, Uninitialized )) registers)
-    )
+init : String -> List Register -> InstructionBlock -> ControllerExample
+init name registers instructions =
+    { name = name
+    , controller =
+        { registers = Set.fromList registers
+        , instructions = instructions
+        }
+    , initialRegisterEnvironment = Dict.fromList (List.map (\register -> ( register, Uninitialized )) registers)
+    }
 
 
+controller : ControllerExample
 controller =
-    init [ "xs", "ys", "main-pair", "dual-pair", "tmp", "root", "test", "continue" ]
+    init "garbage-collector"
+        [ "xs", "ys", "main-pair", "dual-pair", "tmp", "root", "test", "continue" ]
         [ Label "initialization"
 
         -- xs <- list(10, 20, 30, 40)
