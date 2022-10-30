@@ -364,7 +364,8 @@ view config model =
                             Nothing ->
                                 E.text ""
                 ]
-            , E.column [ E.width E.fill, E.alignTop ]
+            , -- ===Runtime State===
+              E.column [ E.width E.fill, E.alignTop ]
                 [ E.row []
                     [ Input.button Button.buttonStyle
                         { onPress =
@@ -403,12 +404,20 @@ view config model =
                                 [ heading "Dual Memory"
                                 , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
                                 ]
-                            , E.column []
-                                [ heading "Stack"
-                                , viewStack machine.stack model
-                                ]
                             ]
                 ]
+            , case model.maybeRuntime of
+                Nothing ->
+                    E.text ""
+
+                Just (Err runtimeError) ->
+                    E.text (runTimeErrorToString runtimeError)
+
+                Just (Ok machine) ->
+                    E.column [ E.alignTop ]
+                        [ heading "Stack"
+                        , viewStack machine.stack model
+                        ]
             ]
         ]
 
