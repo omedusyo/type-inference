@@ -27,7 +27,6 @@ type alias Model =
     { controllers : List ControllerExample
     , controllerDropdownModel : Dropdown.State ControllerExample
     , selectedController : Maybe ControllerExample
-    , parsedMachine : Result TranslationError Machine
     , maybeRuntime : Maybe (Result RuntimeError Machine)
     , memoryView : MemoryView
     , currentlyHighlightedCell : MemoryAddress
@@ -39,7 +38,7 @@ type alias Model =
 
 shouldDisplayEditor : Bool
 shouldDisplayEditor =
-    False
+    True
 
 
 operationEnv : RegisterMachine.OperationEnvironment
@@ -141,7 +140,6 @@ init =
             { controllers = controllers
             , controllerDropdownModel = Dropdown.init "controllers"
             , selectedController = Just defaultSelectedController
-            , parsedMachine = parsedMachine
             , maybeRuntime =
                 case parsedMachine of
                     Ok machine ->
@@ -198,38 +196,26 @@ reset model =
     case model.selectedController of
         Just controllerExample ->
             let
-                parsedMachine =
+                parsedMachineResult =
                     RegisterMachine.makeMachine controllerExample.controller controllerExample.initialRegisterEnvironment operationEnv
             in
-            case parsedMachine of
+            case parsedMachineResult of
                 Ok machine ->
-                    -- Just (Ok machine)
                     { model
                         | maybeRuntime = Just (Ok machine)
                         , memoryView = initMemoryView
+                        , currentlyHighlightedCell = centerOfMemoryView initMemoryView
                     }
 
                 Err _ ->
                     { model
                         | maybeRuntime = Nothing
                         , memoryView = initMemoryView
+                        , currentlyHighlightedCell = centerOfMemoryView initMemoryView
                     }
 
         Nothing ->
             model
-
-
-resetRuntime : Model -> Model
-resetRuntime model =
-    { model
-        | maybeRuntime =
-            case model.parsedMachine of
-                Ok machine ->
-                    Just (Ok machine)
-
-                Err _ ->
-                    Nothing
-    }
 
 
 type Msg
@@ -249,7 +235,7 @@ update : Msg -> Context rootMsg Msg Model
 update msg =
     case msg of
         Reset ->
-            Context.update resetRuntime
+            Context.update reset
 
         Start ->
             Context.update
@@ -684,6 +670,8 @@ viewRegisters registers model =
         registerStyle =
             [ Background.color (E.rgb255 240 0 245)
             , E.padding 20
+            , E.width (E.px 60)
+            , E.height (E.px 60)
             ]
 
         viewRegister : RegisterMachine.Register -> Value -> Element Msg
