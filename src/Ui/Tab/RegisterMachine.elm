@@ -345,7 +345,7 @@ view config model =
         , Dropdown.view dropdownConfig model model.controllerDropdownModel
         , E.row [ E.width E.fill, E.spacing 30 ]
             [ -- ===Instructions===
-              E.column [ E.width E.fill, E.alignTop ]
+              E.column [ E.width E.fill, E.alignTop, E.alignLeft ]
                 [ case model.maybeRuntime of
                     Nothing ->
                         E.text ""
@@ -365,7 +365,7 @@ view config model =
                                 E.text ""
                 ]
             , -- ===Runtime State===
-              E.column [ E.width E.fill, E.alignTop ]
+              E.column [ E.alignTop ]
                 [ E.row []
                     [ Input.button Button.buttonStyle
                         { onPress =
@@ -391,33 +391,27 @@ view config model =
                         E.text (runTimeErrorToString runtimeError)
 
                     Just (Ok machine) ->
-                        E.column [ E.width E.fill, E.spacing 20 ]
-                            [ E.column []
-                                [ heading "Registers"
-                                , viewRegisters (machine.env |> Dict.toList) model
+                        E.row [ E.spacing 30 ]
+                            [ E.column [ E.spacing 20, E.alignTop ]
+                                [ E.column []
+                                    [ heading "Registers"
+                                    , viewRegisters (machine.env |> Dict.toList) model
+                                    ]
+                                , E.column []
+                                    [ heading "Memory"
+                                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                                    ]
+                                , E.column []
+                                    [ heading "Dual Memory"
+                                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                                    ]
                                 ]
-                            , E.column []
-                                [ heading "Memory"
-                                , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
-                                ]
-                            , E.column []
-                                [ heading "Dual Memory"
-                                , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                            , E.column [ E.alignTop, E.width (E.px 100) ]
+                                [ heading "Stack"
+                                , viewStack machine.stack model
                                 ]
                             ]
                 ]
-            , case model.maybeRuntime of
-                Nothing ->
-                    E.text ""
-
-                Just (Err runtimeError) ->
-                    E.text (runTimeErrorToString runtimeError)
-
-                Just (Ok machine) ->
-                    E.column [ E.alignTop ]
-                        [ heading "Stack"
-                        , viewStack machine.stack model
-                        ]
             ]
         ]
 
@@ -712,7 +706,7 @@ viewStack stack model =
             |> List.reverse
             |> List.map
                 (\val ->
-                    E.column [ Border.width 1, Border.solid, E.paddingXY 0 15, E.width (E.px 50) ]
+                    E.column [ Border.width 1, Border.solid, E.paddingXY 0 15, E.width (E.px 70) ]
                         [ E.el [ E.centerX, E.width E.fill ] (viewValue val model)
                         ]
                 )
