@@ -14,7 +14,7 @@ import Element.Region as Region
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionAddress, MemoryAddress, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
-import RegisterMachine.Machine as RegisterMachine exposing (Controller, ControllerExample, Machine, RegisterEnvironment, RuntimeError(..), TranslationError)
+import RegisterMachine.Machine as RegisterMachine exposing (Controller, ControllerExample, MachineWithInstructions, RegisterEnvironment, RuntimeError(..), TranslationError)
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import RegisterMachine.Ui.Editor as Editor
@@ -27,7 +27,7 @@ type alias Model =
     { controllers : List ControllerExample
     , controllerDropdownModel : Dropdown.State ControllerExample
     , selectedController : Maybe ControllerExample
-    , maybeRuntime : Maybe (Result RuntimeError Machine)
+    , maybeRuntime : Maybe (Result RuntimeError MachineWithInstructions)
     , memoryView : MemoryView
     , currentlyHighlightedCell : MemoryAddress
 
@@ -131,7 +131,7 @@ init =
         defaultSelectedController =
             Controllers.controller7_fibonacci_recursive
 
-        parsedMachine : Result TranslationError Machine
+        parsedMachine : Result TranslationError MachineWithInstructions
         parsedMachine =
             RegisterMachine.makeMachine defaultSelectedController.controller defaultSelectedController.initialRegisterEnvironment operationEnv
     in
@@ -339,12 +339,12 @@ view config model =
                     Just (Err runtimeError) ->
                         E.text (runTimeErrorToString runtimeError)
 
-                    Just (Ok machine) ->
+                    Just (Ok ({ machineState, instructionsState } as machine)) ->
                         case model.selectedController of
                             Just controllerExample ->
                                 E.column []
                                     [ heading "Controller"
-                                    , viewInstructions machine.instructionPointer controllerExample.controller.instructions
+                                    , viewInstructions instructionsState.instructionPointer controllerExample.controller.instructions
                                     ]
 
                             Nothing ->
@@ -376,25 +376,25 @@ view config model =
                     Just (Err runtimeError) ->
                         E.text (runTimeErrorToString runtimeError)
 
-                    Just (Ok machine) ->
+                    Just (Ok ({ machineState, instructionsState } as machine)) ->
                         E.row [ E.spacing 30 ]
                             [ E.column [ E.spacing 20, E.alignTop ]
                                 [ E.column []
                                     [ heading "Registers"
-                                    , viewRegisters (machine.env |> Dict.toList) model
+                                    , viewRegisters (machineState.env |> Dict.toList) model
                                     ]
                                 , E.column []
                                     [ heading "Memory"
-                                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                                    , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
                                     ]
                                 , E.column []
                                     [ heading "Dual Memory"
-                                    , viewMemoryState (machine |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                                    , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
                                     ]
                                 ]
                             , E.column [ E.alignTop, E.width (E.px 100) ]
                                 [ heading "Stack"
-                                , viewStack machine.stack model
+                                , viewStack machineState.stack model
                                 ]
                             ]
                 ]
