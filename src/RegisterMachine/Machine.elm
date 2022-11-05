@@ -16,16 +16,16 @@ type alias ControllerExample =
     }
 
 
+type alias MachineWithInstructions =
+    { machineState : MachineState, instructionsState : InstructionsState }
+
+
 type alias MachineState =
     { env : RegisterEnvironment
     , stack : Stack
     , memory : MachineMemory
     , operationEnv : OperationEnvironment
     }
-
-
-type alias MachineWithInstructions =
-    { machineState : MachineState, instructionsState : InstructionsState }
 
 
 type alias InstructionsState =
@@ -297,6 +297,7 @@ makeMachine controller env operationsEnv =
 
 
 -- === Machine ===
+-- =Operations=
 
 
 makeOperation2 : (Value -> Value -> Result RuntimeError Value) -> Operation
@@ -347,6 +348,10 @@ makeNumOperation1 op =
         )
 
 
+
+-- =Instructions=
+
+
 getInstruction : InstructionsState -> Maybe Instruction
 getInstruction instructionsState =
     Array.get instructionsState.instructionPointer instructionsState.instructions.instructions
@@ -357,6 +362,32 @@ advanceInstructionPointer instructionsState =
     { instructionsState
         | instructionPointer = instructionsState.instructionPointer + 1
     }
+
+
+getLabelPosition : Label -> InstructionsState -> Maybe InstructionAddress
+getLabelPosition label instructionsState =
+    Dict.get label instructionsState.instructions.labelToPosition
+
+
+jump : Label -> InstructionsState -> InstructionsState
+jump label instructionsState =
+    case getLabelPosition label instructionsState of
+        Just pointer ->
+            pointerJump pointer instructionsState
+
+        Nothing ->
+            instructionsState
+
+
+pointerJump : InstructionAddress -> InstructionsState -> InstructionsState
+pointerJump pointer instructionsState =
+    { instructionsState
+        | instructionPointer = pointer
+    }
+
+
+
+-- =MachineState=
 
 
 getRegister : Register -> MachineState -> Result RuntimeError Value
@@ -414,6 +445,46 @@ updateRegister register val machine =
     { machine
         | env = Dict.insert register val machine.env
     }
+
+
+getOperation : OperationName -> MachineState -> Result RuntimeError (List Value -> Result RuntimeError Value)
+getOperation operationName machine =
+    case Dict.get operationName machine.operationEnv of
+        Just op ->
+            Ok op
+
+        Nothing ->
+            Err (UndefinedOperation operationName)
+
+
+halt : MachineWithInstructions -> { isFinished : Bool, machine : MachineWithInstructions }
+halt machine =
+    { isFinished = True, machine = machine }
+
+
+
+-- =Stack=
+
+
+push : Value -> MachineState -> MachineState
+push val machine =
+    { machine
+        | stack = Stack.push val machine.stack
+    }
+
+
+pop : MachineState -> Result RuntimeError ( Value, MachineState )
+pop machine =
+    case Stack.pop machine.stack of
+        Just ( val, stack ) ->
+            Ok ( val, { machine | stack = stack } )
+
+        Nothing ->
+            Err PoppingEmptyStack
+
+
+
+-- =Memory=
 
 
 setMemoryStateOfMachine : MemoryType -> MemoryState -> MachineState -> MachineState
@@ -516,60 +587,6 @@ currentMemoryState memoryType machine =
             machine.memory.memoryState0
 
 
-getOperation : OperationName -> MachineState -> Result RuntimeError (List Value -> Result RuntimeError Value)
-getOperation operationName machine =
-    case Dict.get operationName machine.operationEnv of
-        Just op ->
-            Ok op
-
-        Nothing ->
-            Err (UndefinedOperation operationName)
-
-
-getLabelPosition : Label -> InstructionsState -> Maybe InstructionAddress
-getLabelPosition label instructionsState =
-    Dict.get label instructionsState.instructions.labelToPosition
-
-
-jump : Label -> InstructionsState -> InstructionsState
-jump label instructionsState =
-    case getLabelPosition label instructionsState of
-        Just pointer ->
-            pointerJump pointer instructionsState
-
-        Nothing ->
-            instructionsState
-
-
-pointerJump : InstructionAddress -> InstructionsState -> InstructionsState
-pointerJump pointer instructionsState =
-    { instructionsState
-        | instructionPointer = pointer
-    }
-
-
-halt : MachineWithInstructions -> { isFinished : Bool, machine : MachineWithInstructions }
-halt machine =
-    { isFinished = True, machine = machine }
-
-
-push : Value -> MachineState -> MachineState
-push val machine =
-    { machine
-        | stack = Stack.push val machine.stack
-    }
-
-
-pop : MachineState -> Result RuntimeError ( Value, MachineState )
-pop machine =
-    case Stack.pop machine.stack of
-        Just ( val, stack ) ->
-            Ok ( val, { machine | stack = stack } )
-
-        Nothing ->
-            Err PoppingEmptyStack
-
-
 swapMemory : MachineState -> MachineState
 swapMemory ({ memory } as machine) =
     { machine
@@ -585,6 +602,7 @@ swapMemory ({ memory } as machine) =
             }
     }
 
+-- ===Running the Machine===
 
 type RuntimeError
     = UndefinedRegister Register
