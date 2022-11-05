@@ -6,7 +6,7 @@ import RegisterMachine.Base as RegisterMachine
         ( Constant(..)
         , Instruction(..)
         , Label
-        , OperationApplication(..)
+        , OperationApplication
         , OperationArgument(..)
         , Register
         , Value(..)
@@ -67,14 +67,14 @@ controller0_gcd =
         { registers = Set.fromList [ "a", "b", "tmp", "is-b-zero?", "label-test" ]
         , instructions =
             [ Label "loop"
-            , Perform (AssignOperation "is-b-zero?" (Operation "zero?" [ Register "b" ]))
-            , Perform (JumpToLabelIf "is-b-zero?" "done")
-            , Perform (AssignOperation "tmp" (Operation "remainder" [ Register "a", Register "b" ]))
-            , Perform (AssignRegister "a" "b")
-            , Perform (AssignRegister "b" "tmp")
-            , Perform (JumpToLabel "loop")
+            , Perform (AssignOperation { targetRegister = "is-b-zero?", operationApplication = { name = "zero?", arguments = [ Register "b" ] } })
+            , Perform (JumpToLabelIf { testRegister= "is-b-zero?", label= "done"})
+            , Perform (AssignOperation { targetRegister = "tmp", operationApplication = { name = "remainder", arguments = [ Register "a", Register "b" ] } })
+            , Perform (AssignRegister { targetRegister = "a", sourceRegister = "b" })
+            , Perform (AssignRegister { targetRegister = "b", sourceRegister = "tmp" })
+            , Perform (JumpToLabel { label = "loop" })
             , Label "done"
-            , Perform Halt
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =
@@ -99,15 +99,15 @@ controller1_remainder =
     , controller =
         { registers = Set.fromList [ "a", "b", "is-finished?" ]
         , instructions =
-            [ Perform (AssignConstant "a" (Num 16))
-            , Perform (AssignConstant "b" (Num 3))
+            [ Perform (AssignConstant { targetRegister = "a", constant = Num 16 })
+            , Perform (AssignConstant { targetRegister = "b", constant = Num 3 })
             , Label "start"
-            , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "a", Register "b" ]))
-            , Perform (JumpToLabelIf "done?" "done")
-            , Perform (AssignOperation "a" (Operation "sub" [ Register "a", Register "b" ]))
-            , Perform (JumpToLabel "start")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "less-than?", arguments = [ Register "a", Register "b" ] } })
+            , Perform (JumpToLabelIf { testRegister= "done?", label= "done"})
+            , Perform (AssignOperation { targetRegister = "a", operationApplication = { name = "sub", arguments = [ Register "a", Register "b" ] } })
+            , Perform (JumpToLabel { label = "start" })
             , Label "done"
-            , Perform Halt
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =
@@ -132,16 +132,16 @@ controller2_fct_iterative =
     , controller =
         { registers = Set.fromList [ "counter", "state", "done?" ]
         , instructions =
-            [ Perform (AssignConstant "counter" (Num 5))
-            , Perform (AssignConstant "state" (Num 1))
+            [ Perform (AssignConstant { targetRegister = "counter", constant = Num 5 })
+            , Perform (AssignConstant { targetRegister = "state", constant = Num 1 })
             , Label "loop"
-            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "counter" ]))
-            , Perform (JumpToLabelIf "done?" "done")
-            , Perform (AssignOperation "state" (Operation "mul" [ Register "state", Register "counter" ]))
-            , Perform (AssignOperation "counter" (Operation "decrement" [ Register "counter" ]))
-            , Perform (JumpToLabel "loop")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "zero?", arguments = [ Register "counter" ] } })
+            , Perform (JumpToLabelIf { testRegister= "done?", label= "done"})
+            , Perform (AssignOperation { targetRegister = "state", operationApplication = { name = "mul", arguments = [ Register "state", Register "counter" ] } })
+            , Perform (AssignOperation { targetRegister = "counter", operationApplication = { name = "decrement", arguments = [ Register "counter" ] } })
+            , Perform (JumpToLabel { label = "loop" })
             , Label "done"
-            , Perform Halt
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =
@@ -176,30 +176,30 @@ controller3_gcd_with_inlined_remainder =
     , controller =
         { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?" ]
         , instructions =
-            [ Perform (AssignConstant "a" (Num (3 * 5 * 7)))
-            , Perform (AssignConstant "b" (Num (3 * 5 * 5)))
+            [ Perform (AssignConstant { targetRegister = "a", constant = Num (3 * 5 * 7) })
+            , Perform (AssignConstant { targetRegister = "b", constant = Num (3 * 5 * 5) })
             , Label "gcd-loop"
-            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
-            , Perform (JumpToLabelIf "done?" "done")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "zero?", arguments = [ Register "b" ] } })
+            , Perform (JumpToLabelIf { testRegister= "done?", label= "done"})
 
             -- BEGIN Calling remainder($remainder-result, $b)
-            , Perform (AssignRegister "remainder-result" "a")
-            , Perform (JumpToLabel "remainder")
+            , Perform (AssignRegister { targetRegister = "remainder-result", sourceRegister = "a" })
+            , Perform (JumpToLabel { label = "remainder" })
             , Label "after-remainder-done"
 
             -- END Calling remainder
-            , Perform (AssignRegister "a" "b")
-            , Perform (AssignRegister "b" "remainder-result")
-            , Perform (JumpToLabel "gcd-loop")
+            , Perform (AssignRegister { targetRegister = "a", sourceRegister = "b" })
+            , Perform (AssignRegister { targetRegister = "b", sourceRegister = "remainder-result" })
+            , Perform (JumpToLabel { label = "gcd-loop" })
 
             -- This is the remainder procedure
             , Label "remainder"
-            , Perform (AssignOperation "remainder-done?" (Operation "less-than?" [ Register "remainder-result", Register "b" ]))
-            , Perform (JumpToLabelIf "remainder-done?" "after-remainder-done")
-            , Perform (AssignOperation "remainder-result" (Operation "sub" [ Register "remainder-result", Register "b" ]))
-            , Perform (JumpToLabel "remainder")
+            , Perform (AssignOperation { targetRegister = "remainder-done?", operationApplication = { name = "less-than?", arguments = [ Register "remainder-result", Register "b" ] } })
+            , Perform (JumpToLabelIf { testRegister= "remainder-done?", label= "after-remainder-done"})
+            , Perform (AssignOperation { targetRegister = "remainder-result", operationApplication = { name = "sub", arguments = [ Register "remainder-result", Register "b" ] } })
+            , Perform (JumpToLabel { label = "remainder" })
             , Label "done"
-            , Perform Halt
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =
@@ -232,29 +232,29 @@ controller4_gcd_with_inlined_remainder_using_jump =
     , controller =
         { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
         , instructions =
-            [ Perform (AssignConstant "a" (Num (3 * 5 * 7)))
-            , Perform (AssignConstant "b" (Num (3 * 5 * 5)))
+            [ Perform (AssignConstant { targetRegister = "a", constant = Num (3 * 5 * 7) })
+            , Perform (AssignConstant { targetRegister = "b", constant = Num (3 * 5 * 5) })
             , Label "gcd-loop"
-            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "b" ]))
-            , Perform (JumpToLabelIf "done?" "done")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "zero?", arguments = [ Register "b" ] } })
+            , Perform (JumpToLabelIf { testRegister= "done?", label= "done"})
 
             -- BEGIN Calling remainder($remainder-result, $b)
-            , Perform (AssignRegister "remainder-result" "a")
-            , Perform (AssignCallAtLabel "continue" "remainder")
+            , Perform (AssignRegister { targetRegister = "remainder-result", sourceRegister = "a" })
+            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "remainder" })
 
             -- END Calling remainder
-            , Perform (AssignRegister "a" "b")
-            , Perform (AssignRegister "b" "remainder-result")
-            , Perform (JumpToLabel "gcd-loop")
+            , Perform (AssignRegister { targetRegister = "a", sourceRegister = "b" })
+            , Perform (AssignRegister { targetRegister = "b", sourceRegister = "remainder-result" })
+            , Perform (JumpToLabel { label = "gcd-loop" })
 
             -- This is the remainder procedure
             , Label "remainder"
-            , Perform (AssignOperation "remainder-done?" (Operation "less-than?" [ Register "remainder-result", Register "b" ]))
-            , Perform (JumpToLabelAtRegisterIf "remainder-done?" "continue")
-            , Perform (AssignOperation "remainder-result" (Operation "sub" [ Register "remainder-result", Register "b" ]))
-            , Perform (JumpToLabel "remainder")
+            , Perform (AssignOperation { targetRegister = "remainder-done?", operationApplication = { name = "less-than?", arguments = [ Register "remainder-result", Register "b" ] } })
+            , Perform (JumpToLabelAtRegisterIf { testRegister = "remainder-done?", labelRegister= "continue"})
+            , Perform (AssignOperation { targetRegister = "remainder-result", operationApplication = { name = "sub", arguments = [ Register "remainder-result", Register "b" ] } })
+            , Perform (JumpToLabel { label = "remainder" })
             , Label "done"
-            , Perform Halt
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =
@@ -317,23 +317,23 @@ controller6_fct_recursive =
     , controller =
         { registers = Set.fromList [ "n", "result", "done?" ]
         , instructions =
-            [ Perform (AssignConstant "n" (Num 5))
-            , Perform (AssignCallAtLabel "continue" "fct")
-            , Perform Halt
+            [ Perform (AssignConstant { targetRegister = "n", constant = Num 5 })
+            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fct" })
+            , Perform (Halt {})
             , Label "fct"
-            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "n" ]))
-            , Perform (JumpToLabelIf "done?" "done")
-            , Perform (PushRegister "continue")
-            , Perform (PushRegister "n")
-            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
-            , Perform (AssignCallAtLabel "continue" "fct")
-            , Perform (Pop "n")
-            , Perform (Pop "continue")
-            , Perform (AssignOperation "result" (Operation "mul" [ Register "n", Register "result" ]))
-            , Perform (JumpToLabelAtRegister "continue")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "zero?", arguments = [ Register "n" ] } })
+            , Perform (JumpToLabelIf { testRegister= "done?", label= "done"})
+            , Perform (PushRegister { sourceRegister = "continue" })
+            , Perform (PushRegister { sourceRegister = "n" })
+            , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })
+            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fct" })
+            , Perform (Pop { targetRegister = "n" })
+            , Perform (Pop { targetRegister = "continue" })
+            , Perform (AssignOperation { targetRegister = "result", operationApplication = { name = "mul", arguments = [ Register "n", Register "result" ] } })
+            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
             , Label "done"
-            , Perform (AssignConstant "result" (Num 1))
-            , Perform (JumpToLabelAtRegister "continue")
+            , Perform (AssignConstant { targetRegister = "result", constant = Num 1 })
+            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
             ]
         }
     , initialRegisterEnvironment =
@@ -369,37 +369,37 @@ controller7_fibonacci_recursive =
     , controller =
         { registers = Set.fromList [ "n", "result", "tmp", "done?", "continue" ]
         , instructions =
-            [ Perform (AssignConstant "n" (Num 8))
-            , Perform (AssignCallAtLabel "continue" "fib")
-            , Perform Halt
+            [ Perform (AssignConstant { targetRegister = "n", constant = Num 8 })
+            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fib" })
+            , Perform (Halt {})
             , Label "fib"
-            , Perform (AssignOperation "done?" (Operation "less-than?" [ Register "n", Constant (Num 2) ]))
-            , Perform (JumpToLabelIf "done?" "done")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "less-than?", arguments = [ Register "n", Constant (Num 2) ] } })
+            , Perform (JumpToLabelIf { testRegister= "done?", label= "done"})
 
             -- call to fib(n - 1)
-            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
-            , Perform (PushRegister "n")
-            , Perform (PushRegister "continue")
-            , Perform (AssignCallAtLabel "continue" "fib")
-            , Perform (Pop "continue")
-            , Perform (Pop "n")
+            , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })
+            , Perform (PushRegister { sourceRegister = "n" })
+            , Perform (PushRegister { sourceRegister = "continue" })
+            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fib" })
+            , Perform (Pop { targetRegister = "continue" })
+            , Perform (Pop { targetRegister = "n" })
 
             -- call to fib(n - 2)
-            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
-            , Perform (PushRegister "result")
-            , Perform (PushRegister "continue")
-            , Perform (AssignCallAtLabel "continue" "fib")
-            , Perform (Pop "continue")
-            , Perform (Pop "tmp")
+            , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })
+            , Perform (PushRegister { sourceRegister = "result" })
+            , Perform (PushRegister { sourceRegister = "continue" })
+            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fib" })
+            , Perform (Pop { targetRegister = "continue" })
+            , Perform (Pop { targetRegister = "tmp" })
 
             -- returning fib(n - 1) + fib(n - 2)
-            , Perform (AssignOperation "result" (Operation "add" [ Register "result", Register "tmp" ]))
-            , Perform (JumpToLabelAtRegister "continue")
+            , Perform (AssignOperation { targetRegister = "result", operationApplication = { name = "add", arguments = [ Register "result", Register "tmp" ] } })
+            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
 
             -- base case
             , Label "done"
-            , Perform (AssignRegister "result" "n")
-            , Perform (JumpToLabelAtRegister "continue")
+            , Perform (AssignRegister { targetRegister = "result", sourceRegister = "n" })
+            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
             ]
         }
     , initialRegisterEnvironment =
@@ -414,13 +414,13 @@ controller8_memory_test =
         { registers = Set.fromList [ "p", "a", "b", "test" ]
         , instructions =
             [ Label "memory_test"
-            , Perform (ConstructPair "p" (Constant (Num 16)) (Constant (Num 32)))
-            , Perform (First "a" "p")
-            , Perform (Second "b" "p")
-            , Perform (SetFirst "p" (Constant (Num 17)))
-            , Perform (SetSecond "p" (Constant (Num 33)))
-            , Perform (AssignOperation "test" (Operation "pair?" [ Register "p" ]))
-            , Perform Halt
+            , Perform (ConstructPair { targetRegister = "p", operationArgument0 =  (Constant (Num 16)), operationArgument1 = (Constant (Num 32)) })
+            , Perform (First { targetRegister = "a", sourceRegister = "p" })
+            , Perform (Second { targetRegister = "b", sourceRegister = "p" })
+            , Perform (SetFirst { targetRegister = "p", operationArgument = (Constant (Num 17)) })
+            , Perform (SetSecond { targetRegister = "p", operationArgument = (Constant (Num 33)) })
+            , Perform (AssignOperation { targetRegister = "test", operationApplication = { name = "pair?", arguments = [ Register "p" ] } })
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =
@@ -435,13 +435,13 @@ controller9_range =
         { registers = Set.fromList [ "xs", "n", "done?" ]
         , instructions =
             [ Label "start"
-            , Perform (AssignOperation "done?" (Operation "zero?" [ Register "n" ]))
-            , Perform (JumpToLabelIf "done?" "done")
-            , Perform (ConstructPair "xs" (Register "n") (Register "xs"))
-            , Perform (AssignOperation "n" (Operation "decrement" [ Register "n" ]))
-            , Perform (JumpToLabel "start")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "zero?", arguments = [ Register "n" ] } })
+            , Perform (JumpToLabelIf { testRegister= "done?", label= "done"})
+            , Perform (ConstructPair { targetRegister = "xs", operationArgument0 =  (Register "n"), operationArgument1 = (Register "xs") })
+            , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })
+            , Perform (JumpToLabel { label = "start" })
             , Label "done"
-            , Perform Halt
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =
@@ -480,33 +480,33 @@ controller10_append =
         { registers = Set.fromList [ "xs", "ys", "x", "done?", "continue" ]
         , instructions =
             [ -- xs <- list(10, 20, 30, 40)
-              Perform (ConstructPair "xs" (Constant (Num 40)) (Constant Nil))
-            , Perform (ConstructPair "xs" (Constant (Num 30)) (Register "xs"))
-            , Perform (ConstructPair "xs" (Constant (Num 20)) (Register "xs"))
-            , Perform (ConstructPair "xs" (Constant (Num 10)) (Register "xs"))
+              Perform (ConstructPair { targetRegister = "xs", operationArgument0 =  (Constant (Num 40)), operationArgument1 = (Constant Nil) })
+            , Perform (ConstructPair { targetRegister = "xs", operationArgument0 =  (Constant (Num 30)), operationArgument1 = (Register "xs") })
+            , Perform (ConstructPair { targetRegister = "xs", operationArgument0 =  (Constant (Num 20)), operationArgument1 = (Register "xs") })
+            , Perform (ConstructPair { targetRegister = "xs", operationArgument0 =  (Constant (Num 10)), operationArgument1 = (Register "xs") })
             , -- ys <- list(64, 32, 16)
-              Perform (ConstructPair "ys" (Constant (Num 16)) (Constant Nil))
-            , Perform (ConstructPair "ys" (Constant (Num 32)) (Register "ys"))
-            , Perform (ConstructPair "ys" (Constant (Num 64)) (Register "ys"))
-            , Perform (AssignLabel "continue" "done")
+              Perform (ConstructPair { targetRegister = "ys", operationArgument0 =  (Constant (Num 16)), operationArgument1 = (Constant Nil) })
+            , Perform (ConstructPair { targetRegister = "ys", operationArgument0 =  (Constant (Num 32)), operationArgument1 = (Register "ys") })
+            , Perform (ConstructPair { targetRegister = "ys", operationArgument0 =  (Constant (Num 64)), operationArgument1 = (Register "ys") })
+            , Perform (AssignLabel { targetRegister = "continue", label = "done" })
             , Label "append"
-            , Perform (AssignOperation "done?" (Operation "nil?" [ Register "xs" ]))
-            , Perform (JumpToLabelAtRegisterIf "done?" "continue")
-            , Perform (First "x" "xs")
-            , Perform (Second "xs" "xs")
-            , Perform (PushRegister "x")
-            , Perform (PushRegister "continue")
-            , Perform (AssignLabel "continue" "append-after-rec-call")
-            , Perform (JumpToLabel "append")
+            , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "nil?", arguments = [ Register "xs" ] } })
+            , Perform (JumpToLabelAtRegisterIf { testRegister = "done?", labelRegister= "continue"})
+            , Perform (First { targetRegister = "x", sourceRegister = "xs" })
+            , Perform (Second { targetRegister = "xs", sourceRegister = "xs" })
+            , Perform (PushRegister { sourceRegister = "x" })
+            , Perform (PushRegister { sourceRegister = "continue" })
+            , Perform (AssignLabel { targetRegister = "continue", label = "append-after-rec-call" })
+            , Perform (JumpToLabel { label = "append" })
             , Label "append-after-rec-call"
-            , Perform (Pop "continue")
-            , Perform (Pop "x")
-            , Perform (ConstructPair "ys" (Register "x") (Register "ys"))
-            , Perform (JumpToLabelAtRegister "continue")
+            , Perform (Pop { targetRegister = "continue" })
+            , Perform (Pop { targetRegister = "x" })
+            , Perform (ConstructPair { targetRegister = "ys", operationArgument0 =  (Register "x"), operationArgument1 = (Register "ys") })
+            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
 
             ----
             , Label "done"
-            , Perform Halt
+            , Perform (Halt {})
             ]
         }
     , initialRegisterEnvironment =

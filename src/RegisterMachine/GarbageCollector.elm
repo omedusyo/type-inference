@@ -6,7 +6,6 @@ import RegisterMachine.Base as RegisterMachine
         ( Constant(..)
         , Instruction(..)
         , Label
-        , OperationApplication(..)
         , OperationArgument(..)
         , Register
         , Value(..)
@@ -44,69 +43,69 @@ controller =
         -- ys <- (16, nil)
         -- xs <- (32, ys)
         -- root <- list(ys, xs)
-        , Perform (ConstructPair "ys" (Constant (Num 16)) (Constant Nil))
-        , Perform (ConstructPair "xs" (Constant (Num 32)) (Register "ys"))
+        , Perform (ConstructPair { targetRegister = "ys", operationArgument0 = Constant (Num 16), operationArgument1 = Constant Nil })
+        , Perform (ConstructPair { targetRegister = "xs", operationArgument0 = Constant (Num 32), operationArgument1 = Register "ys" })
         , Label "initializing root"
-        , Perform (ConstructPair "root" (Register "xs") (Constant Nil))
-        , Perform (ConstructPair "root" (Register "ys") (Register "root"))
-        , Perform (AssignRegister "to-be-moved" "root")
+        , Perform (ConstructPair { targetRegister = "root", operationArgument0 = Register "xs", operationArgument1 = Constant Nil })
+        , Perform (ConstructPair { targetRegister = "root", operationArgument0 = Register "ys", operationArgument1 = Register "root" })
+        , Perform (AssignRegister { targetRegister = "to-be-moved", sourceRegister = "root" })
         , Label "start garbage collection"
-        , Perform (AssignOperation "test" (Operation "nil?" [ Register "to-be-moved" ]))
-        , Perform (JumpToLabelIf "test" "refresh root")
-        , Perform (First "main-pair" "to-be-moved")
-        , Perform (Second "to-be-moved" "to-be-moved")
-        , Perform (AssignLabel "continue" "start garbage collection")
+        , Perform (AssignOperation { targetRegister = "test", operationApplication = { name = "nil?", arguments = [ Register "to-be-moved" ] } })
+        , Perform (JumpToLabelIf { testRegister = "test", label = "refresh root" })
+        , Perform (First { targetRegister = "main-pair", sourceRegister = "to-be-moved" })
+        , Perform (Second { targetRegister = "to-be-moved", sourceRegister = "to-be-moved" })
+        , Perform (AssignLabel { targetRegister = "continue", label = "start garbage collection" })
 
         -- BEGIN PROCEDURE: move-pair
         --   dual-pair <- move-pair($main-pair, $continue)
         , Label "move-pair"
-        , Perform (First "tmp" "main-pair")
-        , Perform (AssignOperation "test" (Operation "moved?" [ Register "tmp" ]))
-        , Perform (JumpToLabelIf "test" "already moved")
-        , Perform (MoveToDual "dual-pair" "main-pair")
-        , Perform (MarkAsMoved "main-pair" "dual-pair")
+        , Perform (First { targetRegister = "tmp", sourceRegister = "main-pair" })
+        , Perform (AssignOperation { targetRegister = "test", operationApplication = { name = "moved?", arguments = [ Register "tmp" ] } })
+        , Perform (JumpToLabelIf { testRegister = "test", label = "already moved" })
+        , Perform (MoveToDual { targetRegister = "dual-pair", sourceRegister = "main-pair" })
+        , Perform (MarkAsMoved { toBeCollectedFromRegister = "main-pair", referenceToDualMemoryRegister = "dual-pair" })
 
         -- The following label isn't actually needed
         , Label "attempt to move first component"
-        , Perform (AssignRegister "main-pair" "tmp")
-        , Perform (AssignOperation "test" (Operation "pair?" [ Register "main-pair" ]))
-        , Perform (JumpToLabelIf "test" "move first component")
+        , Perform (AssignRegister { targetRegister = "main-pair", sourceRegister = "tmp" })
+        , Perform (AssignOperation { targetRegister = "test", operationApplication = { name = "pair?", arguments = [ Register "main-pair" ] } })
+        , Perform (JumpToLabelIf { testRegister = "test", label = "move first component" })
         , Label "attempt to move second component"
-        , Perform (DualSecond "main-pair" "dual-pair")
-        , Perform (AssignOperation "test" (Operation "pair?" [ Register "main-pair" ]))
-        , Perform (JumpToLabelIf "test" "move second component")
-        , Perform (JumpToLabelAtRegister "continue")
+        , Perform (DualSecond { targetRegister = "main-pair", sourceRegister = "dual-pair" })
+        , Perform (AssignOperation { targetRegister = "test", operationApplication = { name = "pair?", arguments = [ Register "main-pair" ] } })
+        , Perform (JumpToLabelIf { testRegister = "test", label = "move second component" })
+        , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
         , Label "move second component"
-        , Perform (PushRegister "dual-pair")
-        , Perform (PushRegister "continue")
-        , Perform (AssignLabel "continue" "after second call")
-        , Perform (JumpToLabel "move-pair")
+        , Perform (PushRegister { sourceRegister = "dual-pair" })
+        , Perform (PushRegister { sourceRegister = "continue" })
+        , Perform (AssignLabel { targetRegister = "continue", label = "after second call" })
+        , Perform (JumpToLabel { label = "move-pair" })
         , Label "after second call"
-        , Perform (AssignRegister "tmp" "dual-pair")
-        , Perform (Pop "continue")
-        , Perform (Pop "dual-pair")
-        , Perform (DualSetSecond "dual-pair" (Register "tmp"))
-        , Perform (JumpToLabelAtRegister "continue")
+        , Perform (AssignRegister { targetRegister = "tmp", sourceRegister = "dual-pair" })
+        , Perform (Pop { targetRegister = "continue" })
+        , Perform (Pop { targetRegister = "dual-pair" })
+        , Perform (DualSetSecond { targetRegister = "dual-pair", operationArgument = Register "tmp" })
+        , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
         , Label "move first component"
-        , Perform (PushRegister "dual-pair")
-        , Perform (PushRegister "continue")
-        , Perform (AssignLabel "continue" "after first call")
-        , Perform (JumpToLabel "move-pair")
+        , Perform (PushRegister { sourceRegister = "dual-pair" })
+        , Perform (PushRegister { sourceRegister = "continue" })
+        , Perform (AssignLabel { targetRegister = "continue", label = "after first call" })
+        , Perform (JumpToLabel { label = "move-pair" })
         , Label "after first call"
-        , Perform (AssignRegister "tmp" "dual-pair")
-        , Perform (Pop "continue")
-        , Perform (Pop "dual-pair")
-        , Perform (DualSetFirst "dual-pair" (Register "tmp"))
-        , Perform (JumpToLabel "attempt to move second component")
+        , Perform (AssignRegister { targetRegister = "tmp", sourceRegister = "dual-pair" })
+        , Perform (Pop { targetRegister = "continue" })
+        , Perform (Pop { targetRegister = "dual-pair" })
+        , Perform (DualSetFirst { targetRegister = "dual-pair", operationArgument = Register "tmp" })
+        , Perform (JumpToLabel { label = "attempt to move second component" })
         , Label "already moved"
-        , Perform (Second "dual-pair" "main-pair")
-        , Perform (JumpToLabelAtRegister "continue")
+        , Perform (Second { targetRegister = "dual-pair", sourceRegister = "main-pair" })
+        , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
 
         -- END PROCEDURE: move-pair
         , Label "refresh root"
 
         -- TODO
         , Label "done"
-        , Perform SwapMemory
-        , Perform Halt
+        , Perform (SwapMemory {})
+        , Perform (Halt {})
         ]

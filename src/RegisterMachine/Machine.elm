@@ -3,7 +3,7 @@ module RegisterMachine.Machine exposing (..)
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Lib.Result as Result
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Instruction(..), InstructionAddress, Label, MemoryAddress, OperationApplication(..), OperationArgument(..), OperationName, Register, Value(..))
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Instruction(..), InstructionAddress, Label, MemoryAddress, OperationApplication, OperationArgument(..), OperationName, Register, Value(..))
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryError, MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import Set exposing (Set)
@@ -149,85 +149,85 @@ parse controller =
         checkRegisterUse : Instruction -> Result TranslationError ()
         checkRegisterUse instruction =
             case instruction of
-                AssignRegister target source ->
-                    controller |> checkRegisters [ target, source ] []
+                AssignRegister { targetRegister, sourceRegister } ->
+                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
 
-                AssignLabel target _ ->
-                    controller |> checkRegisters [ target ] []
+                AssignLabel { targetRegister } ->
+                    controller |> checkRegisters [ targetRegister ] []
 
-                AssignOperation target (Operation _ arguments) ->
-                    controller |> checkRegisters [] arguments
+                AssignOperation { targetRegister, operationApplication } ->
+                    controller |> checkRegisters [] operationApplication.arguments
 
-                AssignConstant target _ ->
-                    controller |> checkRegisters [ target ] []
+                AssignConstant { targetRegister } ->
+                    controller |> checkRegisters [ targetRegister ] []
 
-                JumpToLabel label ->
+                JumpToLabel { label } ->
                     Ok ()
 
-                JumpToLabelAtRegister target ->
-                    controller |> checkRegisters [ target ] []
+                JumpToLabelAtRegister { labelRegister } ->
+                    controller |> checkRegisters [ labelRegister ] []
 
-                JumpToLabelIf testRegister _ ->
+                JumpToLabelIf { testRegister } ->
                     controller |> checkRegisters [ testRegister ] []
 
-                JumpToLabelAtRegisterIf testRegister target ->
-                    controller |> checkRegisters [ testRegister, target ] []
+                JumpToLabelAtRegisterIf { testRegister, labelRegister } ->
+                    controller |> checkRegisters [ testRegister, labelRegister ] []
 
-                Halt ->
+                Halt _ ->
                     Ok ()
 
-                PushRegister register ->
-                    controller |> checkRegisters [ register ] []
+                PushRegister { sourceRegister } ->
+                    controller |> checkRegisters [ sourceRegister ] []
 
                 PushConstant _ ->
                     Ok ()
 
-                PushLabel label ->
+                PushLabel { label } ->
                     Ok ()
 
-                Pop target ->
-                    controller |> checkRegisters [ target ] []
+                Pop { targetRegister } ->
+                    controller |> checkRegisters [ targetRegister ] []
 
-                AssignCallAtLabel target _ ->
-                    controller |> checkRegisters [ target ] []
+                AssignCallAtLabel { targetRegister } ->
+                    controller |> checkRegisters [ targetRegister ] []
 
-                AssignCallAtRegister target labelRegister ->
-                    controller |> checkRegisters [ target, labelRegister ] []
+                AssignCallAtRegister { targetRegister, labelRegister } ->
+                    controller |> checkRegisters [ targetRegister, labelRegister ] []
 
-                ConstructPair target arg0 arg1 ->
-                    controller |> checkRegisters [ target ] [ arg0, arg1 ]
+                ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
+                    controller |> checkRegisters [ targetRegister ] [ operationArgument0, operationArgument1 ]
 
-                First target source ->
-                    controller |> checkRegisters [ target, source ] []
+                First { targetRegister, sourceRegister } ->
+                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
 
-                Second target source ->
-                    controller |> checkRegisters [ target, source ] []
+                Second { targetRegister, sourceRegister } ->
+                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
 
-                SetFirst target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
+                SetFirst { targetRegister, operationArgument } ->
+                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
 
-                SetSecond target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
+                SetSecond { targetRegister, operationArgument } ->
+                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
 
-                DualFirst target source ->
-                    controller |> checkRegisters [ target, source ] []
+                DualFirst { targetRegister, sourceRegister } ->
+                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
 
-                DualSecond target source ->
-                    controller |> checkRegisters [ target, source ] []
+                DualSecond { targetRegister, sourceRegister } ->
+                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
 
-                DualSetFirst target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
+                DualSetFirst { targetRegister, operationArgument } ->
+                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
 
-                DualSetSecond target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
+                DualSetSecond { targetRegister, operationArgument } ->
+                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
 
-                MoveToDual target source ->
-                    controller |> checkRegisters [ target, source ] []
+                MoveToDual { targetRegister, sourceRegister } ->
+                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
 
-                MarkAsMoved toBeCollected referenceToDualMemory ->
-                    controller |> checkRegisters [ toBeCollected, referenceToDualMemory ] []
+                MarkAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } ->
+                    controller |> checkRegisters [ toBeCollectedFromRegister, referenceToDualMemoryRegister ] []
 
-                SwapMemory ->
+                SwapMemory _ ->
                     Ok ()
 
         initMachineInstructions : ( InstructionAddress, MachineInstructions )
@@ -602,7 +602,10 @@ swapMemory ({ memory } as machine) =
             }
     }
 
+
+
 -- ===Running the Machine===
+
 
 type RuntimeError
     = UndefinedRegister Register
@@ -621,22 +624,22 @@ runOneStep ({ machineState, instructionsState } as machine) =
     case getInstruction instructionsState of
         Just instruction ->
             case instruction of
-                AssignRegister target source ->
-                    getRegister source machineState
+                AssignRegister { targetRegister, sourceRegister } ->
+                    getRegister sourceRegister machineState
                         |> Result.map
                             (\val ->
                                 { isFinished = False
                                 , machine =
                                     { machineState =
                                         machineState
-                                            |> updateRegister target val
+                                            |> updateRegister targetRegister val
                                     , instructionsState =
                                         instructionsState |> advanceInstructionPointer
                                     }
                                 }
                             )
 
-                AssignLabel target label ->
+                AssignLabel { targetRegister, label } ->
                     -- TODO: There could be an off-by-one error, where the label points to Nothing, but actually it is the halting label?
                     case getLabelPosition label instructionsState of
                         Just pointer ->
@@ -645,7 +648,7 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 , machine =
                                     { machineState =
                                         machineState
-                                            |> updateRegister target (InstructionAddress pointer)
+                                            |> updateRegister targetRegister (InstructionAddress pointer)
                                     , instructionsState = instructionsState |> advanceInstructionPointer
                                     }
                                 }
@@ -653,11 +656,11 @@ runOneStep ({ machineState, instructionsState } as machine) =
                         Nothing ->
                             Err (LabelPointsToNothing label)
 
-                AssignOperation target (Operation opName args) ->
+                AssignOperation { targetRegister, operationApplication } ->
                     let
                         applyOp : Operation -> Result RuntimeError { isFinished : Bool, machine : MachineWithInstructions }
                         applyOp op =
-                            args
+                            operationApplication.arguments
                                 |> List.map (\argument -> machineState |> getValueFromArgument argument)
                                 |> Result.sequence
                                 |> Result.andThen op
@@ -667,31 +670,31 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                         , machine =
                                             { machineState =
                                                 machineState
-                                                    |> updateRegister target output
+                                                    |> updateRegister targetRegister output
                                             , instructionsState = instructionsState |> advanceInstructionPointer
                                             }
                                         }
                                     )
                     in
-                    getOperation opName machineState
+                    getOperation operationApplication.name machineState
                         |> Result.andThen applyOp
 
-                AssignConstant target x ->
+                AssignConstant { targetRegister, constant } ->
                     Ok
                         { isFinished = False
                         , machine =
                             { machineState =
                                 machineState
-                                    |> updateRegister target (ConstantValue x)
+                                    |> updateRegister targetRegister (ConstantValue constant)
                             , instructionsState = instructionsState |> advanceInstructionPointer
                             }
                         }
 
-                JumpToLabel label ->
+                JumpToLabel { label } ->
                     Ok { isFinished = False, machine = { machineState = machineState, instructionsState = jump label instructionsState } }
 
-                JumpToLabelAtRegister register ->
-                    getInstructionAddressAtRegister register machineState
+                JumpToLabelAtRegister { labelRegister } ->
+                    getInstructionAddressAtRegister labelRegister machineState
                         |> Result.map
                             (\pointer ->
                                 { isFinished = False
@@ -699,7 +702,7 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 }
                             )
 
-                JumpToLabelIf testRegister label ->
+                JumpToLabelIf { testRegister, label } ->
                     getRegister testRegister machineState
                         |> Result.map
                             (\val ->
@@ -713,12 +716,12 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 }
                             )
 
-                JumpToLabelAtRegisterIf testRegister target ->
+                JumpToLabelAtRegisterIf { testRegister, labelRegister } ->
                     getRegister testRegister machineState
                         |> Result.andThen
                             (\val ->
                                 if val == ConstantValue (Num 1) then
-                                    getInstructionAddressAtRegister target machineState
+                                    getInstructionAddressAtRegister labelRegister machineState
                                         |> Result.map
                                             (\pointer ->
                                                 { isFinished = False
@@ -736,11 +739,11 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                         }
                             )
 
-                Halt ->
+                Halt _ ->
                     Ok (halt machine)
 
-                PushRegister register ->
-                    getRegister register machineState
+                PushRegister { sourceRegister } ->
+                    getRegister sourceRegister machineState
                         |> Result.map
                             (\val ->
                                 { isFinished = False
@@ -754,19 +757,19 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 }
                             )
 
-                PushConstant val ->
+                PushConstant { constant } ->
                     Ok
                         { isFinished = False
                         , machine =
                             { machineState =
                                 machineState
-                                    |> push (ConstantValue val)
+                                    |> push (ConstantValue constant)
                             , instructionsState =
                                 instructionsState |> advanceInstructionPointer
                             }
                         }
 
-                PushLabel label ->
+                PushLabel { label } ->
                     case getLabelPosition label instructionsState of
                         Just pointer ->
                             Ok
@@ -783,7 +786,7 @@ runOneStep ({ machineState, instructionsState } as machine) =
                         Nothing ->
                             Err (LabelPointsToNothing label)
 
-                Pop target ->
+                Pop { targetRegister } ->
                     pop machineState
                         |> Result.map
                             (\( val, newMachineState ) ->
@@ -791,14 +794,14 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 , machine =
                                     { machineState =
                                         newMachineState
-                                            |> updateRegister target val
+                                            |> updateRegister targetRegister val
                                     , instructionsState =
                                         instructionsState |> advanceInstructionPointer
                                     }
                                 }
                             )
 
-                AssignCallAtLabel target label ->
+                AssignCallAtLabel { targetRegister, label } ->
                     -- target <- $ip + 1
                     -- ip <- :label
                     Ok
@@ -806,13 +809,13 @@ runOneStep ({ machineState, instructionsState } as machine) =
                         , machine =
                             { machineState =
                                 machineState
-                                    |> updateRegister target (InstructionAddress (instructionsState.instructionPointer + 1))
+                                    |> updateRegister targetRegister (InstructionAddress (instructionsState.instructionPointer + 1))
                             , instructionsState =
                                 instructionsState |> jump label
                             }
                         }
 
-                AssignCallAtRegister target labelRegister ->
+                AssignCallAtRegister { targetRegister, labelRegister } ->
                     -- target <- $ip + 1
                     -- ip <- $labelRegister
                     getInstructionAddressAtRegister labelRegister machineState
@@ -822,15 +825,15 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 , machine =
                                     { machineState =
                                         machineState
-                                            |> updateRegister target (InstructionAddress (instructionsState.instructionPointer + 1))
+                                            |> updateRegister targetRegister (InstructionAddress (instructionsState.instructionPointer + 1))
                                     , instructionsState =
                                         instructionsState |> pointerJump pointer
                                     }
                                 }
                             )
 
-                ConstructPair target arg0 arg1 ->
-                    Result.tuple2 (machineState |> getValueFromArgument arg0) (machineState |> getValueFromArgument arg1)
+                ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
+                    Result.tuple2 (machineState |> getValueFromArgument operationArgument0) (machineState |> getValueFromArgument operationArgument1)
                         |> Result.andThen
                             (\( value0, value1 ) ->
                                 (machineState |> currentMemoryState Main |> MemoryState.new ( value0, value1 ))
@@ -842,7 +845,7 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                                 { machineState =
                                                     machineState
                                                         |> setMemoryStateOfMachine Main newMemoryState
-                                                        |> updateRegister target (Pair newPairAddress)
+                                                        |> updateRegister targetRegister (Pair newPairAddress)
                                                 , instructionsState =
                                                     instructionsState |> advanceInstructionPointer
                                                 }
@@ -850,33 +853,33 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                         )
                             )
 
-                First target source ->
-                    machine |> accessPair FirstComponent Main target source
+                First { targetRegister, sourceRegister } ->
+                    machine |> accessPair FirstComponent Main targetRegister sourceRegister
 
-                Second target source ->
-                    machine |> accessPair SecondComponent Main target source
+                Second { targetRegister, sourceRegister } ->
+                    machine |> accessPair SecondComponent Main targetRegister sourceRegister
 
-                SetFirst register arg ->
-                    machine |> setPair FirstComponent Main register arg
+                SetFirst { targetRegister, operationArgument } ->
+                    machine |> setPair FirstComponent Main targetRegister operationArgument
 
-                SetSecond register arg ->
-                    machine |> setPair SecondComponent Main register arg
+                SetSecond { targetRegister, operationArgument } ->
+                    machine |> setPair SecondComponent Main targetRegister operationArgument
 
-                DualFirst target source ->
-                    machine |> accessPair FirstComponent Dual target source
+                DualFirst { targetRegister, sourceRegister } ->
+                    machine |> accessPair FirstComponent Dual targetRegister sourceRegister
 
-                DualSecond target source ->
-                    machine |> accessPair SecondComponent Dual target source
+                DualSecond { targetRegister, sourceRegister } ->
+                    machine |> accessPair SecondComponent Dual targetRegister sourceRegister
 
-                DualSetFirst register arg ->
-                    machine |> setPair FirstComponent Dual register arg
+                DualSetFirst { targetRegister, operationArgument } ->
+                    machine |> setPair FirstComponent Dual targetRegister operationArgument
 
-                DualSetSecond register arg ->
-                    machine |> setPair SecondComponent Dual register arg
+                DualSetSecond { targetRegister, operationArgument } ->
+                    machine |> setPair SecondComponent Dual targetRegister operationArgument
 
-                MoveToDual target source ->
+                MoveToDual { targetRegister, sourceRegister } ->
                     machineState
-                        |> getMemoryAddressAtRegister source
+                        |> getMemoryAddressAtRegister sourceRegister
                         |> Result.andThen
                             (\sourceAddress ->
                                 machineState
@@ -897,7 +900,7 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                                 { machineState =
                                                     machineState
                                                         |> setDualMemoryStateOfMachine newDualMemoryState
-                                                        |> updateRegister target (Pair addressOfNewPair)
+                                                        |> updateRegister targetRegister (Pair addressOfNewPair)
                                                 , instructionsState =
                                                     instructionsState |> advanceInstructionPointer
                                                 }
@@ -905,8 +908,8 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                         )
                             )
 
-                MarkAsMoved toBeCollected referenceToDualMemory ->
-                    Result.tuple2 (machineState |> getMemoryAddressAtRegister toBeCollected) (machineState |> getMemoryAddressAtRegister referenceToDualMemory)
+                MarkAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } ->
+                    Result.tuple2 (machineState |> getMemoryAddressAtRegister toBeCollectedFromRegister) (machineState |> getMemoryAddressAtRegister referenceToDualMemoryRegister)
                         |> Result.map
                             (\( addressToBeCollected, addressToDualMemory ) ->
                                 { isFinished = False
@@ -924,7 +927,7 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 }
                             )
 
-                SwapMemory ->
+                SwapMemory _ ->
                     Ok
                         { isFinished = False
                         , machine =

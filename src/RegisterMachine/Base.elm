@@ -4,7 +4,7 @@ module RegisterMachine.Base exposing
     , InstructionAddress
     , Label
     , MemoryAddress
-    , OperationApplication(..)
+    , OperationApplication
     , OperationArgument(..)
     , OperationArity
     , OperationName
@@ -66,8 +66,8 @@ type OperationArgument
     | Constant Constant
 
 
-type OperationApplication
-    = Operation OperationName (List OperationArgument)
+type alias OperationApplication =
+    { name : OperationName, arguments : List OperationArgument }
 
 
 type
@@ -97,36 +97,174 @@ type
     --                      // The
     -- swap-memory          // Switches the roles of memories.
     = -- assignment
-      AssignRegister Register Register
-    | AssignLabel Register Label
-    | AssignOperation Register OperationApplication
-    | AssignConstant Register Constant
+      AssignRegister AssignRegisterInput
+    | AssignLabel AssignLabelInput
+    | AssignOperation AssignOperationInput
+    | AssignConstant AssignConstantInput
       -- jumping
-    | JumpToLabel Label
-    | JumpToLabelAtRegister Register
-    | JumpToLabelIf Register Label
-    | JumpToLabelAtRegisterIf Register Register -- first register is the test register, second register is the register containing the label
-    | Halt
+    | JumpToLabel JumpToLabelInput
+    | JumpToLabelAtRegister JumpToLabelAtRegisterInput
+    | JumpToLabelIf JumpToLabelIfInput
+    | JumpToLabelAtRegisterIf JumpToLabelAtRegisterIfInput
+    | Halt HaltInput
       -- stack
-    | PushRegister Register
-    | PushConstant Constant
-    | PushLabel Label
-    | Pop Register
+    | PushRegister PushRegisterInput
+    | PushConstant PushConstantInput
+    | PushLabel PushLabelInput
+    | Pop PopInput
       -- calling procedure
-    | AssignCallAtLabel Register Label
-    | AssignCallAtRegister Register Register
+    | AssignCallAtLabel AssignCallAtLabelInput
+    | AssignCallAtRegister AssignCallAtRegisterInput
       -- memory
-    | ConstructPair Register OperationArgument OperationArgument
-    | First Register Register
-    | Second Register Register
-    | SetFirst Register OperationArgument
-    | SetSecond Register OperationArgument
+    | ConstructPair ConstructPairInput
+    | First FirstInput
+    | Second SecondInput
+    | SetFirst SetFirstInput
+    | SetSecond SetSecondInput
       -- dual memory
-    | DualFirst Register Register
-    | DualSecond Register Register
-    | DualSetFirst Register OperationArgument
-    | DualSetSecond Register OperationArgument
+    | DualFirst DualFirstInput
+    | DualSecond DualSecondInput
+    | DualSetFirst DualSetFirstInput
+    | DualSetSecond DualSetSecondInput
       -- garbage collection
-    | MoveToDual Register Register -- p <- move-to-dual $q   :=   MoveToDual "p" "q"
-    | MarkAsMoved Register Register -- MarkAsMoved memory_address_to_be_collected memory_address_to_dual_memory
-    | SwapMemory
+    | MoveToDual MoveToDualInput
+    | MarkAsMoved MarkAsMovedInput
+    | SwapMemory SwapMemoryInput
+
+
+
+-- assignment
+
+
+type alias AssignRegisterInput =
+    { targetRegister : Register, sourceRegister : Register }
+
+
+type alias AssignLabelInput =
+    { targetRegister : Register, label : Label }
+
+
+type alias AssignOperationInput =
+    { targetRegister : Register, operationApplication : OperationApplication }
+
+
+type alias AssignConstantInput =
+    { targetRegister : Register, constant : Constant }
+
+
+
+-- jumping
+
+
+type alias JumpToLabelInput =
+    { label : Label }
+
+
+type alias JumpToLabelAtRegisterInput =
+    { labelRegister : Register }
+
+
+type alias JumpToLabelIfInput =
+    { testRegister : Register, label : Label }
+
+
+type alias JumpToLabelAtRegisterIfInput =
+    { testRegister : Register, labelRegister : Register }
+
+
+type alias HaltInput =
+    {}
+
+
+
+--   -- stack
+
+
+type alias PushRegisterInput =
+    { sourceRegister : Register }
+
+
+type alias PushConstantInput =
+    { constant : Constant }
+
+
+type alias PushLabelInput =
+    { label : Label }
+
+
+type alias PopInput =
+    { targetRegister : Register }
+
+
+
+--   -- calling procedure
+
+
+type alias AssignCallAtLabelInput =
+    { targetRegister : Register, label : Label }
+
+
+type alias AssignCallAtRegisterInput =
+    { targetRegister : Register, labelRegister : Register }
+
+
+
+-- memory
+
+
+type alias ConstructPairInput =
+    { targetRegister : Register, operationArgument0 : OperationArgument, operationArgument1 : OperationArgument }
+
+
+type alias FirstInput =
+    { targetRegister : Register, sourceRegister : Register }
+
+
+type alias SecondInput =
+    { targetRegister : Register, sourceRegister : Register }
+
+
+type alias SetFirstInput =
+    { targetRegister : Register, operationArgument : OperationArgument }
+
+
+type alias SetSecondInput =
+    { targetRegister : Register, operationArgument : OperationArgument }
+
+
+
+-- dual memory
+
+
+type alias DualFirstInput =
+    { targetRegister : Register, sourceRegister : Register }
+
+
+type alias DualSecondInput =
+    { targetRegister : Register, sourceRegister : Register }
+
+
+type alias DualSetFirstInput =
+    { targetRegister : Register, operationArgument : OperationArgument }
+
+
+type alias DualSetSecondInput =
+    { targetRegister : Register, operationArgument : OperationArgument }
+
+
+
+-- garbage collection
+
+
+type alias MoveToDualInput =
+    { targetRegister : Register, sourceRegister : Register }
+
+
+type alias MarkAsMovedInput =
+    -- p <- move-to-dual $q   :=   MoveToDual "p" "q"
+    { toBeCollectedFromRegister : Register, referenceToDualMemoryRegister : Register }
+
+
+type alias SwapMemoryInput =
+    -- MarkAsMoved memory_address_to_be_collected memory_address_to_dual_memory
+    {}
