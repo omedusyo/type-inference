@@ -641,7 +641,7 @@ type RuntimeError
 
 type OneComputationStepState
     = RuntimeError RuntimeError
-    | Terminated
+    | Halted
     | Continue MachineState ControllerChange
 
 
@@ -671,12 +671,12 @@ sequenceResult f result =
 
 
 
--- ===START atomized actions===
+-- ===START individual actions===
 -- assignment
 
 
-assignRegisterInput : MachineState -> RegisterMachine.AssignRegisterInput -> OneComputationStepState
-assignRegisterInput machineState { targetRegister, sourceRegister } =
+assignRegister : RegisterMachine.AssignRegisterInput -> MachineState -> OneComputationStepState
+assignRegister { targetRegister, sourceRegister } machineState =
     getRegister sourceRegister machineState
         |> sequenceResult (\val -> advance (machineState |> updateRegister targetRegister val))
 
@@ -752,7 +752,7 @@ jumpToLabelAtRegisterIf { testRegister, labelRegister } machineState =
 
 halt : RegisterMachine.HaltInput -> MachineState -> OneComputationStepState
 halt _ _ =
-    Terminated
+    Halted
 
 
 
@@ -964,8 +964,92 @@ swapMemory _ ({ memory } as machineState) =
 
 
 
--- ===END atomized actions===
+-- ===END individual actions===
 
+
+act : Instruction -> InstructionAddress -> Dict Label InstructionAddress -> MachineState -> OneComputationStepState
+act instruction currentInstructionAddress labelToPosition machineState =
+    case instruction of
+        AssignRegister input ->
+            assignRegister input machineState
+
+        AssignLabel input ->
+            assignLabel input labelToPosition machineState
+
+        AssignOperation input ->
+            assignOperation input machineState
+
+        AssignConstant input ->
+            assignConstant input machineState
+
+        JumpToLabel input ->
+            jumpToLabel input labelToPosition machineState
+
+        JumpToLabelAtRegister input ->
+            jumpToLabelAtRegister input machineState
+
+        JumpToLabelIf input ->
+            jumpToLabelIf input labelToPosition machineState
+
+        JumpToLabelAtRegisterIf input ->
+            jumpToLabelAtRegisterIf input machineState
+
+        Halt input ->
+            halt input machineState
+
+        PushRegister input ->
+            pushRegister input machineState
+
+        PushConstant input ->
+            pushConstant input machineState
+
+        PushLabel input ->
+            pushLabel input labelToPosition machineState
+
+        Pop input ->
+            pop input machineState
+
+        AssignCallAtLabel input ->
+            assignCallAtLabel input currentInstructionAddress labelToPosition machineState
+
+        AssignCallAtRegister input ->
+            assignCallAtRegister input currentInstructionAddress machineState
+
+        ConstructPair input ->
+            constructPair input Main machineState
+
+        First input ->
+            first input Main machineState
+
+        Second input ->
+            second input Main machineState
+
+        SetFirst input ->
+            setFirst input Main machineState
+
+        SetSecond input ->
+            setSecond input Main machineState
+
+        DualFirst input ->
+            first input Dual machineState
+
+        DualSecond input ->
+            second input Dual machineState
+
+        DualSetFirst input ->
+            setFirst input Dual machineState
+
+        DualSetSecond input ->
+            setSecond input Dual machineState
+
+        MoveToDual input ->
+            moveToDual input machineState
+
+        MarkAsMoved input ->
+            markAsMoved input machineState
+
+        SwapMemory input ->
+            swapMemory input machineState
 
 runOneStep : MachineWithInstructions -> Result RuntimeError { isFinished : Bool, machine : MachineWithInstructions }
 runOneStep ({ machineState, instructionsState } as machine) =
