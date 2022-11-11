@@ -1,14 +1,41 @@
 module RegisterMachine.Base exposing
-    ( Constant(..)
+    ( AssignCallAtLabelInput
+    , AssignCallAtRegisterInput
+    , AssignConstantInput
+    , AssignLabelInput
+    , AssignOperationInput
+    , AssignRegisterInput
+    , Constant(..)
+    , ConstructPairInput
+    , DualFirstInput
+    , DualSecondInput
+    , DualSetFirstInput
+    , DualSetSecondInput
+    , FirstInput
+    , HaltInput
     , Instruction(..)
     , InstructionAddress
+    , JumpToLabelAtRegisterIfInput
+    , JumpToLabelAtRegisterInput
+    , JumpToLabelIfInput
+    , JumpToLabelInput
     , Label
+    , MarkAsMovedInput
     , MemoryAddress
+    , MoveToDualInput
     , OperationApplication
     , OperationArgument(..)
     , OperationArity
     , OperationName
+    , PopInput
+    , PushConstantInput
+    , PushLabelInput
+    , PushRegisterInput
     , Register
+    , SecondInput
+    , SetFirstInput
+    , SetSecondInput
+    , SwapMemoryInput
     , Value(..)
     )
 
