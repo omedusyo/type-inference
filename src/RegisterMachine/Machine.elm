@@ -132,6 +132,10 @@ foldlMayFail update state actions0 =
                 |> Result.andThen (\newState -> foldlMayFail update newState actions1)
 
 
+
+-- =Translation=
+
+
 translateLabelToInstructionPointer : LabelEnvironment -> Label -> Result TranslationError InstructionPointer
 translateLabelToInstructionPointer labelEnv label =
     Dict.get label labelEnv
@@ -263,6 +267,10 @@ translateInstructionsToMachineInstructions instructionBlock =
                 translate labelEnv reversedInstructions
                     |> Result.map (\machineInstructions -> ( labelEnv, machineInstructions ))
             )
+
+
+
+-- =Validation & Parsing=
 
 
 checkRegisters : List Register -> List OperationArgument -> Controller -> Result TranslationError ()
@@ -819,11 +827,9 @@ assignRegister { targetRegister, sourceRegister } machineState =
         |> sequenceResult (\val -> advance (machineState |> updateRegister targetRegister val))
 
 
-assignLabel : RegisterMachine.AssignLabelInput -> LabelEnvironment -> MachineState -> OneComputationStepState
-assignLabel { targetRegister, label } labelEnv machineState =
-    -- TODO: Would it be reasonable to have this labelToPosition dictionary in the MachineState?
-    getInstructionPointerFromLabel label labelEnv
-        |> sequenceResult (\pointer -> advance (machineState |> updateRegister targetRegister (InstructionPointer pointer)))
+assignInstructionPointer : RegisterMachine.AssignInstructionPointerInput -> MachineState -> OneComputationStepState
+assignInstructionPointer { targetRegister, instructionPointer } machineState =
+    advance (machineState |> updateRegister targetRegister (InstructionPointer instructionPointer))
 
 
 assignOperation : RegisterMachine.AssignOperationInput -> MachineState -> OneComputationStepState
@@ -848,34 +854,32 @@ assignConstant { targetRegister, constant } machineState =
 -- jumping
 
 
-jumpToLabel : RegisterMachine.JumpToLabelInput -> LabelEnvironment -> MachineState -> OneComputationStepState
-jumpToLabel { label } labelEnv machineState =
-    getInstructionPointerFromLabel label labelEnv
-        |> sequenceResult (\instructionPointer -> jumpTo instructionPointer machineState)
+jumpToInstructionPointer : RegisterMachine.JumpToInstructionPointerInput -> MachineState -> OneComputationStepState
+jumpToInstructionPointer { instructionPointer } machineState =
+    jumpTo instructionPointer machineState
 
 
-jumpToLabelAtRegister : RegisterMachine.JumpToInstructionPointerAtRegisterInput -> MachineState -> OneComputationStepState
-jumpToLabelAtRegister { instructionPointerRegister } machineState =
+jumpToInstructionPointerAtRegister : RegisterMachine.JumpToInstructionPointerAtRegisterInput -> MachineState -> OneComputationStepState
+jumpToInstructionPointerAtRegister { instructionPointerRegister } machineState =
     getInstructionPointerAtRegister instructionPointerRegister machineState
         |> sequenceResult (\pointer -> jumpTo pointer machineState)
 
 
-jumpToLabelIf : RegisterMachine.JumpToLabelIfInput -> LabelEnvironment -> MachineState -> OneComputationStepState
-jumpToLabelIf { testRegister, label } labelEnv machineState =
+jumpToInstructionPointerIf : RegisterMachine.JumpToInstructionPointerIfInput -> MachineState -> OneComputationStepState
+jumpToInstructionPointerIf { testRegister, instructionPointer } machineState =
     getRegister testRegister machineState
         |> sequenceResult
             (\val ->
                 if val == ConstantValue (Num 1) then
-                    getInstructionPointerFromLabel label labelEnv
-                        |> sequenceResult (\instructionPointer -> jumpTo instructionPointer machineState)
+                    jumpTo instructionPointer machineState
 
                 else
                     advance machineState
             )
 
 
-jumpToLabelAtRegisterIf : RegisterMachine.JumpToInstructionPointerAtRegisterIfInput -> MachineState -> OneComputationStepState
-jumpToLabelAtRegisterIf { testRegister, instructionPointerRegister } machineState =
+jumpToInstructionPointerAtRegisterIf : RegisterMachine.JumpToInstructionPointerAtRegisterIfInput -> MachineState -> OneComputationStepState
+jumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } machineState =
     getRegister testRegister machineState
         |> sequenceResult
             (\val ->
@@ -908,10 +912,9 @@ pushConstant { constant } machineState =
     advance (machineState |> push (ConstantValue constant))
 
 
-pushLabel : RegisterMachine.PushLabelInput -> LabelEnvironment -> MachineState -> OneComputationStepState
-pushLabel { label } labelEnv machineState =
-    getInstructionPointerFromLabel label labelEnv
-        |> sequenceResult (\instructionPointer -> advance (machineState |> push (InstructionPointer instructionPointer)))
+pushInstructionPointer : RegisterMachine.PushInstructionPointerInput -> MachineState -> OneComputationStepState
+pushInstructionPointer { instructionPointer } machineState =
+    advance (machineState |> push (InstructionPointer instructionPointer))
 
 
 pop : RegisterMachine.PopInput -> MachineState -> OneComputationStepState
@@ -927,17 +930,13 @@ pop { targetRegister } machineState =
 --       I would prefer to not have this instruction.
 
 
-assignCallAtLabel : RegisterMachine.AssignCallAtLabelInput -> InstructionPointer -> LabelEnvironment -> MachineState -> OneComputationStepState
-assignCallAtLabel { targetRegister, label } currentInstructionPointer labelEnv machineState =
+assignCallAtInstructionPointer : RegisterMachine.AssignCallAtInstructionPointerInput -> InstructionPointer -> MachineState -> OneComputationStepState
+assignCallAtInstructionPointer { targetRegister, instructionPointer } currentInstructionPointer machineState =
     -- target <- $ip + 1
     -- ip <- :label
-    getInstructionPointerFromLabel label labelEnv
-        |> sequenceResult
-            (\instructionPosition ->
-                jumpTo
-                    instructionPosition
-                    (machineState |> updateRegister targetRegister (InstructionPointer (currentInstructionPointer + 1)))
-            )
+    jumpTo
+        instructionPointer
+        (machineState |> updateRegister targetRegister (InstructionPointer (currentInstructionPointer + 1)))
 
 
 assignCallAtRegister : RegisterMachine.AssignCallAtRegisterInput -> InstructionPointer -> MachineState -> OneComputationStepState
@@ -1105,88 +1104,88 @@ swapMemory _ ({ memory } as machineState) =
 -- ===END individual actions===
 
 
-act : Instruction -> InstructionPointer -> LabelEnvironment -> MachineState -> OneComputationStepState
-act instruction currentInstructionPointer labelEnv machineState =
+act : MachineInstruction -> InstructionPointer -> MachineState -> OneComputationStepState
+act instruction currentInstructionPointer machineState =
     case instruction of
-        AssignRegister input ->
+        MAssignRegister input ->
             assignRegister input machineState
 
-        AssignLabel input ->
-            assignLabel input labelEnv machineState
+        MAssignInstructionPointer input ->
+            assignInstructionPointer input machineState
 
-        AssignOperation input ->
+        MAssignOperation input ->
             assignOperation input machineState
 
-        AssignConstant input ->
+        MAssignConstant input ->
             assignConstant input machineState
 
-        JumpToLabel input ->
-            jumpToLabel input labelEnv machineState
+        MJumpToInstructionPointer input ->
+            jumpToInstructionPointer input machineState
 
-        JumpToInstructionPointerAtRegister input ->
-            jumpToLabelAtRegister input machineState
+        MJumpToInstructionPointerAtRegister input ->
+            jumpToInstructionPointerAtRegister input machineState
 
-        JumpToLabelIf input ->
-            jumpToLabelIf input labelEnv machineState
+        MJumpToInstructionPointerIf input ->
+            jumpToInstructionPointerIf input machineState
 
-        JumpToInstructionPointerAtRegisterIf input ->
-            jumpToLabelAtRegisterIf input machineState
+        MJumpToInstructionPointerAtRegisterIf input ->
+            jumpToInstructionPointerAtRegisterIf input machineState
 
-        Halt input ->
+        MHalt input ->
             halt input machineState
 
-        PushRegister input ->
+        MPushRegister input ->
             pushRegister input machineState
 
-        PushConstant input ->
+        MPushConstant input ->
             pushConstant input machineState
 
-        PushLabel input ->
-            pushLabel input labelEnv machineState
+        MPushInstructionPointer input ->
+            pushInstructionPointer input machineState
 
-        Pop input ->
+        MPop input ->
             pop input machineState
 
-        AssignCallAtLabel input ->
-            assignCallAtLabel input currentInstructionPointer labelEnv machineState
+        MAssignCallAtInstructionPointer input ->
+            assignCallAtInstructionPointer input currentInstructionPointer machineState
 
-        AssignCallAtRegister input ->
+        MAssignCallAtRegister input ->
             assignCallAtRegister input currentInstructionPointer machineState
 
-        ConstructPair input ->
+        MConstructPair input ->
             constructPair input Main machineState
 
-        First input ->
+        MFirst input ->
             first input Main machineState
 
-        Second input ->
+        MSecond input ->
             second input Main machineState
 
-        SetFirst input ->
+        MSetFirst input ->
             setFirst input Main machineState
 
-        SetSecond input ->
+        MSetSecond input ->
             setSecond input Main machineState
 
-        DualFirst input ->
+        MDualFirst input ->
             first input Dual machineState
 
-        DualSecond input ->
+        MDualSecond input ->
             second input Dual machineState
 
-        DualSetFirst input ->
+        MDualSetFirst input ->
             setFirst input Dual machineState
 
-        DualSetSecond input ->
+        MDualSetSecond input ->
             setSecond input Dual machineState
 
-        MoveToDual input ->
+        MMoveToDual input ->
             moveToDual input machineState
 
-        MarkAsMoved input ->
+        MMarkAsMoved input ->
             markAsMoved input machineState
 
-        SwapMemory input ->
+        MSwapMemory input ->
             swapMemory input machineState
 
 
