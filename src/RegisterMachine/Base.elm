@@ -36,20 +36,14 @@ type alias OperationName =
     String
 
 
-
--- TODO: Is this going to be used somewhere? Atleast for basic type checking?
-
-
 type alias OperationArity =
+    -- TODO: Is this going to be used somewhere? Atleast for basic type checking?
     Int
 
 
-
--- TODO: Change the third argument to `Operation` to from `Register` to `OperationArgument`
--- TODO: What about labels as arguments to operations?
-
-
-type OperationArgument
+type
+    OperationArgument
+    -- TODO: What about labels as arguments to operations?
     = Register Register
     | Constant Constant
 
