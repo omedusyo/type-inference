@@ -98,9 +98,6 @@ type
     | PushConstant PushConstantInput
     | PushLabel PushLabelInput
     | Pop PopInput
-      -- calling procedure
-    | AssignCallAtLabel AssignCallAtLabelInput
-    | AssignCallAtRegister AssignCallAtRegisterInput
       -- memory
     | ConstructPair ConstructPairInput
     | First FirstInput
@@ -138,9 +135,6 @@ type
     | MPushConstant PushConstantInput
     | MPushInstructionPointer PushInstructionPointerInput
     | MPop PopInput
-      -- calling procedure
-    | MAssignCallAtInstructionPointer AssignCallAtInstructionPointerInput
-    | MAssignCallAtRegister AssignCallAtRegisterInput
       -- -- memory
     | MConstructPair ConstructPairInput
     | MFirst FirstInput
@@ -236,22 +230,6 @@ type alias PushInstructionPointerInput =
 
 type alias PopInput =
     { targetRegister : Register }
-
-
-
---   -- calling procedure
-
-
-type alias AssignCallAtLabelInput =
-    { targetRegister : Register, label : Label }
-
-
-type alias AssignCallAtInstructionPointerInput =
-    { targetRegister : Register, instructionPointer : InstructionPointer }
-
-
-type alias AssignCallAtRegisterInput =
-    { targetRegister : Register, instructionPointerRegister : Register }
 
 
 

@@ -220,7 +220,7 @@ reset model =
 
 type Msg
     = Reset
-    | Start
+    | RunUntilHalted
     | RunOneStep
     | MemoryPointerClicked MemoryPointer
     | ShiftMemoryViewBy Int
@@ -237,7 +237,7 @@ update msg =
         Reset ->
             Context.update reset
 
-        Start ->
+        RunUntilHalted ->
             Context.update
                 (\model ->
                     { model
@@ -360,8 +360,8 @@ view config model =
                         }
                     , Input.button Button.buttonStyle
                         { onPress =
-                            Just Start
-                        , label = E.text "Start"
+                            Just RunUntilHalted
+                        , label = E.text "Run until halted"
                         }
                     , Input.button Button.buttonStyle
                         { onPress =
@@ -606,12 +606,6 @@ viewInstructions instructionPointer instructionBlock =
                     RegisterMachine.Pop { targetRegister } ->
                         [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "pop-stack" ]
 
-                    RegisterMachine.AssignCallAtLabel { targetRegister, label } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "call", viewLabelUse label ]
-
-                    RegisterMachine.AssignCallAtRegister { targetRegister, instructionPointerRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "call", viewRegisterUse instructionPointerRegister ]
-
                     RegisterMachine.ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
                         [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "pair" [ operationArgument0, operationArgument1 ] ]
 
@@ -642,7 +636,7 @@ viewInstructions instructionPointer instructionBlock =
                     RegisterMachine.MoveToDual { targetRegister, sourceRegister } ->
                         [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "move-to-dual" [ RegisterMachine.Register sourceRegister ] ]
 
-                    RegisterMachine.MarkAsMoved {toBeCollectedFromRegister, referenceToDualMemoryRegister} ->
+                    RegisterMachine.MarkAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } ->
                         [ viewInstructionName "mark", viewRegisterUse toBeCollectedFromRegister, viewInstructionName "as-moved-to", viewRegisterUse referenceToDualMemoryRegister ]
 
                     RegisterMachine.SwapMemory _ ->

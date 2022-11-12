@@ -230,7 +230,7 @@ controller4_gcd_with_inlined_remainder_using_jump =
     --   halt
     { name = "gcd-with-inlined-remainder-using-jump"
     , controller =
-        { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "continue" ]
+        { registers = Set.fromList [ "a", "b", "remainder-result", "done?", "remainder-done?", "remainder-result" ]
         , instructions =
             [ Perform (AssignConstant { targetRegister = "a", constant = Num (3 * 5 * 7) })
             , Perform (AssignConstant { targetRegister = "b", constant = Num (3 * 5 * 5) })
@@ -240,9 +240,10 @@ controller4_gcd_with_inlined_remainder_using_jump =
 
             -- BEGIN Calling remainder($remainder-result, $b)
             , Perform (AssignRegister { targetRegister = "remainder-result", sourceRegister = "a" })
-            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "remainder" })
+            , Perform (JumpToLabel { label = "remainder" })
 
             -- END Calling remainder
+            , Label "remainder-return"
             , Perform (AssignRegister { targetRegister = "a", sourceRegister = "b" })
             , Perform (AssignRegister { targetRegister = "b", sourceRegister = "remainder-result" })
             , Perform (JumpToLabel { label = "gcd-loop" })
@@ -250,7 +251,7 @@ controller4_gcd_with_inlined_remainder_using_jump =
             -- This is the remainder procedure
             , Label "remainder"
             , Perform (AssignOperation { targetRegister = "remainder-done?", operationApplication = { name = "less-than?", arguments = [ Register "remainder-result", Register "b" ] } })
-            , Perform (JumpToInstructionPointerAtRegisterIf { testRegister = "remainder-done?", instructionPointerRegister= "continue"})
+            , Perform (JumpToLabelIf { testRegister = "remainder-done?", label= "remainder-return"})
             , Perform (AssignOperation { targetRegister = "remainder-result", operationApplication = { name = "sub", arguments = [ Register "remainder-result", Register "b" ] } })
             , Perform (JumpToLabel { label = "remainder" })
             , Label "done"
@@ -318,7 +319,9 @@ controller6_fct_recursive =
         { registers = Set.fromList [ "n", "result", "done?" ]
         , instructions =
             [ Perform (AssignConstant { targetRegister = "n", constant = Num 5 })
-            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fct" })
+            , Perform (AssignLabel { targetRegister = "continue", label = "fct-return" })
+            , Perform (JumpToLabel { label = "fct" })
+            , Label "fct-return"
             , Perform (Halt {})
             , Label "fct"
             , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "zero?", arguments = [ Register "n" ] } })
@@ -326,7 +329,9 @@ controller6_fct_recursive =
             , Perform (PushRegister { sourceRegister = "continue" })
             , Perform (PushRegister { sourceRegister = "n" })
             , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })
-            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fct" })
+            , Perform (AssignLabel { targetRegister = "continue", label = "fct-internal-return" })
+            , Perform (JumpToLabel { label = "fct" })
+            , Label "fct-internal-return"
             , Perform (Pop { targetRegister = "n" })
             , Perform (Pop { targetRegister = "continue" })
             , Perform (AssignOperation { targetRegister = "result", operationApplication = { name = "mul", arguments = [ Register "n", Register "result" ] } })
@@ -370,7 +375,9 @@ controller7_fibonacci_recursive =
         { registers = Set.fromList [ "n", "result", "tmp", "done?", "continue" ]
         , instructions =
             [ Perform (AssignConstant { targetRegister = "n", constant = Num 8 })
-            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fib" })
+            , Perform (AssignLabel { targetRegister = "continue", label = "fib-return" })
+            , Perform (JumpToLabel { label = "fib" })
+            , Label "fib-return"
             , Perform (Halt {})
             , Label "fib"
             , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "less-than?", arguments = [ Register "n", Constant (Num 2) ] } })
@@ -380,7 +387,9 @@ controller7_fibonacci_recursive =
             , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })
             , Perform (PushRegister { sourceRegister = "n" })
             , Perform (PushRegister { sourceRegister = "continue" })
-            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fib" })
+            , Perform (AssignLabel { targetRegister = "continue", label = "fib-internal-return-0" })
+            , Perform (JumpToLabel { label = "fib" })
+            , Label "fib-internal-return-0"
             , Perform (Pop { targetRegister = "continue" })
             , Perform (Pop { targetRegister = "n" })
 
@@ -388,7 +397,9 @@ controller7_fibonacci_recursive =
             , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })
             , Perform (PushRegister { sourceRegister = "result" })
             , Perform (PushRegister { sourceRegister = "continue" })
-            , Perform (AssignCallAtLabel { targetRegister = "continue", label = "fib" })
+            , Perform (AssignLabel { targetRegister = "continue", label = "fib-internal-return-1" })
+            , Perform (JumpToLabel { label = "fib" })
+            , Label "fib-internal-return-1"
             , Perform (Pop { targetRegister = "continue" })
             , Perform (Pop { targetRegister = "tmp" })
 
