@@ -127,8 +127,8 @@ foldlMayFail update state actions0 =
         [] ->
             Ok state
 
-        action :: actions1 ->
-            update action state
+        a :: actions1 ->
+            update a state
                 |> Result.andThen (\newState -> foldlMayFail update newState actions1)
 
 
@@ -1064,8 +1064,8 @@ swapMemory _ ({ memory } as machineState) =
 -- ===END individual actions===
 
 
-act : MachineInstruction -> MachineState -> ComputationStep
-act instruction machineState =
+action : MachineInstruction -> MachineState -> ComputationStep
+action instruction machineState =
     case instruction of
         MAssignRegister input ->
             assignRegister input machineState
