@@ -243,7 +243,7 @@ update msg =
                     { model
                         | maybeRuntime =
                             model.maybeRuntime
-                                |> Maybe.map (Result.andThen RegisterMachine.start)
+                                |> Maybe.map (Result.andThen RegisterMachine.runUntilHalted)
                     }
                 )
 
@@ -489,6 +489,9 @@ runTimeErrorToString err =
 
                 ExpectedNilAt pointer ->
                     String.concat [ "Expected Nil at #", String.fromInt pointer ]
+
+        InstructionPointerOutOfBounds { instructionPointer, numberOfInstructions } ->
+            String.concat [ "The instruction pointer @", String.fromInt instructionPointer, " is out of bounds (number of instructions is ", String.fromInt numberOfInstructions, ")" ]
 
 
 type LabelOrInstruction
