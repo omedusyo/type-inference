@@ -14,14 +14,14 @@ module RegisterMachine.Base exposing
     , FirstInput
     , HaltInput
     , Instruction(..)
-    , InstructionAddress
+    , InstructionPointer
     , JumpToLabelAtRegisterIfInput
     , JumpToLabelAtRegisterInput
     , JumpToLabelIfInput
     , JumpToLabelInput
     , Label
     , MarkAsMovedInput
-    , MemoryAddress
+    , MemoryPointer
     , MoveToDualInput
     , OperationApplication
     , OperationArgument(..)
@@ -50,14 +50,14 @@ type alias Register =
     String
 
 
-type alias MemoryAddress =
+type alias MemoryPointer =
     Int
 
 
 type Value
     = ConstantValue Constant
-    | Pair MemoryAddress
-    | InstructionAddress InstructionAddress
+    | Pair MemoryPointer
+    | InstructionPointer InstructionPointer
     | Uninitialized
     | Moved
 
@@ -67,7 +67,7 @@ type Constant
     | Nil
 
 
-type alias InstructionAddress =
+type alias InstructionPointer =
     Int
 
 
@@ -118,9 +118,9 @@ type
     -- set-first $p $a
     -- set-second $p $b
     --
-    -- q <- move-to-dual $p // p is a register holding an address in current memory.
+    -- q <- move-to-dual $p // p is a register holding an pointer in current memory.
     --                      // This will move the pair pointed by p to the other memory.
-    --                      // Register q will hold the new address.
+    --                      // Register q will hold the new pointer.
     --                      // The
     -- swap-memory          // Switches the roles of memories.
     = -- assignment
@@ -293,5 +293,5 @@ type alias MarkAsMovedInput =
 
 
 type alias SwapMemoryInput =
-    -- MarkAsMoved memory_address_to_be_collected memory_address_to_dual_memory
+    -- MarkAsMoved memory_pointer_to_be_collected memory_pointer_to_dual_memory
     {}

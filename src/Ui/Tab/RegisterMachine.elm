@@ -11,7 +11,7 @@ import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionAddress, MemoryAddress, Value(..))
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, MemoryPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
 import RegisterMachine.Machine as RegisterMachine exposing (Controller, ControllerExample, MachineWithInstructions, RegisterEnvironment, RuntimeError(..), TranslationError)
@@ -29,7 +29,7 @@ type alias Model =
     , selectedController : Maybe ControllerExample
     , maybeRuntime : Maybe (Result RuntimeError MachineWithInstructions)
     , memoryView : MemoryView
-    , currentlyHighlightedCell : MemoryAddress
+    , currentlyHighlightedCell : MemoryPointer
 
     -- editor
     , editorModel : Editor.Model
@@ -222,7 +222,7 @@ type Msg
     = Reset
     | Start
     | RunOneStep
-    | MemoryAddressClicked MemoryAddress
+    | MemoryPointerClicked MemoryPointer
     | ShiftMemoryViewBy Int
       -- ===Controllers Dropdown===
     | ControllerPicked (Maybe ControllerExample)
@@ -262,7 +262,7 @@ update msg =
                     }
                 )
 
-        MemoryAddressClicked p ->
+        MemoryPointerClicked p ->
             Context.update
                 (\model ->
                     let
@@ -467,8 +467,8 @@ runTimeErrorToString err =
         TheOperationExpectsIntegerArguments ->
             "The operation expects integer arguments"
 
-        ExpectedInstructionAddressInRegister ->
-            "Expected instruction address in the register"
+        ExpectedInstructionPointerInRegister ->
+            "Expected instruction p in the register"
 
         ExpectedPairInRegister ->
             "Expected pair in the register"
@@ -716,7 +716,7 @@ viewMemoryState memoryState model =
                 )
     in
     E.column [ E.width E.fill ]
-        [ E.row [] [ E.text "Next free address: ", viewMemoryAddress memoryState.nextFreePointer ]
+        [ E.row [] [ E.text "Next free pointer: ", viewMemoryPointer memoryState.nextFreePointer ]
         , E.row []
             [ Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy -1), label = E.text "-1" }
             , Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy 1), label = E.text "+1" }
@@ -725,8 +725,8 @@ viewMemoryState memoryState model =
         ]
 
 
-viewMemoryCell : MemoryAddress -> MemoryCell -> Model -> Element Msg
-viewMemoryCell memoryAddress ( a, b ) model =
+viewMemoryCell : MemoryPointer -> MemoryCell -> Model -> Element Msg
+viewMemoryCell memoryPointer ( a, b ) model =
     E.column [ Border.solid, Border.width 1, E.width (E.px 70) ]
         [ E.column [ E.centerX, E.paddingXY 0 15, E.height (E.px 50), E.width E.fill ]
             [ viewValue a model
@@ -736,14 +736,14 @@ viewMemoryCell memoryAddress ( a, b ) model =
             (List.concat
                 -- [ [ E.centerX, E.paddingXY 0 5, Background.color (E.rgb 64 52 235) ]
                 [ [ E.centerX, Background.color (E.rgb 0 0 0), E.width E.fill ]
-                , if model.currentlyHighlightedCell == memoryAddress then
+                , if model.currentlyHighlightedCell == memoryPointer then
                     [ Font.color (E.rgb255 255 0 0) ]
 
                   else
                     [ Font.color (E.rgb255 255 255 255) ]
                 ]
             )
-            (E.text (String.concat [ "#", String.fromInt memoryAddress ]))
+            (E.text (String.concat [ "#", String.fromInt memoryPointer ]))
         ]
 
 
@@ -753,11 +753,11 @@ viewValue value model =
         ConstantValue constant ->
             viewConstant constant
 
-        Pair memoryAddress ->
-            viewMemoryAddress memoryAddress
+        Pair memoryPointer ->
+            viewMemoryPointer memoryPointer
 
-        InstructionAddress instructionAddress ->
-            viewInstructionAddress instructionAddress
+        InstructionPointer instructionPointer ->
+            viewInstructionPointer instructionPointer
 
         Uninitialized ->
             E.text ""
@@ -778,14 +778,14 @@ viewConstant const =
         ]
 
 
-viewMemoryAddress : MemoryAddress -> Element Msg
-viewMemoryAddress p =
-    E.el [ Events.onClick (MemoryAddressClicked p), E.pointer ]
+viewMemoryPointer : MemoryPointer -> Element Msg
+viewMemoryPointer p =
+    E.el [ Events.onClick (MemoryPointerClicked p), E.pointer ]
         (E.text (String.concat [ "#", String.fromInt p ]))
 
 
-viewInstructionAddress : InstructionAddress -> Element Msg
-viewInstructionAddress pointer =
+viewInstructionPointer : InstructionPointer -> Element Msg
+viewInstructionPointer pointer =
     E.text (String.concat [ ":", String.fromInt pointer ])
 
 
