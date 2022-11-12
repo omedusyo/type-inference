@@ -36,7 +36,7 @@ type alias InstructionsState =
 
 type alias MachineInstructions =
     { labels : Set Label
-    , labelToInstructionPointer : Dict Label InstructionPointer
+    , labelEnv : LabelEnvironment
     , instructions : Array Instruction
     }
 
@@ -60,6 +60,10 @@ type alias Operation =
 
 type alias OperationEnvironment =
     Dict OperationName Operation
+
+
+type alias LabelEnvironment =
+    Dict Label InstructionPointer
 
 
 type Two
@@ -244,7 +248,7 @@ parse controller =
         initMachineInstructions =
             ( 0
             , { labels = Set.empty
-              , labelToInstructionPointer = Dict.empty
+              , labelEnv = Dict.empty
               , instructions = Array.empty
               }
             )
@@ -261,8 +265,8 @@ parse controller =
                             ( pointer
                             , { machineInstructions
                                 | labels = Set.insert label machineInstructions.labels
-                                , labelToInstructionPointer =
-                                    Dict.insert label pointer machineInstructions.labelToInstructionPointer
+                                , labelEnv =
+                                    Dict.insert label pointer machineInstructions.labelEnv
                               }
                             )
 
@@ -376,16 +380,16 @@ advanceInstructionPointer instructionsState =
 
 getInstructionPointerFromLabelOld : Label -> InstructionsState -> Maybe InstructionPointer
 getInstructionPointerFromLabelOld label instructionsState =
-    Dict.get label instructionsState.instructions.labelToInstructionPointer
+    Dict.get label instructionsState.instructions.labelEnv
 
 
 
 -- TODO: This one is new. Remove the one above
 
 
-getInstructionPointerFromLabel : Label -> Dict Label InstructionPointer -> Result RuntimeError InstructionPointer
-getInstructionPointerFromLabel label labelToInstructionPointer =
-    Dict.get label labelToInstructionPointer
+getInstructionPointerFromLabel : Label -> LabelEnvironment -> Result RuntimeError InstructionPointer
+getInstructionPointerFromLabel label labelEnv =
+    Dict.get label labelEnv
         |> Result.fromMaybe (LabelPointsToNothing label)
 
 
@@ -681,10 +685,10 @@ assignRegister { targetRegister, sourceRegister } machineState =
         |> sequenceResult (\val -> advance (machineState |> updateRegister targetRegister val))
 
 
-assignLabel : RegisterMachine.AssignLabelInput -> Dict Label InstructionPointer -> MachineState -> OneComputationStepState
-assignLabel { targetRegister, label } labelToInstructionPointer machineState =
+assignLabel : RegisterMachine.AssignLabelInput -> LabelEnvironment -> MachineState -> OneComputationStepState
+assignLabel { targetRegister, label } labelEnv machineState =
     -- TODO: Would it be reasonable to have this labelToPosition dictionary in the MachineState?
-    getInstructionPointerFromLabel label labelToInstructionPointer
+    getInstructionPointerFromLabel label labelEnv
         |> sequenceResult (\pointer -> advance (machineState |> updateRegister targetRegister (InstructionPointer pointer)))
 
 
@@ -710,9 +714,9 @@ assignConstant { targetRegister, constant } machineState =
 -- jumping
 
 
-jumpToLabel : RegisterMachine.JumpToLabelInput -> Dict Label InstructionPointer -> MachineState -> OneComputationStepState
-jumpToLabel { label } labelToInstructionPointer machineState =
-    getInstructionPointerFromLabel label labelToInstructionPointer
+jumpToLabel : RegisterMachine.JumpToLabelInput -> LabelEnvironment -> MachineState -> OneComputationStepState
+jumpToLabel { label } labelEnv machineState =
+    getInstructionPointerFromLabel label labelEnv
         |> sequenceResult (\instructionPointer -> jumpTo instructionPointer machineState)
 
 
@@ -722,13 +726,13 @@ jumpToLabelAtRegister { instructionPointerRegister } machineState =
         |> sequenceResult (\pointer -> jumpTo pointer machineState)
 
 
-jumpToLabelIf : RegisterMachine.JumpToLabelIfInput -> Dict Label InstructionPointer -> MachineState -> OneComputationStepState
-jumpToLabelIf { testRegister, label } labelToInstructionPointer machineState =
+jumpToLabelIf : RegisterMachine.JumpToLabelIfInput -> LabelEnvironment -> MachineState -> OneComputationStepState
+jumpToLabelIf { testRegister, label } labelEnv machineState =
     getRegister testRegister machineState
         |> sequenceResult
             (\val ->
                 if val == ConstantValue (Num 1) then
-                    getInstructionPointerFromLabel label labelToInstructionPointer
+                    getInstructionPointerFromLabel label labelEnv
                         |> sequenceResult (\instructionPointer -> jumpTo instructionPointer machineState)
 
                 else
@@ -770,9 +774,9 @@ pushConstant { constant } machineState =
     advance (machineState |> push (ConstantValue constant))
 
 
-pushLabel : RegisterMachine.PushLabelInput -> Dict Label InstructionPointer -> MachineState -> OneComputationStepState
-pushLabel { label } labelToInstructionPointer machineState =
-    getInstructionPointerFromLabel label labelToInstructionPointer
+pushLabel : RegisterMachine.PushLabelInput -> LabelEnvironment -> MachineState -> OneComputationStepState
+pushLabel { label } labelEnv machineState =
+    getInstructionPointerFromLabel label labelEnv
         |> sequenceResult (\instructionPointer -> advance (machineState |> push (InstructionPointer instructionPointer)))
 
 
@@ -789,11 +793,11 @@ pop { targetRegister } machineState =
 --       I would prefer to not have this instruction.
 
 
-assignCallAtLabel : RegisterMachine.AssignCallAtLabelInput -> InstructionPointer -> Dict Label InstructionPointer -> MachineState -> OneComputationStepState
-assignCallAtLabel { targetRegister, label } currentInstructionPointer labelToInstructionPointer machineState =
+assignCallAtLabel : RegisterMachine.AssignCallAtLabelInput -> InstructionPointer -> LabelEnvironment -> MachineState -> OneComputationStepState
+assignCallAtLabel { targetRegister, label } currentInstructionPointer labelEnv machineState =
     -- target <- $ip + 1
     -- ip <- :label
-    getInstructionPointerFromLabel label labelToInstructionPointer
+    getInstructionPointerFromLabel label labelEnv
         |> sequenceResult
             (\instructionPosition ->
                 jumpTo
@@ -967,14 +971,14 @@ swapMemory _ ({ memory } as machineState) =
 -- ===END individual actions===
 
 
-act : Instruction -> InstructionPointer -> Dict Label InstructionPointer -> MachineState -> OneComputationStepState
-act instruction currentInstructionPointer labelToPosition machineState =
+act : Instruction -> InstructionPointer -> LabelEnvironment -> MachineState -> OneComputationStepState
+act instruction currentInstructionPointer labelEnv machineState =
     case instruction of
         AssignRegister input ->
             assignRegister input machineState
 
         AssignLabel input ->
-            assignLabel input labelToPosition machineState
+            assignLabel input labelEnv machineState
 
         AssignOperation input ->
             assignOperation input machineState
@@ -983,13 +987,13 @@ act instruction currentInstructionPointer labelToPosition machineState =
             assignConstant input machineState
 
         JumpToLabel input ->
-            jumpToLabel input labelToPosition machineState
+            jumpToLabel input labelEnv machineState
 
         JumpToInstructionPointerAtRegister input ->
             jumpToLabelAtRegister input machineState
 
         JumpToLabelIf input ->
-            jumpToLabelIf input labelToPosition machineState
+            jumpToLabelIf input labelEnv machineState
 
         JumpToInstructionPointerAtRegisterIf input ->
             jumpToLabelAtRegisterIf input machineState
@@ -1004,13 +1008,13 @@ act instruction currentInstructionPointer labelToPosition machineState =
             pushConstant input machineState
 
         PushLabel input ->
-            pushLabel input labelToPosition machineState
+            pushLabel input labelEnv machineState
 
         Pop input ->
             pop input machineState
 
         AssignCallAtLabel input ->
-            assignCallAtLabel input currentInstructionPointer labelToPosition machineState
+            assignCallAtLabel input currentInstructionPointer labelEnv machineState
 
         AssignCallAtRegister input ->
             assignCallAtRegister input currentInstructionPointer machineState
