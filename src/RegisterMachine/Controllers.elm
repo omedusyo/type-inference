@@ -250,7 +250,7 @@ controller4_gcd_with_inlined_remainder_using_jump =
             -- This is the remainder procedure
             , Label "remainder"
             , Perform (AssignOperation { targetRegister = "remainder-done?", operationApplication = { name = "less-than?", arguments = [ Register "remainder-result", Register "b" ] } })
-            , Perform (JumpToLabelAtRegisterIf { testRegister = "remainder-done?", labelRegister= "continue"})
+            , Perform (JumpToInstructionPointerAtRegisterIf { testRegister = "remainder-done?", instructionPointerRegister= "continue"})
             , Perform (AssignOperation { targetRegister = "remainder-result", operationApplication = { name = "sub", arguments = [ Register "remainder-result", Register "b" ] } })
             , Perform (JumpToLabel { label = "remainder" })
             , Label "done"
@@ -330,10 +330,10 @@ controller6_fct_recursive =
             , Perform (Pop { targetRegister = "n" })
             , Perform (Pop { targetRegister = "continue" })
             , Perform (AssignOperation { targetRegister = "result", operationApplication = { name = "mul", arguments = [ Register "n", Register "result" ] } })
-            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+            , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
             , Label "done"
             , Perform (AssignConstant { targetRegister = "result", constant = Num 1 })
-            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+            , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
             ]
         }
     , initialRegisterEnvironment =
@@ -394,12 +394,12 @@ controller7_fibonacci_recursive =
 
             -- returning fib(n - 1) + fib(n - 2)
             , Perform (AssignOperation { targetRegister = "result", operationApplication = { name = "add", arguments = [ Register "result", Register "tmp" ] } })
-            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+            , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
 
             -- base case
             , Label "done"
             , Perform (AssignRegister { targetRegister = "result", sourceRegister = "n" })
-            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+            , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
             ]
         }
     , initialRegisterEnvironment =
@@ -491,7 +491,7 @@ controller10_append =
             , Perform (AssignLabel { targetRegister = "continue", label = "done" })
             , Label "append"
             , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "nil?", arguments = [ Register "xs" ] } })
-            , Perform (JumpToLabelAtRegisterIf { testRegister = "done?", labelRegister= "continue"})
+            , Perform (JumpToInstructionPointerAtRegisterIf { testRegister = "done?", instructionPointerRegister= "continue"})
             , Perform (First { targetRegister = "x", sourceRegister = "xs" })
             , Perform (Second { targetRegister = "xs", sourceRegister = "xs" })
             , Perform (PushRegister { sourceRegister = "x" })
@@ -502,7 +502,7 @@ controller10_append =
             , Perform (Pop { targetRegister = "continue" })
             , Perform (Pop { targetRegister = "x" })
             , Perform (ConstructPair { targetRegister = "ys", operationArgument0 =  (Register "x"), operationArgument1 = (Register "ys") })
-            , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+            , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
 
             ----
             , Label "done"

@@ -72,13 +72,13 @@ showInstruction instruction =
         JumpToLabel label ->
             String.concat [ "jump ", showLabel label ]
 
-        JumpToLabelAtRegister target ->
+        JumpToInstructionPointerAtRegister target ->
             String.concat [ "jump ", showRegisterUse target ]
 
         JumpToLabelIf testRegister label ->
             String.concat [ "if ", showRegisterUse testRegister, " jump ", showLabel label ]
 
-        JumpToLabelAtRegisterIf testRegister target ->
+        JumpToInstructionPointerAtRegisterIf testRegister target ->
             String.concat [ "if ", showRegisterUse testRegister, " jump ", showRegisterUse target ]
 
         Halt ->

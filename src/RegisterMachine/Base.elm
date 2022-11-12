@@ -1,43 +1,4 @@
-module RegisterMachine.Base exposing
-    ( AssignCallAtLabelInput
-    , AssignCallAtRegisterInput
-    , AssignConstantInput
-    , AssignLabelInput
-    , AssignOperationInput
-    , AssignRegisterInput
-    , Constant(..)
-    , ConstructPairInput
-    , DualFirstInput
-    , DualSecondInput
-    , DualSetFirstInput
-    , DualSetSecondInput
-    , FirstInput
-    , HaltInput
-    , Instruction(..)
-    , InstructionPointer
-    , JumpToLabelAtRegisterIfInput
-    , JumpToLabelAtRegisterInput
-    , JumpToLabelIfInput
-    , JumpToLabelInput
-    , Label
-    , MarkAsMovedInput
-    , MemoryPointer
-    , MoveToDualInput
-    , OperationApplication
-    , OperationArgument(..)
-    , OperationArity
-    , OperationName
-    , PopInput
-    , PushConstantInput
-    , PushLabelInput
-    , PushRegisterInput
-    , Register
-    , SecondInput
-    , SetFirstInput
-    , SetSecondInput
-    , SwapMemoryInput
-    , Value(..)
-    )
+module RegisterMachine.Base exposing (..)
 
 -- sequence of instructions should start with a label
 
@@ -99,6 +60,9 @@ type alias OperationApplication =
 
 type
     Instruction
+    -- These instructions use labels, and so are meant for writing by humans.
+    -- Below we also have machine instructions, which use instruction pointers directly.
+    --
     -- b <- $a
     -- b <- :foo
     -- a <- op($x, $y)
@@ -130,9 +94,10 @@ type
     | AssignConstant AssignConstantInput
       -- jumping
     | JumpToLabel JumpToLabelInput
-    | JumpToLabelAtRegister JumpToLabelAtRegisterInput
+    | JumpToInstructionPointerAtRegister JumpToInstructionPointerAtRegisterInput
     | JumpToLabelIf JumpToLabelIfInput
-    | JumpToLabelAtRegisterIf JumpToLabelAtRegisterIfInput
+    | JumpToInstructionPointerAtRegisterIf JumpToInstructionPointerAtRegisterIfInput
+      -- haltings
     | Halt HaltInput
       -- stack
     | PushRegister PushRegisterInput
@@ -159,6 +124,46 @@ type
     | SwapMemory SwapMemoryInput
 
 
+type
+    MachineInstruction
+    -- Note that the only difference from Instruction here is that we don't have labels, only instruction pointers.
+    = -- assignment
+      MAssignRegister AssignRegisterInput
+    | MAssignInstructionPointer AssignInstructionPointerInput
+    | MAssignOperation AssignOperationInput
+    | MAssignConstant AssignConstantInput
+      -- jumping
+    | MJumpToInstructionPointer JumpToInstructionPointerInput
+    | MJumpToInstructionPointerAtRegister JumpToInstructionPointerAtRegisterInput
+    | MJumpToInstructionPointerIf JumpToInstructionPointerIfInput
+    | MJumpToInstructionPointerAtRegisterIf JumpToInstructionPointerAtRegisterIfInput
+      -- haltings
+    | MHalt HaltInput
+      -- -- stack
+    | MPushRegister PushRegisterInput
+    | MPushConstant PushConstantInput
+    | MPushInstructionPointer PushInstructionPointerInput
+    | MPop PopInput
+      -- calling procedure
+    | MAssignCallAtInstructionPointer AssignCallAtInstructionPointerInput
+    | MAssignCallAtRegister AssignCallAtRegisterInput
+      -- -- memory
+    | MConstructPair ConstructPairInput
+    | MFirst FirstInput
+    | MSecond SecondInput
+    | MSetFirst SetFirstInput
+    | MSetSecond SetSecondInput
+      -- -- dual memory
+    | MDualFirst DualFirstInput
+    | MDualSecond DualSecondInput
+    | MDualSetFirst DualSetFirstInput
+    | MDualSetSecond DualSetSecondInput
+      -- garbage collection
+    | MMoveToDual MoveToDualInput
+    | MMarkAsMoved MarkAsMovedInput
+    | MSwapMemory SwapMemoryInput
+
+
 
 -- assignment
 
@@ -169,6 +174,10 @@ type alias AssignRegisterInput =
 
 type alias AssignLabelInput =
     { targetRegister : Register, label : Label }
+
+
+type alias AssignInstructionPointerInput =
+    { targetRegister : Register, instructionPointer : InstructionPointer }
 
 
 type alias AssignOperationInput =
@@ -187,16 +196,24 @@ type alias JumpToLabelInput =
     { label : Label }
 
 
-type alias JumpToLabelAtRegisterInput =
-    { labelRegister : Register }
+type alias JumpToInstructionPointerInput =
+    { instructionPointer : InstructionPointer }
+
+
+type alias JumpToInstructionPointerAtRegisterInput =
+    { instructionPointerRegister : Register }
 
 
 type alias JumpToLabelIfInput =
     { testRegister : Register, label : Label }
 
 
-type alias JumpToLabelAtRegisterIfInput =
-    { testRegister : Register, labelRegister : Register }
+type alias JumpToInstructionPointerIfInput =
+    { testRegister : Register, instructionPointer : InstructionPointer }
+
+
+type alias JumpToInstructionPointerAtRegisterIfInput =
+    { testRegister : Register, instructionPointerRegister : Register }
 
 
 type alias HaltInput =
@@ -219,6 +236,10 @@ type alias PushLabelInput =
     { label : Label }
 
 
+type alias PushInstructionPointerInput =
+    { instructionPointer : InstructionPointer }
+
+
 type alias PopInput =
     { targetRegister : Register }
 
@@ -231,8 +252,12 @@ type alias AssignCallAtLabelInput =
     { targetRegister : Register, label : Label }
 
 
+type alias AssignCallAtInstructionPointerInput =
+    { targetRegister : Register, instructionPointer : InstructionPointer }
+
+
 type alias AssignCallAtRegisterInput =
-    { targetRegister : Register, labelRegister : Register }
+    { targetRegister : Register, instructionPointerRegister : Register }
 
 
 

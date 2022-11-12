@@ -582,14 +582,14 @@ viewInstructions instructionPointer instructionBlock =
                     RegisterMachine.JumpToLabel { label } ->
                         [ viewInstructionName "jump", viewLabelUse label ]
 
-                    RegisterMachine.JumpToLabelAtRegister { labelRegister } ->
-                        [ viewInstructionName "jump", viewRegisterUse labelRegister ]
+                    RegisterMachine.JumpToInstructionPointerAtRegister { instructionPointerRegister } ->
+                        [ viewInstructionName "jump", viewRegisterUse instructionPointerRegister ]
 
                     RegisterMachine.JumpToLabelIf { testRegister, label } ->
                         [ viewInstructionName "if", viewRegisterUse testRegister, viewInstructionName "jump", viewLabelUse label ]
 
-                    RegisterMachine.JumpToLabelAtRegisterIf { testRegister, labelRegister } ->
-                        [ viewInstructionName "if", viewRegisterUse testRegister, viewInstructionName "jump", viewRegisterUse labelRegister ]
+                    RegisterMachine.JumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } ->
+                        [ viewInstructionName "if", viewRegisterUse testRegister, viewInstructionName "jump", viewRegisterUse instructionPointerRegister ]
 
                     RegisterMachine.Halt _ ->
                         [ viewInstructionName "halt" ]
@@ -609,8 +609,8 @@ viewInstructions instructionPointer instructionBlock =
                     RegisterMachine.AssignCallAtLabel { targetRegister, label } ->
                         [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "call", viewLabelUse label ]
 
-                    RegisterMachine.AssignCallAtRegister { targetRegister, labelRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "call", viewRegisterUse labelRegister ]
+                    RegisterMachine.AssignCallAtRegister { targetRegister, instructionPointerRegister } ->
+                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "call", viewRegisterUse instructionPointerRegister ]
 
                     RegisterMachine.ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
                         [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "pair" [ operationArgument0, operationArgument1 ] ]

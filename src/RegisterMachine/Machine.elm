@@ -174,14 +174,14 @@ parse controller =
                 JumpToLabel { label } ->
                     Ok ()
 
-                JumpToLabelAtRegister { labelRegister } ->
-                    controller |> checkRegisters [ labelRegister ] []
+                JumpToInstructionPointerAtRegister { instructionPointerRegister } ->
+                    controller |> checkRegisters [ instructionPointerRegister ] []
 
                 JumpToLabelIf { testRegister } ->
                     controller |> checkRegisters [ testRegister ] []
 
-                JumpToLabelAtRegisterIf { testRegister, labelRegister } ->
-                    controller |> checkRegisters [ testRegister, labelRegister ] []
+                JumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } ->
+                    controller |> checkRegisters [ testRegister, instructionPointerRegister ] []
 
                 Halt _ ->
                     Ok ()
@@ -201,8 +201,8 @@ parse controller =
                 AssignCallAtLabel { targetRegister } ->
                     controller |> checkRegisters [ targetRegister ] []
 
-                AssignCallAtRegister { targetRegister, labelRegister } ->
-                    controller |> checkRegisters [ targetRegister, labelRegister ] []
+                AssignCallAtRegister { targetRegister, instructionPointerRegister } ->
+                    controller |> checkRegisters [ targetRegister, instructionPointerRegister ] []
 
                 ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
                     controller |> checkRegisters [ targetRegister ] [ operationArgument0, operationArgument1 ]
@@ -716,9 +716,9 @@ jumpToLabel { label } labelToInstructionPointer machineState =
         |> sequenceResult (\instructionPointer -> jumpTo instructionPointer machineState)
 
 
-jumpToLabelAtRegister : RegisterMachine.JumpToLabelAtRegisterInput -> MachineState -> OneComputationStepState
-jumpToLabelAtRegister { labelRegister } machineState =
-    getInstructionPointerAtRegister labelRegister machineState
+jumpToLabelAtRegister : RegisterMachine.JumpToInstructionPointerAtRegisterInput -> MachineState -> OneComputationStepState
+jumpToLabelAtRegister { instructionPointerRegister } machineState =
+    getInstructionPointerAtRegister instructionPointerRegister machineState
         |> sequenceResult (\pointer -> jumpTo pointer machineState)
 
 
@@ -736,13 +736,13 @@ jumpToLabelIf { testRegister, label } labelToInstructionPointer machineState =
             )
 
 
-jumpToLabelAtRegisterIf : RegisterMachine.JumpToLabelAtRegisterIfInput -> MachineState -> OneComputationStepState
-jumpToLabelAtRegisterIf { testRegister, labelRegister } machineState =
+jumpToLabelAtRegisterIf : RegisterMachine.JumpToInstructionPointerAtRegisterIfInput -> MachineState -> OneComputationStepState
+jumpToLabelAtRegisterIf { testRegister, instructionPointerRegister } machineState =
     getRegister testRegister machineState
         |> sequenceResult
             (\val ->
                 if val == ConstantValue (Num 1) then
-                    getInstructionPointerAtRegister labelRegister machineState
+                    getInstructionPointerAtRegister instructionPointerRegister machineState
                         |> sequenceResult (\instructionPointer -> jumpTo instructionPointer machineState)
 
                 else
@@ -803,10 +803,10 @@ assignCallAtLabel { targetRegister, label } currentInstructionPointer labelToIns
 
 
 assignCallAtRegister : RegisterMachine.AssignCallAtRegisterInput -> InstructionPointer -> MachineState -> OneComputationStepState
-assignCallAtRegister { targetRegister, labelRegister } currentInstructionPointer machineState =
+assignCallAtRegister { targetRegister, instructionPointerRegister } currentInstructionPointer machineState =
     -- target <- $ip + 1
     -- ip <- $labelRegister
-    getInstructionPointerAtRegister labelRegister machineState
+    getInstructionPointerAtRegister instructionPointerRegister machineState
         |> sequenceResult
             (\instructionPointer ->
                 jumpTo instructionPointer
@@ -985,13 +985,13 @@ act instruction currentInstructionPointer labelToPosition machineState =
         JumpToLabel input ->
             jumpToLabel input labelToPosition machineState
 
-        JumpToLabelAtRegister input ->
+        JumpToInstructionPointerAtRegister input ->
             jumpToLabelAtRegister input machineState
 
         JumpToLabelIf input ->
             jumpToLabelIf input labelToPosition machineState
 
-        JumpToLabelAtRegisterIf input ->
+        JumpToInstructionPointerAtRegisterIf input ->
             jumpToLabelAtRegisterIf input machineState
 
         Halt input ->
@@ -1126,8 +1126,8 @@ runOneStep ({ machineState, instructionsState } as machine) =
                 JumpToLabel { label } ->
                     Ok { isFinished = False, machine = { machineState = machineState, instructionsState = jump label instructionsState } }
 
-                JumpToLabelAtRegister { labelRegister } ->
-                    getInstructionPointerAtRegister labelRegister machineState
+                JumpToInstructionPointerAtRegister { instructionPointerRegister } ->
+                    getInstructionPointerAtRegister instructionPointerRegister machineState
                         |> Result.map
                             (\pointer ->
                                 { isFinished = False
@@ -1149,12 +1149,12 @@ runOneStep ({ machineState, instructionsState } as machine) =
                                 }
                             )
 
-                JumpToLabelAtRegisterIf { testRegister, labelRegister } ->
+                JumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } ->
                     getRegister testRegister machineState
                         |> Result.andThen
                             (\val ->
                                 if val == ConstantValue (Num 1) then
-                                    getInstructionPointerAtRegister labelRegister machineState
+                                    getInstructionPointerAtRegister instructionPointerRegister machineState
                                         |> Result.map
                                             (\pointer ->
                                                 { isFinished = False
@@ -1248,10 +1248,10 @@ runOneStep ({ machineState, instructionsState } as machine) =
                             }
                         }
 
-                AssignCallAtRegister { targetRegister, labelRegister } ->
+                AssignCallAtRegister { targetRegister, instructionPointerRegister } ->
                     -- target <- $ip + 1
                     -- ip <- $labelRegister
-                    getInstructionPointerAtRegister labelRegister machineState
+                    getInstructionPointerAtRegister instructionPointerRegister machineState
                         |> Result.map
                             (\pointer ->
                                 { isFinished = False

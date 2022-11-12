@@ -74,7 +74,7 @@ controller =
         , Perform (DualSecond { targetRegister = "main-pair", sourceRegister = "dual-pair" })
         , Perform (AssignOperation { targetRegister = "test", operationApplication = { name = "pair?", arguments = [ Register "main-pair" ] } })
         , Perform (JumpToLabelIf { testRegister = "test", label = "move second component" })
-        , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+        , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
         , Label "move second component"
         , Perform (PushRegister { sourceRegister = "dual-pair" })
         , Perform (PushRegister { sourceRegister = "continue" })
@@ -85,7 +85,7 @@ controller =
         , Perform (Pop { targetRegister = "continue" })
         , Perform (Pop { targetRegister = "dual-pair" })
         , Perform (DualSetSecond { targetRegister = "dual-pair", operationArgument = Register "tmp" })
-        , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+        , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
         , Label "move first component"
         , Perform (PushRegister { sourceRegister = "dual-pair" })
         , Perform (PushRegister { sourceRegister = "continue" })
@@ -99,7 +99,7 @@ controller =
         , Perform (JumpToLabel { label = "attempt to move second component" })
         , Label "already moved"
         , Perform (Second { targetRegister = "dual-pair", sourceRegister = "main-pair" })
-        , Perform (JumpToLabelAtRegister { labelRegister = "continue" })
+        , Perform (JumpToInstructionPointerAtRegister { instructionPointerRegister = "continue" })
 
         -- END PROCEDURE: move-pair
         , Label "refresh root"
