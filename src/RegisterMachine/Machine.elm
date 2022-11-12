@@ -47,7 +47,7 @@ controllerChangeAction change state =
             { state | currentInstructionPointer = instructionPointer }
 
 
-fetchInstruction : ControllerState -> ComputationStep MachineInstruction
+fetchInstruction : ControllerState -> ComputationStep r MachineInstruction
 fetchInstruction { instructions, currentInstructionPointer } =
     case Array.get currentInstructionPointer instructions of
         Just instruction ->
@@ -55,7 +55,6 @@ fetchInstruction { instructions, currentInstructionPointer } =
 
         Nothing ->
             RuntimeError (InstructionPointerOutOfBounds { instructionPointer = currentInstructionPointer, numberOfInstructions = Array.length instructions })
-
 
 
 type alias MachineState =
@@ -66,10 +65,11 @@ type alias MachineState =
     }
 
 
+
 -- ===END NEW STUFF===
-
-
 -- ===START TO BE DELETED===
+
+
 type alias MachineWithInstructions =
     { machineState : MachineState, instructionsState : InstructionsState }
 
@@ -85,6 +85,9 @@ type alias MachineInstructions =
     , labelEnv : LabelEnvironment
     , instructions : Array Instruction
     }
+
+
+
 -- ===END TO BE DELETED===
 
 
@@ -820,23 +823,23 @@ type RuntimeError
     | InstructionPointerOutOfBounds { instructionPointer : InstructionPointer, numberOfInstructions : Int }
 
 
-type ComputationStep a
+type ComputationStep r a
     = RuntimeError RuntimeError
-    | Halted
+    | Halted r
     | Continue a
 
 
-advance : MachineState -> ComputationStep ( MachineState, ControllerChange )
+advance : MachineState -> ComputationStep r ( MachineState, ControllerChange )
 advance machineState =
     Continue ( machineState, AdvanceInstructionPointer )
 
 
-jumpTo : InstructionPointer -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+jumpTo : InstructionPointer -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 jumpTo instructionPointer machineState =
     Continue ( machineState, JumpTo instructionPointer )
 
 
-fromResultAndThen : (a -> ComputationStep b) -> Result RuntimeError a -> ComputationStep b
+fromResultAndThen : (a -> ComputationStep r b) -> Result RuntimeError a -> ComputationStep r b
 fromResultAndThen f result =
     case result of
         Ok a ->
@@ -846,20 +849,20 @@ fromResultAndThen f result =
             RuntimeError e
 
 
-andThen : (a -> ComputationStep b) -> ComputationStep a -> ComputationStep b
+andThen : (a -> ComputationStep r b) -> ComputationStep r a -> ComputationStep r b
 andThen f result =
     case result of
         RuntimeError e ->
             RuntimeError e
 
-        Halted ->
-            Halted
+        Halted r ->
+            Halted r
 
         Continue a ->
             f a
 
 
-map : (a -> b) -> ComputationStep a -> ComputationStep b
+map : (a -> b) -> ComputationStep r a -> ComputationStep r b
 map f result =
     andThen (f >> Continue) result
 
@@ -869,18 +872,18 @@ map f result =
 -- assignment
 
 
-assignRegister : RegisterMachine.AssignRegisterInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+assignRegister : RegisterMachine.AssignRegisterInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 assignRegister { targetRegister, sourceRegister } machineState =
     getRegister sourceRegister machineState
         |> fromResultAndThen (\val -> advance (machineState |> updateRegister targetRegister val))
 
 
-assignInstructionPointer : RegisterMachine.AssignInstructionPointerInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+assignInstructionPointer : RegisterMachine.AssignInstructionPointerInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 assignInstructionPointer { targetRegister, instructionPointer } machineState =
     advance (machineState |> updateRegister targetRegister (InstructionPointer instructionPointer))
 
 
-assignOperation : RegisterMachine.AssignOperationInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+assignOperation : RegisterMachine.AssignOperationInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 assignOperation { targetRegister, operationApplication } machineState =
     getOperation operationApplication.name machineState
         |> fromResultAndThen
@@ -893,7 +896,7 @@ assignOperation { targetRegister, operationApplication } machineState =
             )
 
 
-assignConstant : RegisterMachine.AssignConstantInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+assignConstant : RegisterMachine.AssignConstantInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 assignConstant { targetRegister, constant } machineState =
     advance (machineState |> updateRegister targetRegister (ConstantValue constant))
 
@@ -902,18 +905,18 @@ assignConstant { targetRegister, constant } machineState =
 -- jumping
 
 
-jumpToInstructionPointer : RegisterMachine.JumpToInstructionPointerInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+jumpToInstructionPointer : RegisterMachine.JumpToInstructionPointerInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 jumpToInstructionPointer { instructionPointer } machineState =
     jumpTo instructionPointer machineState
 
 
-jumpToInstructionPointerAtRegister : RegisterMachine.JumpToInstructionPointerAtRegisterInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+jumpToInstructionPointerAtRegister : RegisterMachine.JumpToInstructionPointerAtRegisterInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 jumpToInstructionPointerAtRegister { instructionPointerRegister } machineState =
     getInstructionPointerAtRegister instructionPointerRegister machineState
         |> fromResultAndThen (\pointer -> jumpTo pointer machineState)
 
 
-jumpToInstructionPointerIf : RegisterMachine.JumpToInstructionPointerIfInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+jumpToInstructionPointerIf : RegisterMachine.JumpToInstructionPointerIfInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 jumpToInstructionPointerIf { testRegister, instructionPointer } machineState =
     getRegister testRegister machineState
         |> fromResultAndThen
@@ -926,7 +929,7 @@ jumpToInstructionPointerIf { testRegister, instructionPointer } machineState =
             )
 
 
-jumpToInstructionPointerAtRegisterIf : RegisterMachine.JumpToInstructionPointerAtRegisterIfInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+jumpToInstructionPointerAtRegisterIf : RegisterMachine.JumpToInstructionPointerAtRegisterIfInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 jumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } machineState =
     getRegister testRegister machineState
         |> fromResultAndThen
@@ -940,32 +943,32 @@ jumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister 
             )
 
 
-halt : RegisterMachine.HaltInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
-halt _ _ =
-    Halted
+halt : RegisterMachine.HaltInput -> MachineState -> ComputationStep MachineState a
+halt _ machineState =
+    Halted machineState
 
 
 
 -- stack
 
 
-pushRegister : RegisterMachine.PushRegisterInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+pushRegister : RegisterMachine.PushRegisterInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 pushRegister { sourceRegister } machineState =
     getRegister sourceRegister machineState
         |> fromResultAndThen (\val -> advance (machineState |> push val))
 
 
-pushConstant : RegisterMachine.PushConstantInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+pushConstant : RegisterMachine.PushConstantInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 pushConstant { constant } machineState =
     advance (machineState |> push (ConstantValue constant))
 
 
-pushInstructionPointer : RegisterMachine.PushInstructionPointerInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+pushInstructionPointer : RegisterMachine.PushInstructionPointerInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 pushInstructionPointer { instructionPointer } machineState =
     advance (machineState |> push (InstructionPointer instructionPointer))
 
 
-pop : RegisterMachine.PopInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+pop : RegisterMachine.PopInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 pop { targetRegister } machineState =
     Stack.pop machineState.stack
         |> Result.fromMaybe PoppingEmptyStack
@@ -976,7 +979,7 @@ pop { targetRegister } machineState =
 -- memory
 
 
-constructPair : RegisterMachine.ConstructPairInput -> MemoryType -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+constructPair : RegisterMachine.ConstructPairInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 constructPair { targetRegister, operationArgument0, operationArgument1 } memoryType machineState =
     Result.tuple2 (machineState |> getValueFromArgument operationArgument0) (machineState |> getValueFromArgument operationArgument1)
         |> fromResultAndThen
@@ -994,7 +997,7 @@ constructPair { targetRegister, operationArgument0, operationArgument1 } memoryT
             )
 
 
-accessPair : MemoryCellComponent -> MemoryType -> Register -> Register -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+accessPair : MemoryCellComponent -> MemoryType -> Register -> Register -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 accessPair memoryCellComponent memoryType target source machineState =
     machineState
         |> getMemoryPointerAtRegister source
@@ -1020,7 +1023,7 @@ accessPair memoryCellComponent memoryType target source machineState =
             )
 
 
-setPair : MemoryCellComponent -> MemoryType -> Register -> OperationArgument -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+setPair : MemoryCellComponent -> MemoryType -> Register -> OperationArgument -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 setPair memoryCellComponent memoryType register arg machineState =
     Result.tuple2 (machineState |> getValueFromArgument arg) (machineState |> getMemoryPointerAtRegister register)
         |> fromResultAndThen
@@ -1048,22 +1051,22 @@ setPair memoryCellComponent memoryType register arg machineState =
 -- memory
 
 
-first : RegisterMachine.FirstInput -> MemoryType -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+first : RegisterMachine.FirstInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 first { targetRegister, sourceRegister } memoryType machineState =
     machineState |> accessPair FirstComponent memoryType targetRegister sourceRegister
 
 
-second : RegisterMachine.SecondInput -> MemoryType -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+second : RegisterMachine.SecondInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 second { targetRegister, sourceRegister } memoryType machineState =
     machineState |> accessPair SecondComponent memoryType targetRegister sourceRegister
 
 
-setFirst : RegisterMachine.SetFirstInput -> MemoryType -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+setFirst : RegisterMachine.SetFirstInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 setFirst { targetRegister, operationArgument } memoryType machineState =
     machineState |> setPair FirstComponent memoryType targetRegister operationArgument
 
 
-setSecond : RegisterMachine.SetSecondInput -> MemoryType -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+setSecond : RegisterMachine.SetSecondInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 setSecond { targetRegister, operationArgument } memoryType machineState =
     machineState |> setPair SecondComponent memoryType targetRegister operationArgument
 
@@ -1072,7 +1075,7 @@ setSecond { targetRegister, operationArgument } memoryType machineState =
 -- garbage collection
 
 
-moveToDual : RegisterMachine.MoveToDualInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+moveToDual : RegisterMachine.MoveToDualInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 moveToDual { targetRegister, sourceRegister } machineState =
     machineState
         |> getMemoryPointerAtRegister sourceRegister
@@ -1100,7 +1103,7 @@ moveToDual { targetRegister, sourceRegister } machineState =
             )
 
 
-markAsMoved : RegisterMachine.MarkAsMovedInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+markAsMoved : RegisterMachine.MarkAsMovedInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 markAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } machineState =
     Result.tuple2 (machineState |> getMemoryPointerAtRegister toBeCollectedFromRegister) (machineState |> getMemoryPointerAtRegister referenceToDualMemoryRegister)
         |> fromResultAndThen
@@ -1116,7 +1119,7 @@ markAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } machine
             )
 
 
-swapMemory : RegisterMachine.SwapMemoryInput -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+swapMemory : RegisterMachine.SwapMemoryInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 swapMemory _ ({ memory } as machineState) =
     advance { machineState | memory = { memory | memoryInUse = twoFlip memory.memoryInUse } }
 
@@ -1125,7 +1128,7 @@ swapMemory _ ({ memory } as machineState) =
 -- ===END individual actions===
 
 
-instructionAction : MachineInstruction -> MachineState -> ComputationStep ( MachineState, ControllerChange )
+instructionAction : MachineInstruction -> MachineState -> ComputationStep MachineState ( MachineState, ControllerChange )
 instructionAction instruction machineState =
     case instruction of
         MAssignRegister input ->
@@ -1204,7 +1207,7 @@ instructionAction instruction machineState =
             swapMemory input machineState
 
 
-step : ControlledMachineState -> ComputationStep ControlledMachineState
+step : ControlledMachineState -> ComputationStep MachineState ControlledMachineState
 step ({ machineState, controllerState } as machine) =
     fetchInstruction controllerState
         |> andThen
@@ -1220,30 +1223,46 @@ step ({ machineState, controllerState } as machine) =
             )
 
 
-runOneStepNew : ControlledMachineState -> Result RuntimeError { isFinished : Bool, machine : ControlledMachineState }
-runOneStepNew machine =
-    case step machine of
-        RuntimeError e ->
-            Err e
+isJumpInstruction : MachineInstruction -> Bool
+isJumpInstruction instruction =
+    case instruction of
+        MJumpToInstructionPointer _ ->
+            True
 
-        Halted ->
-            Ok { isFinished = True, machine = machine }
+        MJumpToInstructionPointerAtRegister _ ->
+            True
 
-        Continue newMachine ->
-            Ok { isFinished = False, machine = newMachine }
+        MJumpToInstructionPointerIf _ ->
+            True
+
+        MJumpToInstructionPointerAtRegisterIf _ ->
+            True
+
+        _ ->
+            False
 
 
-runUntilHaltedNew : ControlledMachineState -> Result RuntimeError ControlledMachineState
-runUntilHaltedNew machine0 =
-    runOneStepNew machine0
-        |> Result.andThen
-            (\{ isFinished, machine } ->
-                if isFinished then
-                    Ok machine
+stepUntilNextJump : ControlledMachineState -> ComputationStep MachineState ControlledMachineState
+stepUntilNextJump machine0 =
+    step machine0
+        |> andThen
+            (\({ controllerState } as machine1) ->
+                fetchInstruction controllerState
+                    |> andThen
+                        (\instruction ->
+                            if isJumpInstruction instruction then
+                                Continue machine1
 
-                else
-                    runUntilHaltedNew machine
+                            else
+                                stepUntilNextJump machine1
+                        )
             )
+
+
+
+stepUntilHalted : ControlledMachineState -> ComputationStep MachineState ControlledMachineState
+stepUntilHalted machine0 =
+    step machine0 |> andThen (\machine1 -> stepUntilHalted machine1)
 
 
 runOneStep : MachineWithInstructions -> Result RuntimeError { isFinished : Bool, machine : MachineWithInstructions }
