@@ -3,7 +3,7 @@ module RegisterMachine.Machine exposing (..)
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Lib.Result as Result
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Instruction(..), InstructionPointer, Label, MemoryPointer, OperationApplication, OperationArgument(..), OperationName, Register, Value(..))
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Instruction(..), InstructionPointer, Label, MachineInstruction(..), MemoryPointer, OperationApplication, OperationArgument(..), OperationName, Register, Value(..))
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryError, MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import Set exposing (Set)
@@ -54,16 +54,16 @@ type alias RegisterEnvironment =
     Dict Register Value
 
 
+type alias LabelEnvironment =
+    Dict Label InstructionPointer
+
+
 type alias Operation =
     List Value -> Result RuntimeError Value
 
 
 type alias OperationEnvironment =
     Dict OperationName Operation
-
-
-type alias LabelEnvironment =
-    Dict Label InstructionPointer
 
 
 type Two
@@ -100,6 +100,7 @@ type MemoryType
 
 type TranslationError
     = LabelUsedMoreThanOnce Label
+    | LabelDoesNotExist Label
     | UnknownRegister Register
 
 
@@ -129,6 +130,139 @@ foldlMayFail update state actions0 =
         action :: actions1 ->
             update action state
                 |> Result.andThen (\newState -> foldlMayFail update newState actions1)
+
+
+translateLabelToInstructionPointer : LabelEnvironment -> Label -> Result TranslationError InstructionPointer
+translateLabelToInstructionPointer labelEnv label =
+    Dict.get label labelEnv
+        |> Result.fromMaybe (LabelDoesNotExist label)
+
+
+translateInstructionToMachineInstruction : LabelEnvironment -> Instruction -> Result TranslationError MachineInstruction
+translateInstructionToMachineInstruction labelEnv instruction =
+    case instruction of
+        AssignRegister input ->
+            Ok (MAssignRegister input)
+
+        AssignLabel { targetRegister, label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MAssignInstructionPointer { targetRegister = targetRegister, instructionPointer = instructionPointer })
+
+        AssignOperation input ->
+            Ok (MAssignOperation input)
+
+        AssignConstant input ->
+            Ok (MAssignConstant input)
+
+        JumpToLabel { label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MJumpToInstructionPointer { instructionPointer = instructionPointer })
+
+        JumpToInstructionPointerAtRegister input ->
+            Ok (MJumpToInstructionPointerAtRegister input)
+
+        JumpToLabelIf { testRegister, label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MJumpToInstructionPointerIf { testRegister = testRegister, instructionPointer = instructionPointer })
+
+        JumpToInstructionPointerAtRegisterIf input ->
+            Ok (MJumpToInstructionPointerAtRegisterIf input)
+
+        Halt input ->
+            Ok (MHalt input)
+
+        PushRegister input ->
+            Ok (MPushRegister input)
+
+        PushConstant input ->
+            Ok (MPushConstant input)
+
+        PushLabel { label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MPushInstructionPointer { instructionPointer = instructionPointer })
+
+        Pop input ->
+            Ok (MPop input)
+
+        AssignCallAtLabel { targetRegister, label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MAssignCallAtInstructionPointer { targetRegister = targetRegister, instructionPointer = instructionPointer })
+
+        AssignCallAtRegister input ->
+            Ok (MAssignCallAtRegister input)
+
+        ConstructPair input ->
+            Ok (MConstructPair input)
+
+        First input ->
+            Ok (MFirst input)
+
+        Second input ->
+            Ok (MSecond input)
+
+        SetFirst input ->
+            Ok (MSetFirst input)
+
+        SetSecond input ->
+            Ok (MSetSecond input)
+
+        DualFirst input ->
+            Ok (MDualFirst input)
+
+        DualSecond input ->
+            Ok (MDualSecond input)
+
+        DualSetFirst input ->
+            Ok (MDualSetFirst input)
+
+        DualSetSecond input ->
+            Ok (MDualSetSecond input)
+
+        MoveToDual input ->
+            Ok (MMoveToDual input)
+
+        MarkAsMoved input ->
+            Ok (MMarkAsMoved input)
+
+        SwapMemory input ->
+            Ok (MSwapMemory input)
+
+
+translateInstructionsToMachineInstructions : InstructionBlock -> Result TranslationError ( LabelEnvironment, List MachineInstruction )
+translateInstructionsToMachineInstructions instructionBlock =
+    let
+        -- Note that the list of instructiosn returned is in a reversed order
+        constructLabelEnvironmentAndFilterOutLabels : InstructionPointer -> InstructionBlock -> LabelEnvironment -> List Instruction -> Result TranslationError ( LabelEnvironment, List Instruction )
+        constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock0 labelEnv filteredInstructionsReversed =
+            case instructionBlock0 of
+                [] ->
+                    Ok ( labelEnv, filteredInstructionsReversed )
+
+                labelOrInstruction :: instructionBlock1 ->
+                    case labelOrInstruction of
+                        Perform instruction ->
+                            constructLabelEnvironmentAndFilterOutLabels (nextInstructionPointer + 1) instructionBlock1 labelEnv (instruction :: filteredInstructionsReversed)
+
+                        Label label ->
+                            constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock1 (labelEnv |> Dict.insert label nextInstructionPointer) filteredInstructionsReversed
+
+        -- Note that this assumes the instructions reversed as input
+        translate : LabelEnvironment -> List Instruction -> Result TranslationError (List MachineInstruction)
+        translate labelEnv instructionsReversed =
+            foldlMayFail
+                (\instruction machineInstructions ->
+                    translateInstructionToMachineInstruction labelEnv instruction
+                        |> Result.map (\machineInstruction -> machineInstruction :: machineInstructions)
+                )
+                []
+                instructionsReversed
+    in
+    constructLabelEnvironmentAndFilterOutLabels 0 instructionBlock Dict.empty []
+        |> Result.andThen
+            (\( labelEnv, reversedInstructions ) ->
+                translate labelEnv reversedInstructions
+                    |> Result.map (\machineInstructions -> ( labelEnv, machineInstructions ))
+            )
 
 
 checkRegisters : List Register -> List OperationArgument -> Controller -> Result TranslationError ()
