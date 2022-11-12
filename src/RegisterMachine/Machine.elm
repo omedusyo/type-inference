@@ -16,6 +16,13 @@ type alias ControllerExample =
     }
 
 
+type alias ControllerExampleNew =
+    { name : String
+    , initialRegisters : List ( String, Value )
+    , instructionBlock : InstructionBlock
+    }
+
+
 
 -- ===START NEW STUFF===
 
@@ -58,7 +65,7 @@ fetchInstruction { instructions, currentInstructionPointer } =
 
 
 type alias MachineState =
-    { env : RegisterEnvironment
+    { registerEnv : RegisterEnvironment
     , stack : Stack
     , memory : MachineMemory
     , operationEnv : OperationEnvironment
@@ -148,7 +155,7 @@ type MemoryType
     | Dual
 
 
-type TranslationError
+type CompilationError
     = LabelUsedMoreThanOnce Label
     | LabelDoesNotExist Label
     | UnknownRegister Register
@@ -161,7 +168,7 @@ type TranslationError
 
 type alias Controller =
     -- TODO: Should we have typed registers? Int/Bool? This will complicate the operations though...
-    { registers : Set Register
+    { registers : List Register
     , instructions : InstructionBlock
     }
 
@@ -186,13 +193,13 @@ foldlMayFail update state actions0 =
 -- =Translation=
 
 
-translateLabelToInstructionPointer : LabelEnvironment -> Label -> Result TranslationError InstructionPointer
+translateLabelToInstructionPointer : LabelEnvironment -> Label -> Result CompilationError InstructionPointer
 translateLabelToInstructionPointer labelEnv label =
     Dict.get label labelEnv
         |> Result.fromMaybe (LabelDoesNotExist label)
 
 
-translateInstructionToMachineInstruction : LabelEnvironment -> Instruction -> Result TranslationError MachineInstruction
+translateInstructionToMachineInstruction : LabelEnvironment -> Instruction -> Result CompilationError MachineInstruction
 translateInstructionToMachineInstruction labelEnv instruction =
     case instruction of
         AssignRegister input ->
@@ -275,11 +282,11 @@ translateInstructionToMachineInstruction labelEnv instruction =
             Ok (MSwapMemory input)
 
 
-translateInstructionsToMachineInstructions : InstructionBlock -> Result TranslationError ( LabelEnvironment, Array MachineInstruction )
+translateInstructionsToMachineInstructions : InstructionBlock -> Result CompilationError ( LabelEnvironment, Array MachineInstruction )
 translateInstructionsToMachineInstructions instructionBlock =
     let
         -- Note that the list of instructiosn returned is in a reversed order
-        constructLabelEnvironmentAndFilterOutLabels : InstructionPointer -> InstructionBlock -> LabelEnvironment -> List Instruction -> Result TranslationError ( LabelEnvironment, List Instruction )
+        constructLabelEnvironmentAndFilterOutLabels : InstructionPointer -> InstructionBlock -> LabelEnvironment -> List Instruction -> Result CompilationError ( LabelEnvironment, List Instruction )
         constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock0 labelEnv filteredInstructionsReversed =
             case instructionBlock0 of
                 [] ->
@@ -294,7 +301,7 @@ translateInstructionsToMachineInstructions instructionBlock =
                             constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock1 (labelEnv |> Dict.insert label nextInstructionPointer) filteredInstructionsReversed
 
         -- Note that this assumes the instructions reversed as input
-        translate : LabelEnvironment -> List Instruction -> Result TranslationError (List MachineInstruction)
+        translate : LabelEnvironment -> List Instruction -> Result CompilationError (List MachineInstruction)
         translate labelEnv instructionsReversed =
             foldlMayFail
                 (\instruction machineInstructions ->
@@ -316,18 +323,22 @@ translateInstructionsToMachineInstructions instructionBlock =
 -- =Validation & Parsing=
 
 
-checkRegisters : List Register -> List OperationArgument -> Controller -> Result TranslationError ()
+checkRegisters : List Register -> List OperationArgument -> Controller -> Result CompilationError ()
 checkRegisters registers arguments controller =
     let
-        checkRegister : Register -> Result TranslationError ()
+        controllerRegisterSet : Set Register
+        controllerRegisterSet =
+            Set.fromList controller.registers
+
+        checkRegister : Register -> Result CompilationError ()
         checkRegister register =
-            if Set.member register controller.registers then
+            if Set.member register controllerRegisterSet then
                 Ok ()
 
             else
                 Err (UnknownRegister register)
 
-        checkArg : OperationArgument -> Result TranslationError ()
+        checkArg : OperationArgument -> Result CompilationError ()
         checkArg arg =
             case arg of
                 Register register ->
@@ -342,87 +353,40 @@ checkRegisters registers arguments controller =
         |> Result.ignore
 
 
-parse : Controller -> Result TranslationError MachineInstructions
+compileMachine : InstructionBlock -> List ( Register, Value ) -> OperationEnvironment -> Result CompilationError ( LabelEnvironment, ControlledMachineState )
+compileMachine instructionBlock initialRegisterEnv operationEnv =
+    translateInstructionsToMachineInstructions instructionBlock
+        |> Result.andThen
+            (\( labelEnv, machineInstructions ) ->
+                -- TODO: Here you should check that the machineInstructions use the registers in the initial register environment
+                --       Do that after you replace Register Names with a special RegisterPointers
+                Ok
+                    ( labelEnv
+                    , { machineState =
+                            { registerEnv = Dict.fromList initialRegisterEnv
+                            , operationEnv = operationEnv
+                            , memory =
+                                -- TODO
+                                { memoryState0 = MemoryState.empty 4096
+
+                                -- MemoryState.example0
+                                , memoryState1 = MemoryState.empty 4096
+                                , memoryInUse = Zero
+                                }
+                            , stack = Stack.empty
+                            }
+                      , controllerState =
+                            { instructions = machineInstructions
+                            , currentInstructionPointer = 0
+                            }
+                      }
+                    )
+            )
+
+
+parse : Controller -> Result CompilationError MachineInstructions
 parse controller =
     let
-        checkRegisterUse : Instruction -> Result TranslationError ()
-        checkRegisterUse instruction =
-            case instruction of
-                AssignRegister { targetRegister, sourceRegister } ->
-                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
-
-                AssignLabel { targetRegister } ->
-                    controller |> checkRegisters [ targetRegister ] []
-
-                AssignOperation { targetRegister, operationApplication } ->
-                    controller |> checkRegisters [] operationApplication.arguments
-
-                AssignConstant { targetRegister } ->
-                    controller |> checkRegisters [ targetRegister ] []
-
-                JumpToLabel { label } ->
-                    Ok ()
-
-                JumpToInstructionPointerAtRegister { instructionPointerRegister } ->
-                    controller |> checkRegisters [ instructionPointerRegister ] []
-
-                JumpToLabelIf { testRegister } ->
-                    controller |> checkRegisters [ testRegister ] []
-
-                JumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } ->
-                    controller |> checkRegisters [ testRegister, instructionPointerRegister ] []
-
-                Halt _ ->
-                    Ok ()
-
-                PushRegister { sourceRegister } ->
-                    controller |> checkRegisters [ sourceRegister ] []
-
-                PushConstant _ ->
-                    Ok ()
-
-                PushLabel { label } ->
-                    Ok ()
-
-                Pop { targetRegister } ->
-                    controller |> checkRegisters [ targetRegister ] []
-
-                ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
-                    controller |> checkRegisters [ targetRegister ] [ operationArgument0, operationArgument1 ]
-
-                First { targetRegister, sourceRegister } ->
-                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
-
-                Second { targetRegister, sourceRegister } ->
-                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
-
-                SetFirst { targetRegister, operationArgument } ->
-                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
-
-                SetSecond { targetRegister, operationArgument } ->
-                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
-
-                DualFirst { targetRegister, sourceRegister } ->
-                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
-
-                DualSecond { targetRegister, sourceRegister } ->
-                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
-
-                DualSetFirst { targetRegister, operationArgument } ->
-                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
-
-                DualSetSecond { targetRegister, operationArgument } ->
-                    controller |> checkRegisters [ targetRegister ] [ operationArgument ]
-
-                MoveToDual { targetRegister, sourceRegister } ->
-                    controller |> checkRegisters [ targetRegister, sourceRegister ] []
-
-                MarkAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } ->
-                    controller |> checkRegisters [ toBeCollectedFromRegister, referenceToDualMemoryRegister ] []
-
-                SwapMemory _ ->
-                    Ok ()
-
         initMachineInstructions : ( InstructionPointer, MachineInstructions )
         initMachineInstructions =
             ( 0
@@ -432,7 +396,7 @@ parse controller =
               }
             )
 
-        update : LabelOrInstruction -> ( InstructionPointer, MachineInstructions ) -> Result TranslationError ( InstructionPointer, MachineInstructions )
+        update : LabelOrInstruction -> ( InstructionPointer, MachineInstructions ) -> Result CompilationError ( InstructionPointer, MachineInstructions )
         update labelOrInstruction ( pointer, machineInstructions ) =
             case labelOrInstruction of
                 Label label ->
@@ -462,13 +426,13 @@ parse controller =
         |> Result.map Tuple.second
 
 
-makeMachine : Controller -> RegisterEnvironment -> OperationEnvironment -> Result TranslationError MachineWithInstructions
+makeMachine : Controller -> RegisterEnvironment -> OperationEnvironment -> Result CompilationError MachineWithInstructions
 makeMachine controller env operationsEnv =
     parse controller
         |> Result.map
             (\instructions ->
                 { machineState =
-                    { env = env
+                    { registerEnv = env
                     , operationEnv = operationsEnv
                     , memory =
                         -- TODO
@@ -595,7 +559,7 @@ pointerJump pointer instructionsState =
 
 getRegister : Register -> MachineState -> Result RuntimeError Value
 getRegister register machine =
-    case Dict.get register machine.env of
+    case Dict.get register machine.registerEnv of
         Just val ->
             Ok val
 
@@ -646,7 +610,7 @@ getMemoryPointerAtRegister register machine =
 updateRegister : Register -> Value -> MachineState -> MachineState
 updateRegister register val machine =
     { machine
-        | env = Dict.insert register val machine.env
+        | registerEnv = Dict.insert register val machine.registerEnv
     }
 
 
@@ -1259,10 +1223,13 @@ stepUntilNextJump machine0 =
             )
 
 
-
 stepUntilHalted : ControlledMachineState -> ComputationStep MachineState ControlledMachineState
 stepUntilHalted machine0 =
     step machine0 |> andThen (\machine1 -> stepUntilHalted machine1)
+
+
+
+-- BEGIN OLD STUFF
 
 
 runOneStep : MachineWithInstructions -> Result RuntimeError { isFinished : Bool, machine : MachineWithInstructions }

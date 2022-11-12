@@ -14,7 +14,7 @@ import Element.Region as Region
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, MemoryPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
-import RegisterMachine.Machine as RegisterMachine exposing (Controller, ControllerExample, MachineWithInstructions, RegisterEnvironment, RuntimeError(..), TranslationError)
+import RegisterMachine.Machine as RegisterMachine exposing (CompilationError, Controller, ControllerExample, MachineWithInstructions, RegisterEnvironment, RuntimeError(..))
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import RegisterMachine.Ui.Editor as Editor
@@ -131,7 +131,7 @@ init =
         defaultSelectedController =
             Controllers.controller7_fibonacci_recursive
 
-        parsedMachine : Result TranslationError MachineWithInstructions
+        parsedMachine : Result CompilationError MachineWithInstructions
         parsedMachine =
             RegisterMachine.makeMachine defaultSelectedController.controller defaultSelectedController.initialRegisterEnvironment operationEnv
     in
@@ -381,7 +381,7 @@ view config model =
                             [ E.column [ E.spacing 20, E.alignTop ]
                                 [ E.column []
                                     [ heading "Registers"
-                                    , viewRegisters (machineState.env |> Dict.toList) model
+                                    , viewRegisters (machineState.registerEnv |> Dict.toList) model
                                     ]
                                 , E.column []
                                     [ heading "Memory"

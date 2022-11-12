@@ -18,7 +18,7 @@ init : String -> List Register -> InstructionBlock -> ControllerExample
 init name registers instructions =
     { name = name
     , controller =
-        { registers = Set.fromList registers
+        { registers = registers
         , instructions = instructions
         }
     , initialRegisterEnvironment = Dict.fromList (List.map (\register -> ( register, Uninitialized )) registers)
