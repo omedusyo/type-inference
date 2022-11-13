@@ -1,29 +1,29 @@
 module Ui.Control.InitContext exposing
     ( InitContext
+    , map2
     , mapCmd
     , ooo
     , setModelTo
     , setModelToWithAppShell
     )
 
-import Task
-import Ui.Control.Context as Context exposing (Config, Context, State)
+import Ui.Control.Base as Base exposing (Config)
 
 
 type alias InitContext msg model =
-    Config -> ( State model, Cmd msg )
+    Base.InitContext msg model
 
 
 setModelTo : model -> InitContext msg model
 setModelTo model =
     \_ ->
-        ( Context.embedModelIntoState model, Cmd.none )
+        ( Base.embedModelIntoState model, Cmd.none )
 
 
 setModelToWithAppShell : (Config -> model) -> InitContext msg model
 setModelToWithAppShell f =
     \config ->
-        ( Context.embedModelIntoState (f config), Cmd.none )
+        ( Base.embedModelIntoState (f config), Cmd.none )
 
 
 mapCmd : (msg0 -> msg1) -> InitContext msg0 model -> InitContext msg1 model
@@ -46,10 +46,6 @@ mapModel f initContext0 =
         ( { model = f initState.model, notifications = initState.notifications }, initCmd )
 
 
-
--- TODO: CHECK THE FUNCTIONS BELOW
-
-
 tuple2 : InitContext msg model0 -> InitContext msg model1 -> InitContext msg ( model0, model1 )
 tuple2 initContext0 initContext1 =
     \config ->
@@ -60,9 +56,7 @@ tuple2 initContext0 initContext1 =
             ( initState1, initCmd1 ) =
                 initContext1 config
         in
-        ( { notifications = {} -- TODO
-          , model = ( initState0.model, initState1.model )
-          }
+        ( Base.pairState2 initState0 initState1
         , Cmd.batch [ initCmd0, initCmd1 ]
         )
 

@@ -1,33 +1,26 @@
 module Ui.Tab.RegisterMachine exposing (Model, Msg, init, subscriptions, update, view)
 
-import Array
-import Array.Extra as Array
-import Dict
 import Dropdown
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
-import Element.Events as Events
 import Element.Font as Font
-import Element.Input as Input
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, MemoryPointer, Value(..))
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
-import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, ControllerExample, LabelEnvironment, MachineState, RuntimeError(..))
-import RegisterMachine.MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
-import RegisterMachine.Stack as Stack exposing (Stack)
+import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControllerExample, RuntimeError(..))
+import RegisterMachine.MemoryState exposing (MemoryError(..))
 import RegisterMachine.Ui.Editor as Editor
 import RegisterMachine.Ui.Runtime as Runtime
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
 import Ui.Element as E
-import Ui.Style.Button as Button
 
 
 type alias Model =
     { controllers : List ControllerExample
     , controllerDropdownModel : Dropdown.State ControllerExample
-    , selectedController : Maybe ControllerExample
+    , selectedController : ControllerExample
 
     -- runtime
     , runtimeModel : Runtime.Model
@@ -69,7 +62,7 @@ init =
         (\editorModel runtimeModel ->
             { controllers = controllers
             , controllerDropdownModel = Dropdown.init "controllers"
-            , selectedController = Just defaultSelectedController
+            , selectedController = defaultSelectedController
             , runtimeModel = runtimeModel
             , -- TODO: Is 0 as the default instruction pointer reasonable?
               currentInstructionPointerResult = Just 0
@@ -111,8 +104,14 @@ update msg =
             Context.update (\model -> { model | currentInstructionPointerResult = Just instructionPointer })
 
         ControllerPicked maybeControllerExample ->
-            -- TODO: What about reset???
-            Context.update (\model -> { model | selectedController = maybeControllerExample })
+            case maybeControllerExample of
+                Just controllerExample ->
+                    Context.update (\model -> { model | selectedController = controllerExample })
+                        |> Context.updateFromInitContext (\model -> Runtime.init model.selectedController |> InitContext.mapCmd RuntimeMsg)
+                            (\model runtimeModel -> { model | runtimeModel = runtimeModel })
+
+                Nothing ->
+                    Context.none
 
         ControllersDropdownMsg dropdownMsg ->
             Context.updateWithCommand
@@ -146,25 +145,20 @@ view config model =
         , E.row [ E.width E.fill, E.spacing 30 ]
             [ -- ===Instructions===
               E.column [ E.width E.fill, E.alignTop, E.alignLeft ]
-                [ case model.selectedController of
-                    Nothing ->
-                        E.text ""
+                [ E.column []
+                    [ E.heading "Controller"
+                    , case model.currentInstructionPointerResult of
+                        Nothing ->
+                            -- TODO: Note that here we loose compilation error information
+                            --       We need to somehow also isolate the compilation from runtime
+                            --       Compilation is the responsibility of the editor and not the simulator?
+                            -- Err compilationError ->
+                            --     E.text (compilationErrorToString compilationError)
+                            E.text "error?"
 
-                    Just controllerExample ->
-                        E.column []
-                            [ E.heading "Controller"
-                            , case model.currentInstructionPointerResult of
-                                Nothing ->
-                                    -- TODO: Note that here we loose compilation error information
-                                    --       We need to somehow also isolate the compilation from runtime
-                                    --       Compilation is the responsibility of the editor and not the simulator?
-                                    -- Err compilationError ->
-                                    --     E.text (compilationErrorToString compilationError)
-                                    E.text "error?"
-
-                                Just currentInstructionPointer ->
-                                    viewInstructions currentInstructionPointer controllerExample.instructionBlock
-                            ]
+                        Just currentInstructionPointer ->
+                            viewInstructions currentInstructionPointer model.selectedController.instructionBlock
+                    ]
                 ]
             , -- ===Runtime State===
               Runtime.view config model.runtimeModel |> E.map RuntimeMsg
@@ -180,7 +174,7 @@ dropdownConfig : Dropdown.Config ControllerExample Msg Model
 dropdownConfig =
     Dropdown.basic
         { itemsFromModel = \model -> model.controllers
-        , selectionFromModel = \model -> model.selectedController
+        , selectionFromModel = \model -> Just model.selectedController
         , dropdownMsg = ControllersDropdownMsg
         , onSelectMsg = ControllerPicked
         , itemToPrompt =
