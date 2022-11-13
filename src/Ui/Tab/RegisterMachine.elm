@@ -466,9 +466,6 @@ runTimeErrorToString err =
         WrongNumberOfArgumentsGivenToOperationExpected int ->
             String.concat [ "Wrong number of arguments given to the operation. Expected ", String.fromInt int ]
 
-        LabelPointsToNothing label ->
-            String.concat [ "The label :", label, " points to nothing" ]
-
         PoppingEmptyStack ->
             "Popping empty stack"
 

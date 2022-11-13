@@ -496,7 +496,6 @@ type RuntimeError
     | UndefinedOperation OperationName
     | WrongNumberOfArgumentsGivenToOperationExpected Int
     | TheOperationExpectsIntegerArguments
-    | LabelPointsToNothing Label
     | PoppingEmptyStack
     | ExpectedInstructionPointerInRegister
     | ExpectedPairInRegister
