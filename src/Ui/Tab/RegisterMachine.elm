@@ -1,8 +1,8 @@
 module Ui.Tab.RegisterMachine exposing (Model, Msg, init, subscriptions, update, view)
 
-import Array exposing (Array)
+import Array
 import Array.Extra as Array
-import Dict exposing (Dict)
+import Dict
 import Dropdown
 import Element as E exposing (Element)
 import Element.Background as Background
@@ -10,12 +10,11 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import Element.Region as Region
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, MemoryPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
-import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, Controller, ControllerExampleNew, LabelEnvironment, MachineState, MachineWithInstructions, RegisterEnvironment, RuntimeError(..))
-import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
+import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, ControllerExample, LabelEnvironment, MachineState, RuntimeError(..))
+import RegisterMachine.MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import RegisterMachine.Ui.Editor as Editor
 import Ui.Control.Context as Context exposing (Config, Context)
@@ -24,9 +23,9 @@ import Ui.Style.Button as Button
 
 
 type alias Model =
-    { controllers : List ControllerExampleNew
-    , controllerDropdownModel : Dropdown.State ControllerExampleNew
-    , selectedController : Maybe ControllerExampleNew
+    { controllers : List ControllerExample
+    , controllerDropdownModel : Dropdown.State ControllerExample
+    , selectedController : Maybe ControllerExample
     , runtime : Result CompilationError ( LabelEnvironment, ComputationStep ControlledMachineState ControlledMachineState )
     , memoryView : MemoryView
     , currentlyHighlightedCell : MemoryPointer
@@ -113,7 +112,7 @@ operationEnv =
 init : InitContext Msg Model
 init =
     let
-        controllers : List ControllerExampleNew
+        controllers : List ControllerExample
         controllers =
             [ Controllers.controller0_gcd
             , Controllers.controller1_remainder
@@ -128,7 +127,7 @@ init =
             , GarbageCollector.controller
             ]
 
-        defaultSelectedController : ControllerExampleNew
+        defaultSelectedController : ControllerExample
         defaultSelectedController =
             Controllers.controller7_fibonacci_recursive
 
@@ -213,8 +212,8 @@ type Msg
     | MemoryPointerClicked MemoryPointer
     | ShiftMemoryViewBy Int
       -- ===Controllers Dropdown===
-    | ControllerPicked (Maybe ControllerExampleNew)
-    | ControllersDropdownMsg (Dropdown.Msg ControllerExampleNew)
+    | ControllerPicked (Maybe ControllerExample)
+    | ControllersDropdownMsg (Dropdown.Msg ControllerExample)
       -- editor
     | EditorMsg Editor.Msg
 
@@ -402,7 +401,7 @@ viewMachineState model machineState =
 -- ===Controller Dropdown===
 
 
-dropdownConfig : Dropdown.Config ControllerExampleNew Msg Model
+dropdownConfig : Dropdown.Config ControllerExample Msg Model
 dropdownConfig =
     Dropdown.basic
         { itemsFromModel = \model -> model.controllers

@@ -9,7 +9,7 @@ import RegisterMachine.Base as RegisterMachine
         , Register
         , Value(..)
         )
-import RegisterMachine.Machine as RegisterMachine exposing (ControllerExampleNew, LabelOrInstruction(..))
+import RegisterMachine.Machine as RegisterMachine exposing (ControllerExample, LabelOrInstruction(..))
 
 
 num : Int -> Value
@@ -22,7 +22,7 @@ nil =
     ConstantValue Nil
 
 
-controller0_gcd : ControllerExampleNew
+controller0_gcd : ControllerExample
 controller0_gcd =
     let
         a =
@@ -31,7 +31,7 @@ controller0_gcd =
         b =
             [ 3, 5, 11 ]
     in
-    ControllerExampleNew
+    ControllerExample
         (String.concat
             [ "gcd("
             , a |> List.map String.fromInt |> String.join "*"
@@ -53,11 +53,11 @@ controller0_gcd =
         ]
 
 
-controller1_remainder : ControllerExampleNew
+controller1_remainder : ControllerExample
 controller1_remainder =
     -- What's the algorithm?
     -- subtract $b from $a and assign it into $a, until $a <- $b is true. Then halt. The result is in the register $a.
-    ControllerExampleNew
+    ControllerExample
         "remainder"
         [ ( "a", num 0 ), ( "b", num 15 ), ( "done?", num 0 ) ]
         [ Perform (AssignConstant { targetRegister = "a", constant = Num 16 })
@@ -72,9 +72,9 @@ controller1_remainder =
         ]
 
 
-controller2_fct_iterative : ControllerExampleNew
+controller2_fct_iterative : ControllerExample
 controller2_fct_iterative =
-    ControllerExampleNew
+    ControllerExample
         "fct-iterative"
         [ ( "counter", num 0 ), ( "state", num 0 ), ( "done?", num 0 ) ]
         [ Perform (AssignConstant { targetRegister = "counter", constant = Num 5 })
@@ -90,7 +90,7 @@ controller2_fct_iterative =
         ]
 
 
-controller3_gcd_with_inlined_remainder : ControllerExampleNew
+controller3_gcd_with_inlined_remainder : ControllerExample
 controller3_gcd_with_inlined_remainder =
     -- gcd: a, b, remainder-result, done?, remainder-done?
     --   // I don't really need the `remainder-done?` register, I could reuse `done?`
@@ -113,7 +113,7 @@ controller3_gcd_with_inlined_remainder =
     --   jump :remainder
     -- done:
     --   halt
-    ControllerExampleNew
+    ControllerExample
         "gcd-with-inlined-remainder"
         [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ) ]
         [ Perform (AssignConstant { targetRegister = "a", constant = Num (3 * 5 * 7) })
@@ -143,7 +143,7 @@ controller3_gcd_with_inlined_remainder =
         ]
 
 
-controller4_gcd_with_inlined_remainder_using_jump : ControllerExampleNew
+controller4_gcd_with_inlined_remainder_using_jump : ControllerExample
 controller4_gcd_with_inlined_remainder_using_jump =
     -- gcd registers: a, b, remainder-result, done?, remainder-done?, continue
     --   a <- 15
@@ -164,7 +164,7 @@ controller4_gcd_with_inlined_remainder_using_jump =
     --   jump :remainder
     -- done:
     --   halt
-    ControllerExampleNew
+    ControllerExample
         "gcd-with-inlined-remainder-using-jump"
         [ ( "a", num 0 ), ( "b", num 0 ), ( "remainder-result", num 0 ), ( "done?", num 0 ), ( "remainder-done?", num 0 ), ( "continue", num 0 ) ]
         [ Perform (AssignConstant { targetRegister = "a", constant = Num (3 * 5 * 7) })
@@ -194,7 +194,7 @@ controller4_gcd_with_inlined_remainder_using_jump =
         ]
 
 
-controller5_sqrt : ControllerExampleNew
+controller5_sqrt : ControllerExample
 controller5_sqrt =
     -- TODO: you'd need Float values for this
     -- sqrt x =
@@ -224,13 +224,13 @@ controller5_sqrt =
     --     jump :sqrt-iter
     --   done:
     --     halt
-    ControllerExampleNew
+    ControllerExample
         "sqrt"
         []
         []
 
 
-controller6_fct_recursive : ControllerExampleNew
+controller6_fct_recursive : ControllerExample
 controller6_fct_recursive =
     -- fct:
     --   done? <- $n == 0
@@ -246,7 +246,7 @@ controller6_fct_recursive =
     -- done:
     --   result <- 1
     --   jump $continue
-    ControllerExampleNew
+    ControllerExample
         "fct-recursive"
         [ ( "n", num 0 ), ( "result", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
         [ Perform (AssignConstant { targetRegister = "n", constant = Num 5 })
@@ -273,7 +273,7 @@ controller6_fct_recursive =
         ]
 
 
-controller7_fibonacci_recursive : ControllerExampleNew
+controller7_fibonacci_recursive : ControllerExample
 controller7_fibonacci_recursive =
     -- registers: n, result, tmp, done?, continue
     --
@@ -297,7 +297,7 @@ controller7_fibonacci_recursive =
     -- done:
     --   result <- $n
     --   jump $continue
-    ControllerExampleNew
+    ControllerExample
         "fibonacci-recursive"
         [ ( "n", num 0 ), ( "result", num 0 ), ( "tmp", num 0 ), ( "done?", num 0 ), ( "continue", num 0 ) ]
         [ Perform (AssignConstant { targetRegister = "n", constant = Num 8 })
@@ -340,9 +340,9 @@ controller7_fibonacci_recursive =
         ]
 
 
-controller8_memory_test : ControllerExampleNew
+controller8_memory_test : ControllerExample
 controller8_memory_test =
-    ControllerExampleNew
+    ControllerExample
         "memory-test"
         [ ( "p", nil ), ( "a", num 0 ), ( "b", num 0 ), ( "test", num 0 ) ]
         [ Label "memory_test"
@@ -356,9 +356,9 @@ controller8_memory_test =
         ]
 
 
-controller9_range : ControllerExampleNew
+controller9_range : ControllerExample
 controller9_range =
-    ControllerExampleNew
+    ControllerExample
         "range"
         [ ( "xs", nil ), ( "n", num 5 ), ( "done?", num 0 ) ]
         [ Label "start"
@@ -372,7 +372,7 @@ controller9_range =
         ]
 
 
-controller10_append : ControllerExampleNew
+controller10_append : ControllerExample
 controller10_append =
     -- xs <- pair 40 nil
     -- xs <- pair 30 xs
@@ -398,7 +398,7 @@ controller10_append =
     --   jump $continue
     -- :done
     --   halt
-    ControllerExampleNew
+    ControllerExample
         "append"
         [ ( "continue", Uninitialized ), ( "xs", Uninitialized ), ( "ys", Uninitialized ), ( "x", Uninitialized ), ( "done?", Uninitialized ) ]
         [ -- xs <- list(10, 20, 30, 40)

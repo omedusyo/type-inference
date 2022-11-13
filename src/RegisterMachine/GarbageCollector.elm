@@ -9,12 +9,12 @@ import RegisterMachine.Base as RegisterMachine
         , Register
         , Value(..)
         )
-import RegisterMachine.Machine as RegisterMachine exposing (ControllerExampleNew, LabelOrInstruction(..))
+import RegisterMachine.Machine as RegisterMachine exposing (ControllerExample, LabelOrInstruction(..))
 
 
-controller : ControllerExampleNew
+controller : ControllerExample
 controller =
-    ControllerExampleNew
+    ControllerExample
         "garbage-collector"
         [ ( "xs", Uninitialized ), ( "ys", Uninitialized ), ( "main-pair", Uninitialized ), ( "dual-pair", Uninitialized ), ( "tmp", Uninitialized ), ( "root", Uninitialized ), ( "test", Uninitialized ), ( "continue", Uninitialized ) ]
         [ Label "initialization"
