@@ -322,13 +322,13 @@ view config model =
                                 Err compilationError ->
                                     E.text (compilationErrorToString compilationError)
 
-                                Ok ( labelEnv, RuntimeError runtimeError ) ->
+                                Ok ( _, RuntimeError runtimeError ) ->
                                     E.text (runTimeErrorToString runtimeError)
 
-                                Ok ( labelEnv, Halted { controllerState } ) ->
+                                Ok ( _, Halted { controllerState } ) ->
                                     viewInstructions controllerState.currentInstructionPointer controllerExample.instructionBlock
 
-                                Ok ( labelEnv, Continue { controllerState } ) ->
+                                Ok ( _, Continue { controllerState } ) ->
                                     viewInstructions controllerState.currentInstructionPointer controllerExample.instructionBlock
                             ]
                 ]
@@ -360,39 +360,39 @@ view config model =
                     Err compilationError ->
                         E.text (compilationErrorToString compilationError)
 
-                    Ok ( labelEnv, RuntimeError runtimeError ) ->
+                    Ok ( _, RuntimeError runtimeError ) ->
                         E.text (runTimeErrorToString runtimeError)
 
                     Ok ( labelEnv, Halted { machineState } ) ->
-                        viewMachineState model machineState
+                        viewMachineState model machineState labelEnv
 
                     Ok ( labelEnv, Continue { machineState } ) ->
-                        viewMachineState model machineState
+                        viewMachineState model machineState labelEnv
                 ]
             ]
         ]
 
 
-viewMachineState : Model -> MachineState -> Element Msg
-viewMachineState model machineState =
+viewMachineState : Model -> MachineState -> LabelEnvironment -> Element Msg
+viewMachineState model machineState labelEnv =
     E.row [ E.spacing 30 ]
         [ E.column [ E.spacing 20, E.alignTop ]
             [ E.column []
                 [ heading "Registers"
-                , viewRegisters (machineState.registerEnv |> Dict.toList) model
+                , viewRegisters (machineState.registerEnv |> Dict.toList) labelEnv model
                 ]
             , E.column []
                 [ heading "Memory"
-                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Main) labelEnv model
                 ]
             , E.column []
                 [ heading "Dual Memory"
-                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Dual) labelEnv model
                 ]
             ]
         , E.column [ E.alignTop, E.width (E.px 100) ]
             [ heading "Stack"
-            , viewStack machineState.stack model
+            , viewStack machineState.stack labelEnv model
             ]
         ]
 
@@ -666,20 +666,22 @@ viewInstructions instructionPointer instructionBlock =
         )
 
 
-viewRegisters : List ( RegisterMachine.Register, Value ) -> Model -> Element Msg
-viewRegisters registers model =
+viewRegisters : List ( RegisterMachine.Register, Value ) -> LabelEnvironment -> Model -> Element Msg
+viewRegisters registers labelEnv model =
     let
         registerStyle =
             [ Background.color (E.rgb255 240 0 245)
             , E.padding 20
             , E.width (E.px 60)
             , E.height (E.px 60)
+            , E.clip
+            , E.scrollbars
             ]
 
         viewRegister : RegisterMachine.Register -> Value -> Element Msg
         viewRegister name val =
             E.row [ E.spacing 10 ]
-                [ E.el [ E.width (E.px 230) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val model) ]
+                [ E.el [ E.width (E.px 230) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val labelEnv model) ]
     in
     -- registers
     E.column [ E.width E.fill, E.spacing 5 ]
@@ -688,23 +690,23 @@ viewRegisters registers model =
         )
 
 
-viewStack : Stack -> Model -> Element Msg
-viewStack stack model =
+viewStack : Stack -> LabelEnvironment -> Model -> Element Msg
+viewStack stack labelEnv model =
     E.column [ E.width E.fill ]
         (stack
             |> Stack.toList
             |> List.reverse
             |> List.map
                 (\val ->
-                    E.column [ Border.width 1, Border.solid, E.paddingXY 0 15, E.width (E.px 70) ]
-                        [ E.el [ E.centerX, E.width E.fill ] (viewValue val model)
+                    E.column [ Border.width 1, Border.solid, E.paddingXY 0 15, E.width (E.px 70), E.height (E.px 70), E.clip, E.scrollbars ]
+                        [ E.el [ E.centerX, E.width E.fill ] (viewValue val labelEnv model)
                         ]
                 )
         )
 
 
-viewMemoryState : MemoryState -> Model -> Element Msg
-viewMemoryState memoryState model =
+viewMemoryState : MemoryState -> LabelEnvironment -> Model -> Element Msg
+viewMemoryState memoryState labelEnv model =
     let
         viewMemorySegment a b =
             E.row [ E.width E.fill ]
@@ -713,7 +715,7 @@ viewMemoryState memoryState model =
                     |> Array.toIndexedList
                     |> List.map
                         (\( i, memoryCell ) ->
-                            viewMemoryCell (i + a) memoryCell model
+                            viewMemoryCell (i + a) memoryCell labelEnv model
                         )
                 )
     in
@@ -727,12 +729,12 @@ viewMemoryState memoryState model =
         ]
 
 
-viewMemoryCell : MemoryPointer -> MemoryCell -> Model -> Element Msg
-viewMemoryCell memoryPointer ( a, b ) model =
+viewMemoryCell : MemoryPointer -> MemoryCell -> LabelEnvironment -> Model -> Element Msg
+viewMemoryCell memoryPointer ( a, b ) labelEnv model =
     E.column [ Border.solid, Border.width 1, E.width (E.px 70) ]
         [ E.column [ E.centerX, E.paddingXY 0 15, E.height (E.px 50), E.width E.fill ]
-            [ viewValue a model
-            , viewValue b model
+            [ viewValue a labelEnv model
+            , viewValue b labelEnv model
             ]
         , E.el
             (List.concat
@@ -749,8 +751,8 @@ viewMemoryCell memoryPointer ( a, b ) model =
         ]
 
 
-viewValue : Value -> Model -> Element Msg
-viewValue value model =
+viewValue : Value -> LabelEnvironment -> Model -> Element Msg
+viewValue value labelEnv model =
     case value of
         ConstantValue constant ->
             viewConstant constant
@@ -759,7 +761,7 @@ viewValue value model =
             viewMemoryPointer memoryPointer
 
         InstructionPointer instructionPointer ->
-            viewInstructionPointer instructionPointer
+            viewInstructionPointer instructionPointer labelEnv
 
         Uninitialized ->
             E.text ""
@@ -786,9 +788,16 @@ viewMemoryPointer p =
         (E.text (String.concat [ "#", String.fromInt p ]))
 
 
-viewInstructionPointer : InstructionPointer -> Element Msg
-viewInstructionPointer pointer =
-    E.text (String.concat [ ":", String.fromInt pointer ])
+viewInstructionPointer : InstructionPointer -> LabelEnvironment -> Element Msg
+viewInstructionPointer pointer labelEnv =
+    -- TODO: Remvoe
+    -- E.text (String.concat [ ":", String.fromInt pointer ])
+    case RegisterMachine.labelFromInstructionPointer pointer labelEnv of
+        Just label ->
+            E.text (String.concat [ ":", label ])
+
+        Nothing ->
+            E.text ":::error:::"
 
 
 subscriptions : Model -> Sub Msg

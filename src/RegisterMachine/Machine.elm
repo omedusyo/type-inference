@@ -75,7 +75,8 @@ type alias RegisterEnvironment =
 
 
 type alias LabelEnvironment =
-    Dict Label InstructionPointer
+    -- Poor's man invertible dictionary
+    ( Dict Label InstructionPointer, Dict InstructionPointer Label )
 
 
 type alias Operation =
@@ -84,6 +85,28 @@ type alias Operation =
 
 type alias OperationEnvironment =
     Dict OperationName Operation
+
+
+emptyLabelEnv : LabelEnvironment
+emptyLabelEnv =
+    ( Dict.empty, Dict.empty )
+
+
+instructionPointerFromLabel : Label -> LabelEnvironment -> Maybe InstructionPointer
+instructionPointerFromLabel label ( labelToInstructionPointer, _ ) =
+    Dict.get label labelToInstructionPointer
+
+
+labelFromInstructionPointer : InstructionPointer -> LabelEnvironment -> Maybe Label
+labelFromInstructionPointer instructionPointer ( _, instructionPointerToLabel ) =
+    Dict.get instructionPointer instructionPointerToLabel
+
+
+bindLabel : Label -> InstructionPointer -> LabelEnvironment -> LabelEnvironment
+bindLabel label instructionPointer ( labelToInstructionPointer, instructionPointerToLabel ) =
+    ( Dict.insert label instructionPointer labelToInstructionPointer
+    , Dict.insert instructionPointer label instructionPointerToLabel
+    )
 
 
 type Two
@@ -148,7 +171,7 @@ foldlMayFail update state actions0 =
 
 translateLabelToInstructionPointer : LabelEnvironment -> Label -> Result CompilationError InstructionPointer
 translateLabelToInstructionPointer labelEnv label =
-    Dict.get label labelEnv
+    instructionPointerFromLabel label labelEnv
         |> Result.fromMaybe (LabelDoesNotExist label)
 
 
@@ -251,7 +274,7 @@ translateInstructionsToMachineInstructions instructionBlock =
                             constructLabelEnvironmentAndFilterOutLabels (nextInstructionPointer + 1) instructionBlock1 labelEnv (instruction :: filteredInstructionsReversed)
 
                         Label label ->
-                            constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock1 (labelEnv |> Dict.insert label nextInstructionPointer) filteredInstructionsReversed
+                            constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock1 (labelEnv |> bindLabel label nextInstructionPointer) filteredInstructionsReversed
 
         -- Note that this assumes the instructions reversed as input
         translate : LabelEnvironment -> List Instruction -> Result CompilationError (List MachineInstruction)
@@ -264,13 +287,12 @@ translateInstructionsToMachineInstructions instructionBlock =
                 []
                 instructionsReversed
     in
-    constructLabelEnvironmentAndFilterOutLabels 0 instructionBlock Dict.empty []
+    constructLabelEnvironmentAndFilterOutLabels 0 instructionBlock emptyLabelEnv []
         |> Result.andThen
             (\( labelEnv, reversedInstructions ) ->
                 translate labelEnv reversedInstructions
                     |> Result.map (\machineInstructions -> ( labelEnv, machineInstructions |> Array.fromList ))
             )
-
 
 
 compileMachine : InstructionBlock -> List ( Register, Value ) -> OperationEnvironment -> Result CompilationError ( LabelEnvironment, ControlledMachineState )
