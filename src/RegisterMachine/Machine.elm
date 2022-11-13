@@ -979,3 +979,16 @@ stepUntilNextJump machine0 =
 stepUntilHalted : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState
 stepUntilHalted machine0 =
     step machine0 |> andThen (\machine1 -> stepUntilHalted machine1)
+
+
+currentInstructionPointerFromComputationStep : ComputationStep ControlledMachineState ControlledMachineState -> Maybe InstructionPointer
+currentInstructionPointerFromComputationStep result =
+    case result of
+        Continue machine ->
+            Just machine.controllerState.currentInstructionPointer
+
+        Halted machine ->
+            Just machine.controllerState.currentInstructionPointer
+
+        _ ->
+            Nothing

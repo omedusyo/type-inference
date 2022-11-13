@@ -1,4 +1,4 @@
-module RegisterMachine.Ui.Color exposing (..)
+module RegisterMachine.Ui.Editor.Color exposing (..)
 
 import Element as E exposing (Element)
 

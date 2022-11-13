@@ -17,8 +17,10 @@ import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..)
 import RegisterMachine.MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import RegisterMachine.Ui.Editor as Editor
+import RegisterMachine.Ui.Runtime as Runtime
 import Ui.Control.Context as Context exposing (Config, Context)
 import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Element as E
 import Ui.Style.Button as Button
 
 
@@ -26,9 +28,10 @@ type alias Model =
     { controllers : List ControllerExample
     , controllerDropdownModel : Dropdown.State ControllerExample
     , selectedController : Maybe ControllerExample
-    , runtime : Result CompilationError ( LabelEnvironment, ComputationStep ControlledMachineState ControlledMachineState )
-    , memoryView : MemoryView
-    , currentlyHighlightedCell : MemoryPointer
+
+    -- runtime
+    , runtimeModel : Runtime.Model
+    , currentInstructionPointerResult : Maybe InstructionPointer
 
     -- editor
     , editorModel : Editor.Model
@@ -38,75 +41,6 @@ type alias Model =
 shouldDisplayEditor : Bool
 shouldDisplayEditor =
     True
-
-
-operationEnv : RegisterMachine.OperationEnvironment
-operationEnv =
-    let
-        boolToInt : Bool -> Int
-        boolToInt b =
-            if b then
-                1
-
-            else
-                0
-    in
-    Dict.fromList
-        [ ( "sub", RegisterMachine.makeNumOperation2 (\x y -> x - y) )
-        , ( "less-than?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x < y)) )
-        , ( "add", RegisterMachine.makeNumOperation2 (\x y -> x + y) )
-        , ( "mul", RegisterMachine.makeNumOperation2 (\x y -> x * y) )
-        , ( "zero?", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
-        , ( "eq?", RegisterMachine.makeNumOperation2 (\x y -> boolToInt (x == y)) )
-        , ( "not", RegisterMachine.makeNumOperation1 (\x -> boolToInt (x == 0)) )
-        , ( "decrement", RegisterMachine.makeNumOperation1 (\x -> x - 1) )
-        , ( "increment", RegisterMachine.makeNumOperation1 (\x -> x + 1) )
-        , ( "remainder", RegisterMachine.makeNumOperation2 (\x y -> remainderBy y x) )
-        , ( "pair?"
-          , RegisterMachine.makeOperation1
-                (\val ->
-                    case val of
-                        Pair _ ->
-                            Ok (ConstantValue (Num 1))
-
-                        _ ->
-                            Ok (ConstantValue (Num 0))
-                )
-          )
-        , ( "nil?"
-          , RegisterMachine.makeOperation1
-                (\val ->
-                    case val of
-                        ConstantValue Nil ->
-                            Ok (ConstantValue (Num 1))
-
-                        _ ->
-                            Ok (ConstantValue (Num 0))
-                )
-          )
-        , ( "num?"
-          , RegisterMachine.makeOperation1
-                (\val ->
-                    case val of
-                        ConstantValue (Num _) ->
-                            Ok (ConstantValue (Num 1))
-
-                        _ ->
-                            Ok (ConstantValue (Num 0))
-                )
-          )
-        , ( "moved?"
-          , RegisterMachine.makeOperation1
-                (\val ->
-                    case val of
-                        Moved ->
-                            Ok (ConstantValue (Num 1))
-
-                        _ ->
-                            Ok (ConstantValue (Num 0))
-                )
-          )
-        ]
 
 
 init : InitContext Msg Model
@@ -130,87 +64,25 @@ init =
         defaultSelectedController : ControllerExample
         defaultSelectedController =
             Controllers.controller7_fibonacci_recursive
-
-        compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
-        compiledMachine =
-            RegisterMachine.compileMachineFromControllerExample defaultSelectedController operationEnv
     in
     InitContext.setModelTo
-        (\editorModel ->
+        (\editorModel runtimeModel ->
             { controllers = controllers
             , controllerDropdownModel = Dropdown.init "controllers"
             , selectedController = Just defaultSelectedController
-            , runtime = compiledMachine |> Result.map (\( labelEnv, machine ) -> ( labelEnv, Continue machine ))
-            , memoryView = initMemoryView
-            , currentlyHighlightedCell = centerOfMemoryView initMemoryView
+            , runtimeModel = runtimeModel
+            , -- TODO: Is 0 as the default instruction pointer reasonable?
+              currentInstructionPointerResult = Just 0
             , editorModel = editorModel
             }
         )
         |> InitContext.ooo (Editor.init |> InitContext.mapCmd EditorMsg)
-
-
-type alias MemoryView =
-    { bottom : Int, top : Int }
-
-
-initMemoryView : MemoryView
-initMemoryView =
-    { bottom = 0, top = 10 }
-
-
-centerOfMemoryView : MemoryView -> Int
-centerOfMemoryView { top, bottom } =
-    bottom + (top - bottom) // 2
-
-
-shiftBy : Int -> MemoryView -> MemoryView
-shiftBy delta { bottom, top } =
-    let
-        ( bottomNew, topNew ) =
-            ( bottom + delta, top + delta )
-    in
-    if bottomNew < 0 then
-        { bottom = 0, top = topNew - bottomNew }
-
-    else
-        { bottom = bottomNew, top = topNew }
-
-
-centerAt : Int -> MemoryView -> MemoryView
-centerAt p memoryView =
-    let
-        oldCenter =
-            centerOfMemoryView memoryView
-    in
-    memoryView |> shiftBy (p - oldCenter)
-
-
-reset : Model -> Model
-reset model =
-    case model.selectedController of
-        Just controllerExample ->
-            let
-                compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
-                compiledMachine =
-                    RegisterMachine.compileMachineFromControllerExample controllerExample operationEnv
-            in
-            { model
-                | runtime = compiledMachine |> Result.map (\( labelEnv, machine ) -> ( labelEnv, Continue machine ))
-                , memoryView = initMemoryView
-                , currentlyHighlightedCell = centerOfMemoryView initMemoryView
-            }
-
-        Nothing ->
-            model
+        |> InitContext.ooo (Runtime.init defaultSelectedController |> InitContext.mapCmd RuntimeMsg)
 
 
 type Msg
-    = Reset
-    | StepUntilHalted
-    | StepUntilNextJump
-    | Step
-    | MemoryPointerClicked MemoryPointer
-    | ShiftMemoryViewBy Int
+    = RuntimeMsg Runtime.Msg
+    | CurrentInstructionPointerChanged InstructionPointer
       -- ===Controllers Dropdown===
     | ControllerPicked (Maybe ControllerExample)
     | ControllersDropdownMsg (Dropdown.Msg ControllerExample)
@@ -220,54 +92,27 @@ type Msg
 
 update : Msg -> Context rootMsg Msg Model
 update msg =
-    let
-        updateRuntime : (ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState) -> Context rootMsg Msg Model
-        updateRuntime f =
-            Context.update
-                (\({ runtime } as model) ->
-                    { model | runtime = runtime |> Result.map (\( labelEnv, resultMachine ) -> ( labelEnv, resultMachine |> RegisterMachine.andThen f )) }
-                )
-    in
     case msg of
-        Reset ->
-            Context.update reset
-
-        StepUntilHalted ->
-            updateRuntime RegisterMachine.stepUntilHalted
-
-        StepUntilNextJump ->
-            updateRuntime RegisterMachine.stepUntilNextJump
-
-        Step ->
-            updateRuntime RegisterMachine.step
-
-        MemoryPointerClicked p ->
-            Context.update
-                (\model ->
-                    let
-                        newMemoryView =
-                            model.memoryView |> centerAt p
-                    in
-                    { model
-                        | memoryView = newMemoryView
-                        , currentlyHighlightedCell = p
-                    }
+        RuntimeMsg runtimeMsg ->
+            Context.liftMsgToCmd
+                (\lift ->
+                    Runtime.update (lift << CurrentInstructionPointerChanged) runtimeMsg
+                        |> Context.embed
+                            RuntimeMsg
+                            .runtimeModel
+                            (\model runtimeModel -> { model | runtimeModel = runtimeModel })
                 )
 
-        ShiftMemoryViewBy delta ->
-            Context.update
-                (\model ->
-                    let
-                        newMemoryView =
-                            model.memoryView |> shiftBy delta
-                    in
-                    { model
-                        | memoryView = newMemoryView
-                    }
-                )
+        CurrentInstructionPointerChanged instructionPointer ->
+            let
+                _ =
+                    Debug.log "INSTRUCTION POINTER CHANGES" instructionPointer
+            in
+            Context.update (\model -> { model | currentInstructionPointerResult = Just instructionPointer })
 
         ControllerPicked maybeControllerExample ->
-            Context.update (\model -> { model | selectedController = maybeControllerExample } |> reset)
+            -- TODO: What about reset???
+            Context.update (\model -> { model | selectedController = maybeControllerExample })
 
         ControllersDropdownMsg dropdownMsg ->
             Context.updateWithCommand
@@ -285,16 +130,6 @@ update msg =
                     EditorMsg
                     .editorModel
                     (\model editorModel -> { model | editorModel = editorModel })
-
-
-headingSize : Int
-headingSize =
-    20
-
-
-heading : String -> Element a
-heading str =
-    E.el [ Font.size headingSize, Font.bold ] (E.text str)
 
 
 view : Config -> Model -> Element Msg
@@ -317,82 +152,22 @@ view config model =
 
                     Just controllerExample ->
                         E.column []
-                            [ heading "Controller"
-                            , case model.runtime of
-                                Err compilationError ->
-                                    E.text (compilationErrorToString compilationError)
+                            [ E.heading "Controller"
+                            , case model.currentInstructionPointerResult of
+                                Nothing ->
+                                    -- TODO: Note that here we loose compilation error information
+                                    --       We need to somehow also isolate the compilation from runtime
+                                    --       Compilation is the responsibility of the editor and not the simulator?
+                                    -- Err compilationError ->
+                                    --     E.text (compilationErrorToString compilationError)
+                                    E.text "error?"
 
-                                Ok ( _, RuntimeError runtimeError ) ->
-                                    E.text (runTimeErrorToString runtimeError)
-
-                                Ok ( _, Halted { controllerState } ) ->
-                                    viewInstructions controllerState.currentInstructionPointer controllerExample.instructionBlock
-
-                                Ok ( _, Continue { controllerState } ) ->
-                                    viewInstructions controllerState.currentInstructionPointer controllerExample.instructionBlock
+                                Just currentInstructionPointer ->
+                                    viewInstructions currentInstructionPointer controllerExample.instructionBlock
                             ]
                 ]
             , -- ===Runtime State===
-              E.column [ E.alignTop ]
-                [ E.row []
-                    [ Input.button Button.buttonStyle
-                        { onPress =
-                            Just Reset
-                        , label = E.text "Reset"
-                        }
-                    , Input.button Button.buttonStyle
-                        { onPress =
-                            Just StepUntilHalted
-                        , label = E.text "Step until halted"
-                        }
-                    , Input.button Button.buttonStyle
-                        { onPress =
-                            Just StepUntilNextJump
-                        , label = E.text "Step until next jump"
-                        }
-                    , Input.button Button.buttonStyle
-                        { onPress =
-                            Just Step
-                        , label = E.text "Step"
-                        }
-                    ]
-                , case model.runtime of
-                    Err compilationError ->
-                        E.text (compilationErrorToString compilationError)
-
-                    Ok ( _, RuntimeError runtimeError ) ->
-                        E.text (runTimeErrorToString runtimeError)
-
-                    Ok ( labelEnv, Halted { machineState } ) ->
-                        viewMachineState model machineState labelEnv
-
-                    Ok ( labelEnv, Continue { machineState } ) ->
-                        viewMachineState model machineState labelEnv
-                ]
-            ]
-        ]
-
-
-viewMachineState : Model -> MachineState -> LabelEnvironment -> Element Msg
-viewMachineState model machineState labelEnv =
-    E.row [ E.spacing 30 ]
-        [ E.column [ E.spacing 20, E.alignTop ]
-            [ E.column []
-                [ heading "Registers"
-                , viewRegisters (machineState.registerEnv |> Dict.toList) labelEnv model
-                ]
-            , E.column []
-                [ heading "Memory"
-                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Main) labelEnv model
-                ]
-            , E.column []
-                [ heading "Dual Memory"
-                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Dual) labelEnv model
-                ]
-            ]
-        , E.column [ E.alignTop, E.width (E.px 100) ]
-            [ heading "Stack"
-            , viewStack machineState.stack labelEnv model
+              Runtime.view config model.runtimeModel |> E.map RuntimeMsg
             ]
         ]
 
@@ -439,64 +214,6 @@ dropdownConfig =
             , Border.roundEach { topLeft = 0, topRight = 0, bottomLeft = 5, bottomRight = 5 }
             , E.width E.fill
             ]
-
-
-compilationErrorToString : CompilationError -> String
-compilationErrorToString err =
-    case err of
-        LabelUsedMoreThanOnce label ->
-            String.concat [ "Label :", label, " used more than once" ]
-
-        LabelDoesNotExist label ->
-            String.concat [ "Label :", label, " does not exist" ]
-
-        UnknownRegister register ->
-            String.concat [ "Unknown register $", register ]
-
-
-runTimeErrorToString : RuntimeError -> String
-runTimeErrorToString err =
-    case err of
-        UndefinedRegister register ->
-            String.concat [ "Undefined register $", register ]
-
-        UndefinedOperation operationName ->
-            String.concat [ "Undefined operation ", operationName ]
-
-        WrongNumberOfArgumentsGivenToOperationExpected int ->
-            String.concat [ "Wrong number of arguments given to the operation. Expected ", String.fromInt int ]
-
-        PoppingEmptyStack ->
-            "Popping empty stack"
-
-        TheOperationExpectsIntegerArguments ->
-            "The operation expects integer arguments"
-
-        ExpectedInstructionPointerInRegister ->
-            "Expected instruction p in the register"
-
-        ExpectedPairInRegister ->
-            "Expected pair in the register"
-
-        MemoryError memoryError ->
-            case memoryError of
-                MemoryExceeded ->
-                    "Memory Exceeded"
-
-                InvalidMemoryAccessAt pointer ->
-                    String.concat [ "Invalid memory access at #", String.fromInt pointer ]
-
-                ExpectedNumAt pointer ->
-                    String.concat [ "Expected Num at #", String.fromInt pointer ]
-
-                ExpectedPairAt pointer ->
-                    String.concat [ "Expected Pair at #", String.fromInt pointer ]
-
-                ExpectedNilAt pointer ->
-                    String.concat [ "Expected Nil at #", String.fromInt pointer ]
-
-        InstructionPointerOutOfBounds { instructionPointer, numberOfInstructions } ->
-            String.concat [ "The instruction pointer @", String.fromInt instructionPointer, " is out of bounds (number of instructions is ", String.fromInt numberOfInstructions, ")" ]
 
 
 type LabelOrInstruction
@@ -666,110 +383,6 @@ viewInstructions instructionPointer instructionBlock =
         )
 
 
-viewRegisters : List ( RegisterMachine.Register, Value ) -> LabelEnvironment -> Model -> Element Msg
-viewRegisters registers labelEnv model =
-    let
-        registerStyle =
-            [ Background.color (E.rgb255 240 0 245)
-            , E.padding 20
-            , E.width (E.px 60)
-            , E.height (E.px 60)
-            , E.clip
-            , E.scrollbars
-            ]
-
-        viewRegister : RegisterMachine.Register -> Value -> Element Msg
-        viewRegister name val =
-            E.row [ E.spacing 10 ]
-                [ E.el [ E.width (E.px 230) ] (E.text name), E.text "<-", E.el registerStyle (viewValue val labelEnv model) ]
-    in
-    -- registers
-    E.column [ E.width E.fill, E.spacing 5 ]
-        (registers
-            |> List.map (\( name, val ) -> viewRegister name val)
-        )
-
-
-viewStack : Stack -> LabelEnvironment -> Model -> Element Msg
-viewStack stack labelEnv model =
-    E.column [ E.width E.fill ]
-        (stack
-            |> Stack.toList
-            |> List.reverse
-            |> List.map
-                (\val ->
-                    E.column [ Border.width 1, Border.solid, E.paddingXY 0 15, E.width (E.px 70), E.height (E.px 70), E.clip, E.scrollbars ]
-                        [ E.el [ E.centerX, E.width E.fill ] (viewValue val labelEnv model)
-                        ]
-                )
-        )
-
-
-viewMemoryState : MemoryState -> LabelEnvironment -> Model -> Element Msg
-viewMemoryState memoryState labelEnv model =
-    let
-        viewMemorySegment a b =
-            E.row [ E.width E.fill ]
-                (memoryState.memory
-                    |> Array.slice a (b + 1)
-                    |> Array.toIndexedList
-                    |> List.map
-                        (\( i, memoryCell ) ->
-                            viewMemoryCell (i + a) memoryCell labelEnv model
-                        )
-                )
-    in
-    E.column [ E.width E.fill ]
-        [ E.row [] [ E.text "Next free pointer: ", viewMemoryPointer memoryState.nextFreePointer ]
-        , E.row []
-            [ Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy -1), label = E.text "-1" }
-            , Input.button Button.buttonStyle { onPress = Just (ShiftMemoryViewBy 1), label = E.text "+1" }
-            ]
-        , viewMemorySegment model.memoryView.bottom model.memoryView.top
-        ]
-
-
-viewMemoryCell : MemoryPointer -> MemoryCell -> LabelEnvironment -> Model -> Element Msg
-viewMemoryCell memoryPointer ( a, b ) labelEnv model =
-    E.column [ Border.solid, Border.width 1, E.width (E.px 70) ]
-        [ E.column [ E.centerX, E.paddingXY 0 15, E.height (E.px 50), E.width E.fill ]
-            [ viewValue a labelEnv model
-            , viewValue b labelEnv model
-            ]
-        , E.el
-            (List.concat
-                -- [ [ E.centerX, E.paddingXY 0 5, Background.color (E.rgb 64 52 235) ]
-                [ [ E.centerX, Background.color (E.rgb 0 0 0), E.width E.fill ]
-                , if model.currentlyHighlightedCell == memoryPointer then
-                    [ Font.color (E.rgb255 255 0 0) ]
-
-                  else
-                    [ Font.color (E.rgb255 255 255 255) ]
-                ]
-            )
-            (E.text (String.concat [ "#", String.fromInt memoryPointer ]))
-        ]
-
-
-viewValue : Value -> LabelEnvironment -> Model -> Element Msg
-viewValue value labelEnv model =
-    case value of
-        ConstantValue constant ->
-            viewConstant constant
-
-        Pair memoryPointer ->
-            viewMemoryPointer memoryPointer
-
-        InstructionPointer instructionPointer ->
-            viewInstructionPointer instructionPointer labelEnv
-
-        Uninitialized ->
-            E.text ""
-
-        Moved ->
-            E.text "Moved"
-
-
 viewConstant : Constant -> Element Msg
 viewConstant const =
     E.row []
@@ -780,24 +393,6 @@ viewConstant const =
             Nil ->
                 E.text "nil"
         ]
-
-
-viewMemoryPointer : MemoryPointer -> Element Msg
-viewMemoryPointer p =
-    E.el [ Events.onClick (MemoryPointerClicked p), E.pointer ]
-        (E.text (String.concat [ "#", String.fromInt p ]))
-
-
-viewInstructionPointer : InstructionPointer -> LabelEnvironment -> Element Msg
-viewInstructionPointer pointer labelEnv =
-    -- TODO: Remvoe
-    -- E.text (String.concat [ ":", String.fromInt pointer ])
-    case RegisterMachine.labelFromInstructionPointer pointer labelEnv of
-        Just label ->
-            E.text (String.concat [ ":", label ])
-
-        Nothing ->
-            E.text ":::error:::"
 
 
 subscriptions : Model -> Sub Msg

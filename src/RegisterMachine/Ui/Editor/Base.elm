@@ -1,4 +1,4 @@
-module RegisterMachine.Ui.Base exposing (..)
+module RegisterMachine.Ui.Editor.Base exposing (..)
 
 import Lib.ZipList as ZipList exposing (ZipList)
 

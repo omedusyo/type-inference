@@ -2,17 +2,26 @@ module Ui.Control.Context exposing
     ( Config
     , Context
     , State
+    , performRootMsgWithModel
     , embed
     , embedModelIntoState
     , getConfig
     , initConfig
-    , mapCmd
+    , performMsgWithModel
+    , lift
+    , liftMsgToCmd
+    , mapMsg
     , none
     , performCmd
+    , performCmdWithModel
     , performMsg
+    , performRootCmd
+    , performRootCmdWithModel
+    , performRootMsg
     , setModelTo
     , update
     , updateWithCommand
+    , updateWithRootCommand
     )
 
 import Task
@@ -37,6 +46,26 @@ type alias Context rootMsg msg model =
     Config -> (msg -> rootMsg) -> State model -> ( State model, Cmd rootMsg )
 
 
+performRootCmdWithModel : (model -> Cmd rootMsg) -> Context rootMsg msg model -> Context rootMsg msg model
+performRootCmdWithModel f context0 =
+    \config liftMsg state0 ->
+        let
+            ( state1, rootCmd0 ) =
+                context0 config liftMsg state0
+        in
+        ( state1, Cmd.batch [ rootCmd0, f state1.model ] )
+
+
+performCmdWithModel : (model -> Cmd msg) -> Context rootMsg msg model -> Context rootMsg msg model
+performCmdWithModel f context0 =
+    \config liftMsg state0 ->
+        let
+            ( state1, rootCmd0 ) =
+                context0 config liftMsg state0
+        in
+        ( state1, Cmd.batch [ rootCmd0, f state1.model |> Cmd.map liftMsg ] )
+
+
 embedModelIntoState : model -> State model
 embedModelIntoState model =
     { notifications = {}
@@ -55,6 +84,7 @@ update f =
     \_ _ state ->
         ( { state | model = f state.model }, Cmd.none )
 
+
 updateWithCommand : (model -> ( model, Cmd msg )) -> Context rootMsg msg model
 updateWithCommand f =
     \_ liftMsg state ->
@@ -65,14 +95,34 @@ updateWithCommand f =
         ( { state | model = newModel }, Cmd.map liftMsg cmd )
 
 
+updateWithRootCommand : (model -> ( model, Cmd rootMsg )) -> Context rootMsg msg model
+updateWithRootCommand f =
+    \_ _ state ->
+        let
+            ( newModel, rootCmd ) =
+                f state.model
+        in
+        ( { state | model = newModel }, rootCmd )
+
+
 performCmd : Cmd msg -> Context rootMsg msg model -> Context rootMsg msg model
 performCmd cmd1 context0 =
     \config liftMsg state0 ->
         let
-            ( state1, cmd0 ) =
+            ( state1, rootCmd0 ) =
                 context0 config liftMsg state0
         in
-        ( state1, Cmd.batch [ cmd0, cmd1 |> Cmd.map liftMsg ] )
+        ( state1, Cmd.batch [ rootCmd0, cmd1 |> Cmd.map liftMsg ] )
+
+
+performRootCmd : Cmd rootMsg -> Context rootMsg msg model -> Context rootMsg msg model
+performRootCmd rootCmd1 context0 =
+    \config liftMsg state0 ->
+        let
+            ( state1, rootCmd0 ) =
+                context0 config liftMsg state0
+        in
+        ( state1, Cmd.batch [ rootCmd0, rootCmd1 ] )
 
 
 none : Context rootMsg msg model
@@ -80,6 +130,15 @@ none =
     \_ _ state ->
         ( state, Cmd.none )
 
+
+performRootMsgWithModel : (model -> rootMsg) -> Context rootMsg msg model -> Context rootMsg msg model
+performRootMsgWithModel f context0 =
+    performRootCmdWithModel (msgToCmd << f) context0
+
+
+performMsgWithModel : (model -> msg) -> Context rootMsg msg model -> Context rootMsg msg model
+performMsgWithModel f context0 =
+    performCmdWithModel (msgToCmd << f) context0
 
 msgToCmd : msg -> Cmd msg
 msgToCmd msg =
@@ -91,14 +150,19 @@ performMsg msg =
     performCmd (msgToCmd msg)
 
 
+performRootMsg : rootMsg -> Context rootMsg msg model -> Context rootMsg msg model
+performRootMsg rootMsg =
+    performRootCmd (msgToCmd rootMsg)
+
+
 setModelTo : model -> Context rootMsg msg model
 setModelTo model =
     \_ _ state ->
         ( { state | model = model }, Cmd.none )
 
 
-mapCmd : (msg0 -> msg1) -> Context rootMsg msg0 model -> Context rootMsg msg1 model
-mapCmd f context0 =
+mapMsg : (msg0 -> msg1) -> Context rootMsg msg0 model -> Context rootMsg msg1 model
+mapMsg f context0 =
     \config liftMsg1 state0 ->
         let
             ( state1, cmd1 ) =
@@ -121,6 +185,12 @@ lift : ((msg -> rootMsg) -> Context rootMsg msg model) -> Context rootMsg msg mo
 lift f =
     \config liftMsg ->
         f liftMsg config liftMsg
+
+
+liftMsgToCmd : ((msg -> Cmd rootMsg) -> Context rootMsg msg model) -> Context rootMsg msg model
+liftMsgToCmd f =
+    \config liftMsg ->
+        f (msgToCmd << liftMsg) config liftMsg
 
 
 

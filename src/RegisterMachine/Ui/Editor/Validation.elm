@@ -1,10 +1,10 @@
-module RegisterMachine.Ui.Validation exposing (validatedInstruction, setNodeToOperationNameNode)
+module RegisterMachine.Ui.Editor.Validation exposing (validatedInstruction, setNodeToOperationNameNode)
 
 import Lib.Break as Break
 import Lib.ZipList as ZipList exposing (ZipList)
 import List.Extra as List
 import Maybe.Extra as Maybe
-import RegisterMachine.Ui.Base as Base
+import RegisterMachine.Ui.Editor.Base as Base
     exposing
         ( EntityKind(..)
         , ExpectedArity(..)
