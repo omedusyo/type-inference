@@ -14,7 +14,7 @@ import Element.Region as Region
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, MemoryPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
-import RegisterMachine.Machine as RegisterMachine exposing (CompilationError, Controller, ControllerExample, MachineWithInstructions, RegisterEnvironment, RuntimeError(..))
+import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, Controller, ControllerExampleNew, LabelEnvironment, MachineState, MachineWithInstructions, RegisterEnvironment, RuntimeError(..))
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
 import RegisterMachine.Ui.Editor as Editor
@@ -24,10 +24,10 @@ import Ui.Style.Button as Button
 
 
 type alias Model =
-    { controllers : List ControllerExample
-    , controllerDropdownModel : Dropdown.State ControllerExample
-    , selectedController : Maybe ControllerExample
-    , maybeRuntime : Maybe (Result RuntimeError MachineWithInstructions)
+    { controllers : List ControllerExampleNew
+    , controllerDropdownModel : Dropdown.State ControllerExampleNew
+    , selectedController : Maybe ControllerExampleNew
+    , runtime : Result CompilationError ( LabelEnvironment, ComputationStep ControlledMachineState ControlledMachineState )
     , memoryView : MemoryView
     , currentlyHighlightedCell : MemoryPointer
 
@@ -113,7 +113,7 @@ operationEnv =
 init : InitContext Msg Model
 init =
     let
-        controllers : List ControllerExample
+        controllers : List ControllerExampleNew
         controllers =
             [ Controllers.controller0_gcd
             , Controllers.controller1_remainder
@@ -128,25 +128,20 @@ init =
             , GarbageCollector.controller
             ]
 
+        defaultSelectedController : ControllerExampleNew
         defaultSelectedController =
             Controllers.controller7_fibonacci_recursive
 
-        parsedMachine : Result CompilationError MachineWithInstructions
-        parsedMachine =
-            RegisterMachine.makeMachine defaultSelectedController.controller defaultSelectedController.initialRegisterEnvironment operationEnv
+        compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
+        compiledMachine =
+            RegisterMachine.compileMachineFromControllerExample defaultSelectedController operationEnv
     in
     InitContext.setModelTo
         (\editorModel ->
             { controllers = controllers
             , controllerDropdownModel = Dropdown.init "controllers"
             , selectedController = Just defaultSelectedController
-            , maybeRuntime =
-                case parsedMachine of
-                    Ok machine ->
-                        Just (Ok machine)
-
-                    Err _ ->
-                        Nothing
+            , runtime = compiledMachine |> Result.map (\( labelEnv, machine ) -> ( labelEnv, Continue machine ))
             , memoryView = initMemoryView
             , currentlyHighlightedCell = centerOfMemoryView initMemoryView
             , editorModel = editorModel
@@ -170,7 +165,7 @@ centerOfMemoryView { top, bottom } =
 
 
 shiftBy : Int -> MemoryView -> MemoryView
-shiftBy delta ({ bottom, top } as memoryView) =
+shiftBy delta { bottom, top } =
     let
         ( bottomNew, topNew ) =
             ( bottom + delta, top + delta )
@@ -196,23 +191,15 @@ reset model =
     case model.selectedController of
         Just controllerExample ->
             let
-                parsedMachineResult =
-                    RegisterMachine.makeMachine controllerExample.controller controllerExample.initialRegisterEnvironment operationEnv
+                compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
+                compiledMachine =
+                    RegisterMachine.compileMachineFromControllerExample controllerExample operationEnv
             in
-            case parsedMachineResult of
-                Ok machine ->
-                    { model
-                        | maybeRuntime = Just (Ok machine)
-                        , memoryView = initMemoryView
-                        , currentlyHighlightedCell = centerOfMemoryView initMemoryView
-                    }
-
-                Err _ ->
-                    { model
-                        | maybeRuntime = Nothing
-                        , memoryView = initMemoryView
-                        , currentlyHighlightedCell = centerOfMemoryView initMemoryView
-                    }
+            { model
+                | runtime = compiledMachine |> Result.map (\( labelEnv, machine ) -> ( labelEnv, Continue machine ))
+                , memoryView = initMemoryView
+                , currentlyHighlightedCell = centerOfMemoryView initMemoryView
+            }
 
         Nothing ->
             model
@@ -220,47 +207,40 @@ reset model =
 
 type Msg
     = Reset
-    | RunUntilHalted
-    | RunOneStep
+    | StepUntilHalted
+    | StepUntilNextJump
+    | Step
     | MemoryPointerClicked MemoryPointer
     | ShiftMemoryViewBy Int
       -- ===Controllers Dropdown===
-    | ControllerPicked (Maybe ControllerExample)
-    | ControllersDropdownMsg (Dropdown.Msg ControllerExample)
+    | ControllerPicked (Maybe ControllerExampleNew)
+    | ControllersDropdownMsg (Dropdown.Msg ControllerExampleNew)
       -- editor
     | EditorMsg Editor.Msg
 
 
 update : Msg -> Context rootMsg Msg Model
 update msg =
+    let
+        updateRuntime : (ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState) -> Context rootMsg Msg Model
+        updateRuntime f =
+            Context.update
+                (\({ runtime } as model) ->
+                    { model | runtime = runtime |> Result.map (\( labelEnv, resultMachine ) -> ( labelEnv, resultMachine |> RegisterMachine.andThen f )) }
+                )
+    in
     case msg of
         Reset ->
             Context.update reset
 
-        RunUntilHalted ->
-            Context.update
-                (\model ->
-                    { model
-                        | maybeRuntime =
-                            model.maybeRuntime
-                                |> Maybe.map (Result.andThen RegisterMachine.runUntilHalted)
-                    }
-                )
+        StepUntilHalted ->
+            updateRuntime RegisterMachine.stepUntilHalted
 
-        RunOneStep ->
-            Context.update
-                (\model ->
-                    { model
-                        | maybeRuntime =
-                            model.maybeRuntime
-                                |> Maybe.map
-                                    (\resultMachine ->
-                                        resultMachine
-                                            |> Result.andThen RegisterMachine.runOneStep
-                                            |> Result.map .machine
-                                    )
-                    }
-                )
+        StepUntilNextJump ->
+            updateRuntime RegisterMachine.stepUntilNextJump
+
+        Step ->
+            updateRuntime RegisterMachine.step
 
         MemoryPointerClicked p ->
             Context.update
@@ -332,23 +312,26 @@ view config model =
         , E.row [ E.width E.fill, E.spacing 30 ]
             [ -- ===Instructions===
               E.column [ E.width E.fill, E.alignTop, E.alignLeft ]
-                [ case model.maybeRuntime of
+                [ case model.selectedController of
                     Nothing ->
                         E.text ""
 
-                    Just (Err runtimeError) ->
-                        E.text (runTimeErrorToString runtimeError)
+                    Just controllerExample ->
+                        E.column []
+                            [ heading "Controller"
+                            , case model.runtime of
+                                Err compilationError ->
+                                    E.text (compilationErrorToString compilationError)
 
-                    Just (Ok ({ machineState, instructionsState } as machine)) ->
-                        case model.selectedController of
-                            Just controllerExample ->
-                                E.column []
-                                    [ heading "Controller"
-                                    , viewInstructions instructionsState.instructionPointer controllerExample.controller.instructions
-                                    ]
+                                Ok ( labelEnv, RuntimeError runtimeError ) ->
+                                    E.text (runTimeErrorToString runtimeError)
 
-                            Nothing ->
-                                E.text ""
+                                Ok ( labelEnv, Halted { controllerState } ) ->
+                                    viewInstructions controllerState.currentInstructionPointer controllerExample.instructionBlock
+
+                                Ok ( labelEnv, Continue { controllerState } ) ->
+                                    viewInstructions controllerState.currentInstructionPointer controllerExample.instructionBlock
+                            ]
                 ]
             , -- ===Runtime State===
               E.column [ E.alignTop ]
@@ -360,44 +343,57 @@ view config model =
                         }
                     , Input.button Button.buttonStyle
                         { onPress =
-                            Just RunUntilHalted
-                        , label = E.text "Run until halted"
+                            Just StepUntilHalted
+                        , label = E.text "Step until halted"
                         }
                     , Input.button Button.buttonStyle
                         { onPress =
-                            Just RunOneStep
-                        , label = E.text "Run one step"
+                            Just StepUntilNextJump
+                        , label = E.text "Step until next jump"
+                        }
+                    , Input.button Button.buttonStyle
+                        { onPress =
+                            Just Step
+                        , label = E.text "Step"
                         }
                     ]
-                , case model.maybeRuntime of
-                    Nothing ->
-                        E.text ""
+                , case model.runtime of
+                    Err compilationError ->
+                        E.text (compilationErrorToString compilationError)
 
-                    Just (Err runtimeError) ->
+                    Ok ( labelEnv, RuntimeError runtimeError ) ->
                         E.text (runTimeErrorToString runtimeError)
 
-                    Just (Ok ({ machineState, instructionsState } as machine)) ->
-                        E.row [ E.spacing 30 ]
-                            [ E.column [ E.spacing 20, E.alignTop ]
-                                [ E.column []
-                                    [ heading "Registers"
-                                    , viewRegisters (machineState.registerEnv |> Dict.toList) model
-                                    ]
-                                , E.column []
-                                    [ heading "Memory"
-                                    , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
-                                    ]
-                                , E.column []
-                                    [ heading "Dual Memory"
-                                    , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
-                                    ]
-                                ]
-                            , E.column [ E.alignTop, E.width (E.px 100) ]
-                                [ heading "Stack"
-                                , viewStack machineState.stack model
-                                ]
-                            ]
+                    Ok ( labelEnv, Halted { machineState } ) ->
+                        viewMachineState model machineState
+
+                    Ok ( labelEnv, Continue { machineState } ) ->
+                        viewMachineState model machineState
                 ]
+            ]
+        ]
+
+
+viewMachineState : Model -> MachineState -> Element Msg
+viewMachineState model machineState =
+    E.row [ E.spacing 30 ]
+        [ E.column [ E.spacing 20, E.alignTop ]
+            [ E.column []
+                [ heading "Registers"
+                , viewRegisters (machineState.registerEnv |> Dict.toList) model
+                ]
+            , E.column []
+                [ heading "Memory"
+                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Main) model
+                ]
+            , E.column []
+                [ heading "Dual Memory"
+                , viewMemoryState (machineState |> RegisterMachine.currentMemoryState RegisterMachine.Dual) model
+                ]
+            ]
+        , E.column [ E.alignTop, E.width (E.px 100) ]
+            [ heading "Stack"
+            , viewStack machineState.stack model
             ]
         ]
 
@@ -406,7 +402,7 @@ view config model =
 -- ===Controller Dropdown===
 
 
-dropdownConfig : Dropdown.Config ControllerExample Msg Model
+dropdownConfig : Dropdown.Config ControllerExampleNew Msg Model
 dropdownConfig =
     Dropdown.basic
         { itemsFromModel = \model -> model.controllers
@@ -444,6 +440,19 @@ dropdownConfig =
             , Border.roundEach { topLeft = 0, topRight = 0, bottomLeft = 5, bottomRight = 5 }
             , E.width E.fill
             ]
+
+
+compilationErrorToString : CompilationError -> String
+compilationErrorToString err =
+    case err of
+        LabelUsedMoreThanOnce label ->
+            String.concat [ "Label :", label, " used more than once" ]
+
+        LabelDoesNotExist label ->
+            String.concat [ "Label :", label, " does not exist" ]
+
+        UnknownRegister register ->
+            String.concat [ "Unknown register $", register ]
 
 
 runTimeErrorToString : RuntimeError -> String

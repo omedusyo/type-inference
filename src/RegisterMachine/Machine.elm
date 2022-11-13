@@ -354,7 +354,7 @@ checkRegisters registers arguments controller =
 
 
 compileMachine : InstructionBlock -> List ( Register, Value ) -> OperationEnvironment -> Result CompilationError ( LabelEnvironment, ControlledMachineState )
-compileMachine instructionBlock initialRegisterEnv operationEnv =
+compileMachine instructionBlock initialRegisters operationEnv =
     translateInstructionsToMachineInstructions instructionBlock
         |> Result.andThen
             (\( labelEnv, machineInstructions ) ->
@@ -363,14 +363,15 @@ compileMachine instructionBlock initialRegisterEnv operationEnv =
                 Ok
                     ( labelEnv
                     , { machineState =
-                            { registerEnv = Dict.fromList initialRegisterEnv
+                            { registerEnv = Dict.fromList initialRegisters
                             , operationEnv = operationEnv
                             , memory =
-                                -- TODO
-                                { memoryState0 = MemoryState.empty 4096
-
-                                -- MemoryState.example0
-                                , memoryState1 = MemoryState.empty 4096
+                                let
+                                    memorySize =
+                                        4096
+                                in
+                                { memoryState0 = MemoryState.empty memorySize
+                                , memoryState1 = MemoryState.empty memorySize
                                 , memoryInUse = Zero
                                 }
                             , stack = Stack.empty
@@ -382,6 +383,11 @@ compileMachine instructionBlock initialRegisterEnv operationEnv =
                       }
                     )
             )
+
+
+compileMachineFromControllerExample : ControllerExampleNew -> OperationEnvironment -> Result CompilationError ( LabelEnvironment, ControlledMachineState )
+compileMachineFromControllerExample { instructionBlock, initialRegisters } operationEnv =
+    compileMachine instructionBlock initialRegisters operationEnv
 
 
 parse : Controller -> Result CompilationError MachineInstructions
@@ -831,6 +837,19 @@ map f result =
     andThen (f >> Continue) result
 
 
+mapHalted : (r0 -> r1) -> ComputationStep r0 a -> ComputationStep r1 a
+mapHalted f result =
+    case result of
+        RuntimeError e ->
+            RuntimeError e
+
+        Halted r ->
+            Halted (f r)
+
+        Continue a ->
+            Continue a
+
+
 
 -- ===START individual actions===
 -- assignment
@@ -1171,12 +1190,14 @@ instructionAction instruction machineState =
             swapMemory input machineState
 
 
-step : ControlledMachineState -> ComputationStep MachineState ControlledMachineState
+step : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState
 step ({ machineState, controllerState } as machine) =
     fetchInstruction controllerState
         |> andThen
             (\instruction ->
                 instructionAction instruction machineState
+                    |> mapHalted
+                        (\_ -> machine)
                     |> map
                         (\( newMachineState, controllerChange ) ->
                             { machine
@@ -1206,7 +1227,7 @@ isJumpInstruction instruction =
             False
 
 
-stepUntilNextJump : ControlledMachineState -> ComputationStep MachineState ControlledMachineState
+stepUntilNextJump : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState
 stepUntilNextJump machine0 =
     step machine0
         |> andThen
@@ -1223,7 +1244,7 @@ stepUntilNextJump machine0 =
             )
 
 
-stepUntilHalted : ControlledMachineState -> ComputationStep MachineState ControlledMachineState
+stepUntilHalted : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState
 stepUntilHalted machine0 =
     step machine0 |> andThen (\machine1 -> stepUntilHalted machine1)
 
