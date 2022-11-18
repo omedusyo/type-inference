@@ -1,13 +1,11 @@
 module RegisterMachine.Ui.Editor exposing (..)
 
-import Browser.Dom as Dom
 import Browser.Events as BE
 import Dict exposing (Dict)
 import Dropdown
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
-import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import Json.Decode as Decode
@@ -43,6 +41,7 @@ type InstructionMode
     = TraversingInstructions NodeMode
     | InsertingInstruction
     | SelectingInstructions
+    | Run
 
 
 type NodeMode
@@ -51,7 +50,7 @@ type NodeMode
 
 
 type alias Model =
-    -- TODO: This is wrong... it should be a sum of three models, one for each instruction...
+    -- TODO: This is wrong... it should be a sum of three models, one for each mode...
     { instructions : ZipList Instruction
     , instructionMode : InstructionMode
     , fragmentBoard : FragmentBoard
@@ -172,6 +171,11 @@ setModeToSelectInstructions model =
         | instructionMode = SelectingInstructions
         , selectedInstructions = Just (ZipListSelection.fromZipList model.instructions)
     }
+
+
+setModeToRun : Model -> Model
+setModeToRun model =
+    { model | instructionMode = Run }
 
 
 selectionMovement : VerticalDirection -> Model -> Model
@@ -639,6 +643,9 @@ update msg =
                 SelectingInstructions ->
                     Context.update setModeToSelectInstructions
 
+                Run ->
+                    Context.update setModeToRun
+
         NodeEdit str ->
             -- TODO: Node validation
             Context.update (updateCurrentNodeWithoutValidation (\(Node nodeKind nodeValidation nodeExpectation _) -> Node nodeKind nodeValidation nodeExpectation str))
@@ -708,38 +715,46 @@ view ({ instructions } as model) =
 
             SelectingInstructions ->
                 E.el [] (E.text "Selecting")
+
+            Run ->
+                E.el [] (E.text "Running")
         , E.column []
-            (let
-                bgColor =
-                    E.rgb255 215 215 215
-             in
-             case model.instructionMode of
-                SelectingInstructions ->
-                    case model.selectedInstructions of
-                        Just instructionSelection ->
-                            instructionSelection
-                                |> ZipListSelection.mapToList
+            (case model.instructionMode of
+                Run ->
+                    [ E.text "...compile the instructions..." ]
+
+                _ ->
+                    let
+                        bgColor =
+                            E.rgb255 215 215 215
+                    in
+                    case model.instructionMode of
+                        SelectingInstructions ->
+                            case model.selectedInstructions of
+                                Just instructionSelection ->
+                                    instructionSelection
+                                        |> ZipListSelection.mapToList
+                                            { current =
+                                                \instruction ->
+                                                    E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = False } model.instructionMode instruction)
+                                            , others =
+                                                \instruction ->
+                                                    E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
+                                            }
+
+                                Nothing ->
+                                    [ viewKeyword "---should not be ever displayed---" ]
+
+                        _ ->
+                            instructions
+                                |> ZipList.mapToList
                                     { current =
                                         \instruction ->
-                                            E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = False } model.instructionMode instruction)
+                                            E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = True } model.instructionMode instruction)
                                     , others =
                                         \instruction ->
                                             E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
                                     }
-
-                        Nothing ->
-                            [ viewKeyword "---should not be ever displayed---" ]
-
-                _ ->
-                    instructions
-                        |> ZipList.mapToList
-                            { current =
-                                \instruction ->
-                                    E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = True } model.instructionMode instruction)
-                            , others =
-                                \instruction ->
-                                    E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
-                            }
             )
 
         -- Fragment Board
@@ -1048,6 +1063,10 @@ viewInstruction { isInstructionSelected, isNodeSelected } instructionMode instru
         SelectingInstructions ->
             viewBareInstruction TraversingNodes
 
+        Run ->
+            -- TODO
+            E.text "running..."
+
 
 viewNode : Bool -> Bool -> NodeMode -> Node -> Element Msg
 viewNode isSelected isInstructionSelected nodeMode (Node _ nodeValidation nodeExpectation str) =
@@ -1175,6 +1194,9 @@ traverseModeKeyBindings =
         -- ===Selection===
         , ( "m", SetModeTo SelectingInstructions )
 
+        -- ===Run mode===
+        , ( "r", SetModeTo Run )
+
         -- ===Debugger===
         , ( "?", DebugCurrentInstruction )
         ]
@@ -1205,6 +1227,12 @@ selectionModeKeyBindings =
         ]
 
 
+runModeKeyBindings : Dict KeyCode Msg
+runModeKeyBindings =
+    Dict.fromList
+        []
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     BE.onKeyUp
@@ -1212,7 +1240,7 @@ subscriptions model =
             |> Decode.andThen
                 (\keyCode ->
                     -- let
-                    --     wat =
+                    --     _ =
                     --         Debug.log "key == " keyCode
                     -- in
                     case model.instructionMode of
@@ -1249,6 +1277,19 @@ subscriptions model =
 
                         SelectingInstructions ->
                             case Dict.get keyCode selectionModeKeyBindings of
+                                Just msg ->
+                                    Decode.succeed msg
+
+                                Nothing ->
+                                    case keyCode of
+                                        "Escape" ->
+                                            Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
+
+                                        _ ->
+                                            Decode.fail ""
+
+                        Run ->
+                            case Dict.get keyCode runModeKeyBindings of
                                 Just msg ->
                                     Decode.succeed msg
 
