@@ -116,6 +116,7 @@ update changeCurrentInstructionPointerCmd msg =
     case msg of
         Reset ->
             Context.update reset
+                |> Context.performRootCmdWithModel changeCurrentInstructionPointer
 
         StepUntilHalted ->
             updateRuntime RegisterMachine.stepUntilHalted

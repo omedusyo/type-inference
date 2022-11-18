@@ -137,6 +137,7 @@ update msg =
                                     Err err ->
                                         Effect.pure { model | runtimeModel = Err err }
                             )
+                        |> Action.updateThen (\model -> { model | currentInstructionPointerResult = Just 0 })
 
                 Nothing ->
                     Action.none
