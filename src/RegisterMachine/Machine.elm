@@ -257,6 +257,9 @@ translateInstructionToMachineInstruction labelEnv instruction =
         SwapMemory input ->
             Ok (MSwapMemory input)
 
+        Unfinished input ->
+            Ok (MUnfinished input)
+
 
 translateInstructionsToMachineInstructions : InstructionBlock -> Result CompilationError ( LabelEnvironment, Array MachineInstruction )
 translateInstructionsToMachineInstructions instructionBlock =
@@ -839,6 +842,13 @@ swapMemory _ ({ memory } as machineState) =
     advance { machineState | memory = { memory | memoryInUse = twoFlip memory.memoryInUse } }
 
 
+unfinished : RegisterMachine.UninishedInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+unfinished _ machineState =
+    -- TODO: What should we do?
+    --       For now just increment the instruction pointer.
+    advance machineState
+
+
 
 -- ===END individual actions===
 
@@ -920,6 +930,9 @@ instructionAction instruction machineState =
 
         MSwapMemory input ->
             swapMemory input machineState
+
+        MUnfinished input ->
+            unfinished input machineState
 
 
 step : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState

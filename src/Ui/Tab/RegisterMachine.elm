@@ -397,6 +397,9 @@ viewInstructions instructionPointer instructionBlock =
 
                     RegisterMachine.SwapMemory _ ->
                         [ viewInstructionName "swap-memory" ]
+
+                    RegisterMachine.Unfinished _ ->
+                        [ viewInstructionName "unfinished" ]
                 )
     in
     E.column [ E.width E.fill ]

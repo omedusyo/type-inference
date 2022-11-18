@@ -113,6 +113,8 @@ type
     | MoveToDual MoveToDualInput
     | MarkAsMoved MarkAsMovedInput
     | SwapMemory SwapMemoryInput
+      -- dev-mode instructions
+    | Unfinished UninishedInput
 
 
 type
@@ -150,6 +152,8 @@ type
     | MMoveToDual MoveToDualInput
     | MMarkAsMoved MarkAsMovedInput
     | MSwapMemory SwapMemoryInput
+      -- dev-mode instructions
+    | MUnfinished UninishedInput
 
 
 
@@ -291,4 +295,12 @@ type alias MarkAsMovedInput =
 
 type alias SwapMemoryInput =
     -- MarkAsMoved memory_pointer_to_be_collected memory_pointer_to_dual_memory
+    {}
+
+
+
+-- dev-mode instructions
+
+
+type alias UninishedInput =
     {}
