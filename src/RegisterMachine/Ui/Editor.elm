@@ -29,8 +29,8 @@ import RegisterMachine.Ui.Editor.Base as Base
         )
 import RegisterMachine.Ui.Editor.Color as Color
 import RegisterMachine.Ui.Editor.Validation as Validation exposing (validatedInstruction)
-import Ui.Control.Context as Context exposing (Config, Context)
-import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Control.Action as Context exposing (Action)
+import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.InputCell as E
 import Ui.Style.Button as Button
 
@@ -229,9 +229,9 @@ exampleInstruction2 =
     Instruction LabelKind (ZipList.fromList lbl []) initialInstructionValidity
 
 
-init : InitContext Msg Model
+init : Effect rootMsg Msg Model
 init =
-    InitContext.setModelTo
+    Effect.pure
         { instructions = ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
         , instructionMode = TraversingInstructions TraversingNodes
         , fragmentBoard = initFragmentBoard
@@ -572,7 +572,7 @@ validateCurrentInstruction =
         )
 
 
-update : Msg -> Context rootMsg Msg Model
+update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         InstructionMovement direction ->

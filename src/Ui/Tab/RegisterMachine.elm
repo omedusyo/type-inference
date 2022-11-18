@@ -8,12 +8,13 @@ import Element.Font as Font
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
-import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControllerExample, RuntimeError(..))
+import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, ControllerExample, LabelEnvironment, RuntimeError(..))
 import RegisterMachine.MemoryState exposing (MemoryError(..))
+import RegisterMachine.OperationEnvironment as OperationEnvironment
 import RegisterMachine.Ui.Editor as Editor
 import RegisterMachine.Ui.Runtime as Runtime
-import Ui.Control.Context as Context exposing (Config, Context)
-import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Control.Action as Action exposing (Action)
+import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.Element as E
 
 
@@ -23,7 +24,7 @@ type alias Model =
     , selectedController : ControllerExample
 
     -- runtime
-    , runtimeModel : Runtime.Model
+    , runtimeModel : Result CompilationError Runtime.Model
     , currentInstructionPointerResult : Maybe InstructionPointer
 
     -- editor
@@ -36,7 +37,7 @@ shouldDisplayEditor =
     True
 
 
-init : InitContext Msg Model
+init : Effect rootMsg Msg Model
 init =
     let
         controllers : List ControllerExample
@@ -57,20 +58,33 @@ init =
         defaultSelectedController : ControllerExample
         defaultSelectedController =
             Controllers.controller7_fibonacci_recursive
+
+        compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
+        compiledMachine =
+            RegisterMachine.compileMachineFromControllerExample defaultSelectedController OperationEnvironment.env
     in
-    InitContext.setModelTo
-        (\editorModel runtimeModel ->
+    Effect.pure
+        (\editorModel runtimeModelResult ->
             { controllers = controllers
             , controllerDropdownModel = Dropdown.init "controllers"
             , selectedController = defaultSelectedController
-            , runtimeModel = runtimeModel
+            , runtimeModel = runtimeModelResult
             , -- TODO: Is 0 as the default instruction pointer reasonable?
               currentInstructionPointerResult = Just 0
             , editorModel = editorModel
             }
         )
-        |> InitContext.ooo (Editor.init |> InitContext.mapCmd EditorMsg)
-        |> InitContext.ooo (Runtime.init defaultSelectedController |> InitContext.mapCmd RuntimeMsg)
+        |> Effect.ooo (Editor.init |> Effect.mapMsg EditorMsg)
+        |> Effect.ooo
+            (case compiledMachine of
+                Ok ( labelEnv, machine ) ->
+                    Runtime.init labelEnv (Continue machine)
+                        |> Effect.mapMsg RuntimeMsg
+                        |> Effect.map Ok
+
+                Err err ->
+                    Effect.pure (Err err)
+            )
 
 
 type Msg
@@ -83,17 +97,17 @@ type Msg
     | EditorMsg Editor.Msg
 
 
-update : Msg -> Context rootMsg Msg Model
+update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         RuntimeMsg runtimeMsg ->
-            Context.liftMsgToCmd
+            Action.liftMsgToCmd
                 (\lift ->
                     Runtime.update (lift << CurrentInstructionPointerChanged) runtimeMsg
-                        |> Context.embed
+                        |> Action.embedIfOk
                             RuntimeMsg
                             .runtimeModel
-                            (\model runtimeModel -> { model | runtimeModel = runtimeModel })
+                            (\model runtimeModel -> { model | runtimeModel = Ok runtimeModel })
                 )
 
         CurrentInstructionPointerChanged instructionPointer ->
@@ -101,20 +115,34 @@ update msg =
                 _ =
                     Debug.log "INSTRUCTION POINTER CHANGES" instructionPointer
             in
-            Context.update (\model -> { model | currentInstructionPointerResult = Just instructionPointer })
+            Action.update (\model -> { model | currentInstructionPointerResult = Just instructionPointer })
 
         ControllerPicked maybeControllerExample ->
             case maybeControllerExample of
                 Just controllerExample ->
-                    Context.update (\model -> { model | selectedController = controllerExample })
-                        |> Context.updateFromInitContext (\model -> Runtime.init model.selectedController |> InitContext.mapCmd RuntimeMsg)
-                            (\model runtimeModel -> { model | runtimeModel = runtimeModel })
+                    Action.update (\model -> { model | selectedController = controllerExample })
+                        |> Action.updateFromEffect
+                            (\model ->
+                                let
+                                    compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
+                                    compiledMachine =
+                                        RegisterMachine.compileMachineFromControllerExample controllerExample OperationEnvironment.env
+                                in
+                                case compiledMachine of
+                                    Ok ( labelEnv, machine ) ->
+                                        Runtime.init labelEnv (Continue machine)
+                                            |> Effect.mapMsg RuntimeMsg
+                                            |> Effect.map (\runtimeModel -> { model | runtimeModel = Ok runtimeModel })
+
+                                    Err err ->
+                                        Effect.pure { model | runtimeModel = Err err }
+                            )
 
                 Nothing ->
-                    Context.none
+                    Action.none
 
         ControllersDropdownMsg dropdownMsg ->
-            Context.updateWithCommand
+            Action.updateWithCommand
                 (\model ->
                     let
                         ( newDropdownModel, cmd ) =
@@ -125,14 +153,14 @@ update msg =
 
         EditorMsg editorMsg ->
             Editor.update editorMsg
-                |> Context.embed
+                |> Action.embed
                     EditorMsg
                     .editorModel
                     (\model editorModel -> { model | editorModel = editorModel })
 
 
-view : Config -> Model -> Element Msg
-view config model =
+view : Model -> Element Msg
+view model =
     -- 1. I need to display all the registers
     -- 2. I need to display the instruction block with labels
     E.column [ E.width E.fill, E.spacing 15 ]
@@ -161,7 +189,12 @@ view config model =
                     ]
                 ]
             , -- ===Runtime State===
-              Runtime.view config model.runtimeModel |> E.map RuntimeMsg
+              case model.runtimeModel of
+                Ok runtimeModel ->
+                    Runtime.view runtimeModel |> E.map RuntimeMsg
+
+                Err compilationError ->
+                    E.text "compilation error"
             ]
         ]
 

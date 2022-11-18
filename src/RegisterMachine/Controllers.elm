@@ -307,7 +307,9 @@ controller7_fibonacci_recursive =
         , Perform (Halt {})
         , Label "fib"
         , Perform (AssignOperation { targetRegister = "done?", operationApplication = { name = "less-than?", arguments = [ Register "n", Constant (Num 2) ] } })
+        -- TODO: Note that I made a typo
         , Perform (JumpToLabelIf { testRegister = "done?", label = "done" })
+        -- , Perform (JumpToLabelIf { testRegister = "done?", label = "non-existent-label" })
 
         -- call to fib(n - 1)
         , Perform (AssignOperation { targetRegister = "n", operationApplication = { name = "decrement", arguments = [ Register "n" ] } })

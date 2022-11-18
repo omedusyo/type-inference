@@ -11,8 +11,8 @@ import Element as E exposing (Element)
 import Element.Input as Input
 import Lib.Parser.Error as PError
 import Lib.State.StatefulWithErr as State
-import Ui.Control.Context as Context exposing (Config, Context)
-import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Control.Action as Context exposing (Action)
+import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.Style.Button as Button
 
 
@@ -49,9 +49,9 @@ type alias Model =
     Binding
 
 
-init : InitContext Msg Model
+init : Effect rootMsg Msg Model
 init =
-    InitContext.setModelTo
+    Effect.pure
         exampleBinding
 
 
@@ -138,7 +138,7 @@ type Msg
     | RunButtonClicked
 
 
-update : Msg -> Context rootMsg Msg Model
+update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         InputChanged input ->
@@ -175,8 +175,8 @@ update msg =
                 )
 
 
-view : Config -> Model -> Element Msg
-view config model =
+view : Model -> Element Msg
+view model =
     let
         heightPx =
             300

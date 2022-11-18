@@ -1,33 +1,33 @@
 module Ui.Tab.Help exposing (Model, Msg, init, update, view)
 
 import Element as E exposing (Element)
-import Ui.Control.Context as Context exposing (Config, Context)
-import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Control.Action as Context exposing (Action)
+import Ui.Control.Effect as Effect exposing (Effect)
+import Ui.Control.Config exposing (Config)
 
 
 type alias Model =
     {}
 
 
-init : InitContext Msg Model
+init : Effect rootMsg Msg Model
 init =
-    InitContext.setModelTo
-        {}
+    Effect.pure {}
 
 
 type Msg
     = Wat
 
 
-update : Msg -> Context rootMsg Msg Model
+update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         Wat ->
             Context.none
 
 
-view : Config -> Model -> Element Msg
-view config model =
+view : Model -> Element Msg
+view model =
     E.column [ E.width E.fill ]
         [ E.text ""
         , E.text "example: `\\{ p . match-pair $p { pair(x y) . pair($y $x) } }`"

@@ -11,34 +11,30 @@ import Element.Font as Font
 import Element.Input as Input
 import Lib.Cmd as Cmd
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, MemoryPointer, Value(..))
-import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, ControllerExample, LabelEnvironment, MachineState, RuntimeError(..))
+import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, LabelEnvironment, MachineState, RuntimeError(..))
 import RegisterMachine.MemoryState exposing (MemoryCell, MemoryError(..), MemoryState)
-import RegisterMachine.OperationEnvironment as OperationEnvironment
 import RegisterMachine.Stack as Stack exposing (Stack)
-import Ui.Control.Context as Context exposing (Config, Context)
-import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Control.Action as Context exposing (Action)
+import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.Element as E
 import Ui.Style.Button as Button
 
 
 type alias Model =
-    { initialControllerExample : ControllerExample
-    , runtime : Result CompilationError ( LabelEnvironment, ComputationStep ControlledMachineState ControlledMachineState )
+    { initialMachineResult : ComputationStep ControlledMachineState ControlledMachineState -- This is here so that we can reset
+    , labelEnv : LabelEnvironment
+    , machineResult : ComputationStep ControlledMachineState ControlledMachineState
     , memoryView : MemoryView
     , currentlyHighlightedCell : MemoryPointer
     }
 
 
-init : ControllerExample -> InitContext Msg Model
-init controllerExample =
-    let
-        compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
-        compiledMachine =
-            RegisterMachine.compileMachineFromControllerExample controllerExample OperationEnvironment.env
-    in
-    InitContext.setModelTo
-        { initialControllerExample = controllerExample
-        , runtime = compiledMachine |> Result.map (\( labelEnv, machine ) -> ( labelEnv, Continue machine ))
+init : LabelEnvironment -> ComputationStep ControlledMachineState ControlledMachineState -> Effect rootMsg Msg Model
+init labelEnv machineResult =
+    Effect.pure
+        { initialMachineResult = machineResult
+        , labelEnv = labelEnv
+        , machineResult = machineResult
         , memoryView = initMemoryView
         , currentlyHighlightedCell = centerOfMemoryView initMemoryView
         }
@@ -91,40 +87,30 @@ type Msg
 
 reset : Model -> Model
 reset model =
-    let
-        compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
-        compiledMachine =
-            RegisterMachine.compileMachineFromControllerExample model.initialControllerExample OperationEnvironment.env
-    in
     { model
-        | runtime = compiledMachine |> Result.map (\( labelEnv, machine ) -> ( labelEnv, Continue machine ))
+        | machineResult = model.initialMachineResult
         , memoryView = initMemoryView
         , currentlyHighlightedCell = centerOfMemoryView initMemoryView
     }
 
 
-update : (InstructionPointer -> Cmd rootMsg) -> Msg -> Context rootMsg Msg Model
+update : (InstructionPointer -> Cmd rootMsg) -> Msg -> Action rootMsg Msg Model
 update changeCurrentInstructionPointerCmd msg =
     let
-        updateRuntime : (ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState) -> Context rootMsg Msg Model
+        updateRuntime : (ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState) -> Action rootMsg Msg Model
         updateRuntime f =
             Context.update
-                (\({ runtime } as model) ->
-                    { model | runtime = runtime |> Result.map (\( labelEnv, resultMachine ) -> ( labelEnv, resultMachine |> RegisterMachine.andThen f )) }
+                (\({ machineResult } as model) ->
+                    { model | machineResult = machineResult |> RegisterMachine.andThen f }
                 )
 
         changeCurrentInstructionPointer : Model -> Cmd rootMsg
         changeCurrentInstructionPointer model =
-            case model.runtime of
-                Ok ( _, result ) ->
-                    case RegisterMachine.currentInstructionPointerFromComputationStep result of
-                        Just instructionPointer ->
-                            changeCurrentInstructionPointerCmd instructionPointer
+            case RegisterMachine.currentInstructionPointerFromComputationStep model.machineResult of
+                Just instructionPointer ->
+                    changeCurrentInstructionPointerCmd instructionPointer
 
-                        Nothing ->
-                            Cmd.none
-
-                _ ->
+                Nothing ->
                     Cmd.none
     in
     case msg of
@@ -169,8 +155,8 @@ update changeCurrentInstructionPointerCmd msg =
                 )
 
 
-view : Config -> Model -> Element Msg
-view config model =
+view : Model -> Element Msg
+view model =
     -- 1. I need to display all the registers
     -- 2. I need to display the instruction block with labels
     E.column [ E.alignTop ]
@@ -196,23 +182,31 @@ view config model =
                 , label = E.text "Step"
                 }
             ]
-        , case model.runtime of
-            Err compilationError ->
-                E.text (compilationErrorToString compilationError)
 
-            Ok ( _, RuntimeError runtimeError ) ->
+        -- TODO: Move to RegisterMachine
+        -- , case model.runtime of
+        --     Err compilationError ->
+        --         E.text (compilationErrorToString compilationError)
+        --     Ok ( _, RuntimeError runtimeError ) ->
+        --         E.text (runTimeErrorToString runtimeError)
+        --     Ok ( labelEnv, Halted { machineState } ) ->
+        --         viewMachineState model machineState labelEnv
+        --     Ok ( labelEnv, Continue { machineState } ) ->
+        --         viewMachineState model machineState labelEnv
+        , case model.machineResult of
+            RuntimeError runtimeError ->
                 E.text (runTimeErrorToString runtimeError)
 
-            Ok ( labelEnv, Halted { machineState } ) ->
-                viewMachineState model machineState labelEnv
+            Halted { machineState } ->
+                viewMachineState model machineState
 
-            Ok ( labelEnv, Continue { machineState } ) ->
-                viewMachineState model machineState labelEnv
+            Continue { machineState } ->
+                viewMachineState model machineState
         ]
 
 
-viewMachineState : Model -> MachineState -> LabelEnvironment -> Element Msg
-viewMachineState model machineState labelEnv =
+viewMachineState : Model -> MachineState -> Element Msg
+viewMachineState ({ labelEnv } as model) machineState =
     E.row [ E.spacing 30 ]
         [ E.column [ E.spacing 20, E.alignTop ]
             [ E.column []
