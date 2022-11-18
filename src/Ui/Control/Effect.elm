@@ -23,26 +23,26 @@ type alias Effect rootMsg msg model =
 pure : model -> Effect rootMsg msg model
 pure model =
     \_ ->
-        ( model, Cmd.none )
+        ( model, Cmd.none, [] )
 
 
 andThen : (model0 -> Effect rootMsg msg model1) -> Effect rootMsg msg model0 -> Effect rootMsg msg model1
 andThen f eff0 =
     \config ->
         let
-            ( model0, rootCmds0 ) =
+            ( model0, rootCmds0, notifications0 ) =
                 eff0 config
 
-            ( model1, rootCmds1 ) =
+            ( model1, rootCmds1, notifications1 ) =
                 f model0 config
         in
-        ( model1, Cmd.batch [ rootCmds0, rootCmds1 ] )
+        ( model1, Cmd.batch [ rootCmds0, rootCmds1 ], notifications0 ++ notifications1 )
 
 
 pureWithConfig : (Config rootMsg msg -> model) -> Effect rootMsg msg model
 pureWithConfig f =
     \config ->
-        ( f config, Cmd.none )
+        ( f config, Cmd.none, [] )
 
 
 getConfig : (Config rootMsg msg -> Effect rootMsg msg model) -> Effect rootMsg msg model
@@ -87,17 +87,17 @@ perform : Cmd msg -> Effect rootMsg msg model -> Effect rootMsg msg model
 perform cmd1 eff =
     \({ liftMsg } as config) ->
         let
-            ( model, rootCmds0 ) =
+            ( model, rootCmds0, notifications ) =
                 eff config
         in
-        ( model, Cmd.batch [ rootCmds0, cmd1 |> Cmd.map liftMsg ] )
+        ( model, Cmd.batch [ rootCmds0, cmd1 |> Cmd.map liftMsg ], notifications )
 
 
 performRoot : Cmd rootMsg -> Effect rootMsg msg model -> Effect rootMsg msg model
 performRoot rootMsg1 eff =
     \config ->
         let
-            ( model, rootCmds0 ) =
+            ( model, rootCmds0, notifications ) =
                 eff config
         in
-        ( model, Cmd.batch [ rootCmds0, rootMsg1 ] )
+        ( model, Cmd.batch [ rootCmds0, rootMsg1 ], notifications )

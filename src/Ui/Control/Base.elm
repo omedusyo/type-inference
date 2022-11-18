@@ -19,7 +19,7 @@ type alias Notification =
 
 
 type alias Effect rootMsg msg model =
-    Config rootMsg msg -> ( model, Cmd rootMsg )
+    Config rootMsg msg -> ( model, Cmd rootMsg, List Notification )
 
 
 type alias Action rootMsg msg model =

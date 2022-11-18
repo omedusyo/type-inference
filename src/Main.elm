@@ -22,7 +22,7 @@ type alias Model =
 initModel : ( Model, Cmd Msg )
 initModel =
     let
-        ( lambdaUiState, lambdaUiCmd ) =
+        ( lambdaUiState, lambdaUiCmd, notifications ) =
             LambdaUi.init Config.init
     in
     ( { lambdaUiState = lambdaUiState }
@@ -43,7 +43,7 @@ update msg model =
     case msg of
         LambdaUiMsg lambdaUiMsg ->
             let
-                ( lambdaUiState, cmd ) =
+                ( lambdaUiState, cmd, notifications ) =
                     LambdaUi.update lambdaUiMsg model.lambdaUiState (Config.init |> Config.contraMap LambdaUiMsg)
             in
             ( { model | lambdaUiState = lambdaUiState }, cmd )
