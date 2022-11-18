@@ -160,7 +160,7 @@ view : Model -> Element Msg
 view model =
     -- 1. I need to display all the registers
     -- 2. I need to display the instruction block with labels
-    E.column [ E.alignTop ]
+    E.column [ E.alignTop, E.width E.fill ]
         [ E.row []
             [ Input.button Button.buttonStyle
                 { onPress =
@@ -183,20 +183,10 @@ view model =
                 , label = E.text "Step"
                 }
             ]
-
-        -- TODO: Move to RegisterMachine
-        -- , case model.runtime of
-        --     Err compilationError ->
-        --         E.text (compilationErrorToString compilationError)
-        --     Ok ( _, RuntimeError runtimeError ) ->
-        --         E.text (runTimeErrorToString runtimeError)
-        --     Ok ( labelEnv, Halted { machineState } ) ->
-        --         viewMachineState model machineState labelEnv
-        --     Ok ( labelEnv, Continue { machineState } ) ->
-        --         viewMachineState model machineState labelEnv
         , case model.machineResult of
             RuntimeError runtimeError ->
-                E.text (runTimeErrorToString runtimeError)
+                E.column [ E.alignTop, E.width E.fill ]
+                    [ E.text (runTimeErrorToString runtimeError) ]
 
             Halted { machineState } ->
                 viewMachineState model machineState

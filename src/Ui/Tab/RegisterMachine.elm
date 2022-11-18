@@ -195,7 +195,10 @@ view model =
                     Runtime.view runtimeModel |> E.map RuntimeMsg
 
                 Err compilationError ->
-                    E.text "compilation error"
+                    E.column [ E.alignTop, E.width E.fill ]
+                        [ E.text
+                            (Runtime.compilationErrorToString compilationError)
+                        ]
             ]
         ]
 
