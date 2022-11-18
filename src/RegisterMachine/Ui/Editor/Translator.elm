@@ -1,4 +1,4 @@
-module RegisterMachine.Ui.Editor.Translator exposing (..)
+module RegisterMachine.Ui.Editor.Translator exposing (translateEditorInstruction, translateEditorInstructions)
 
 import Lib.ZipList as ZipList exposing (ZipList)
 import Maybe.Extra as Maybe
@@ -7,11 +7,8 @@ import RegisterMachine.Machine as RegisterMachine
 import RegisterMachine.Ui.Editor.Base as Editor
 
 
-translate : ZipList Editor.Instruction -> RegisterMachine.InstructionBlock
-translate instructions =
-    instructions
-        |> ZipList.toList
-        |> List.map translateInstruction
+
+-- ===helpers===
 
 
 unfinished : RegisterMachine.LabelOrInstruction
@@ -23,9 +20,17 @@ halt : RegisterMachine.LabelOrInstruction
 halt =
     RegisterMachine.Perform (RegisterMachine.Halt {})
 
+-- ===Translators===
 
-translateInstruction : Editor.Instruction -> RegisterMachine.LabelOrInstruction
-translateInstruction instruction =
+translateEditorInstructions : ZipList Editor.Instruction -> RegisterMachine.InstructionBlock
+translateEditorInstructions instructions =
+    instructions
+        |> ZipList.toList
+        |> List.map translateEditorInstruction
+
+
+translateEditorInstruction : Editor.Instruction -> RegisterMachine.LabelOrInstruction
+translateEditorInstruction instruction =
     case instruction of
         Editor.Instruction instructionKind nodes instructionValidity ->
             case instructionValidity of
@@ -206,6 +211,10 @@ translateInstruction instruction =
         Editor.FutureInstruction _ ->
             -- TODO: Refine the Editor.Instruction type so that I don't have to deal with it here
             Debug.todo "This should never happen"
+
+
+
+-- ===String Parsing===
 
 
 parseArgument : String -> Maybe Argument
