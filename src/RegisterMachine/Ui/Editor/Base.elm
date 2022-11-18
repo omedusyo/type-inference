@@ -56,6 +56,12 @@ type Node
     = Node NodeKind NodeValidity NodeExpectations String
 
 
+nodeInput : Node -> String
+nodeInput (Node _ _ _ input) =
+    input
+
+
+
 -- ===Instructions===
 
 
@@ -113,6 +119,7 @@ emptyNode nodeKind nodeExpectation =
 argNode : Node
 argNode =
     emptyNode Dynamic argExpectation
+
 
 
 -- ===Instruction Validation===

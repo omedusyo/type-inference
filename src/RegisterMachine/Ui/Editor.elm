@@ -12,6 +12,7 @@ import Json.Decode as Decode
 import Lib.ZipList as ZipList exposing (ZipList)
 import Lib.ZipListSelection as ZipListSelection exposing (ZipListSelection)
 import List.Nonempty as NonemptyList
+import RegisterMachine.Ui.Editor.Translator
 import RegisterMachine.Ui.Editor.Base as Base
     exposing
         ( HorizontalDirection(..)
