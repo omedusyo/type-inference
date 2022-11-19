@@ -20,7 +20,10 @@ halt : RegisterMachine.LabelOrInstruction
 halt =
     RegisterMachine.Perform (RegisterMachine.Halt {})
 
+
+
 -- ===Translators===
+
 
 translateEditorInstructions : ZipList Editor.Instruction -> RegisterMachine.InstructionBlock
 translateEditorInstructions instructions =
@@ -37,7 +40,12 @@ translateEditorInstruction instruction =
                 Editor.EveryNodeIsValid ->
                     case instructionKind of
                         Editor.LabelKind ->
-                            RegisterMachine.Label (Editor.nodeInput (ZipList.current nodes))
+                            case ZipList.toList nodes of
+                                [ labelNode ] ->
+                                    RegisterMachine.Label (Editor.nodeInput labelNode)
+
+                                _ ->
+                                    unfinished
 
                         Editor.OperationApplicationKind ->
                             case ZipList.toList nodes of
