@@ -58,10 +58,6 @@ type alias Model =
     , fragmentBoard : FragmentBoard
     , selectedInstructions : Maybe (ZipListSelection Instruction)
     , debugConsole : DebugConsole
-
-    -- ===dropdown test===
-    , dropdownModel : Dropdown.State Int
-    , selectedOption : Maybe Int
     }
 
 
@@ -243,8 +239,6 @@ init =
         , fragmentBoard = initFragmentBoard
         , selectedInstructions = Nothing
         , debugConsole = initDebugConsole
-        , dropdownModel = Dropdown.init "dropdown"
-        , selectedOption = Nothing
         }
 
 
