@@ -28,7 +28,7 @@ type alias Model =
 
     -- runtime
     , runtimeModel : Result CompilationError Runtime.Model
-    , currentInstructionPointerResult : Maybe InstructionPointer
+    , currentInstructionPointer : InstructionPointer
 
     -- editor
     , editorModel : Editor.Model
@@ -72,8 +72,7 @@ init =
             , controllerDropdownModel = Dropdown.init "controllers"
             , selectedController = defaultSelectedController
             , runtimeModel = runtimeModelResult
-            , -- TODO: Is 0 as the default instruction pointer reasonable?
-              currentInstructionPointerResult = Just 0
+            , currentInstructionPointer = 0
             , editorModel = editorModel
             }
         )
@@ -114,10 +113,10 @@ resetRuntime controllerExample =
                 Ok ( labelEnv, machine ) ->
                     Runtime.init labelEnv (Continue machine)
                         |> Effect.mapMsg RuntimeMsg
-                        |> Effect.map (\runtimeModel -> { model | runtimeModel = Ok runtimeModel, currentInstructionPointerResult = Just 0 })
+                        |> Effect.map (\runtimeModel -> { model | runtimeModel = Ok runtimeModel, currentInstructionPointer = 0 })
 
                 Err err ->
-                    Effect.pure { model | runtimeModel = Err err, currentInstructionPointerResult = Just 0 }
+                    Effect.pure { model | runtimeModel = Err err, currentInstructionPointer = 0 }
         )
 
 
@@ -139,7 +138,7 @@ update msg =
                 _ =
                     Debug.log "INSTRUCTION POINTER CHANGES" instructionPointer
             in
-            Action.from (\model -> { model | currentInstructionPointerResult = Just instructionPointer })
+            Action.from (\model -> { model | currentInstructionPointer = instructionPointer })
 
         ControllerPicked maybeControllerExample ->
             case maybeControllerExample of
@@ -183,10 +182,9 @@ update msg =
 
 view : Model -> Element Msg
 view model =
-    -- 1. I need to display all the registers
-    -- 2. I need to display the instruction block with labels
     E.column [ E.width E.fill, E.spacing 15 ]
-        [ if shouldDisplayEditor then
+        [ -- TODO: Remove
+          if shouldDisplayEditor then
             E.el [ Border.width 1, E.width E.fill ] (Editor.view model.editorModel |> E.map EditorMsg)
 
           else
@@ -201,17 +199,7 @@ view model =
         , E.row [ E.width E.fill, E.spacing 30 ]
             [ -- ===Instructions===
               E.column [ E.width E.fill, E.alignTop, E.alignLeft ]
-                [ case model.currentInstructionPointerResult of
-                    Nothing ->
-                        -- TODO: Note that here we loose compilation error information
-                        --       We need to somehow also isolate the compilation from runtime.
-                        --       Compilation is the responsibility of the editor and not the simulator?
-                        -- Err compilationError ->
-                        --     E.text (compilationErrorToString compilationError)
-                        E.text "error?"
-
-                    Just currentInstructionPointer ->
-                        RegisterMachineUI.viewInstructions currentInstructionPointer model.selectedController.instructionBlock
+                [ RegisterMachineUI.viewInstructions model.currentInstructionPointer model.selectedController.instructionBlock
                 ]
             , -- ===Runtime State===
               case model.runtimeModel of
