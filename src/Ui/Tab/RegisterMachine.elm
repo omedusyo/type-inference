@@ -7,13 +7,13 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, Value(..))
+import List.Extra as List
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
 import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, ControllerExample, LabelEnvironment, RuntimeError(..))
 import RegisterMachine.MemoryState exposing (MemoryError(..))
 import RegisterMachine.OperationEnvironment as OperationEnvironment
 import RegisterMachine.Ui.Editor as Editor
-import RegisterMachine.Ui.MachineInstructions as RegisterMachineUI
 import RegisterMachine.Ui.Runtime as Runtime
 import Ui.Control.Action as Action exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)
@@ -33,11 +33,6 @@ type alias Model =
     -- editor
     , editorModel : Editor.Model
     }
-
-
-shouldDisplayEditor : Bool
-shouldDisplayEditor =
-    True
 
 
 init : Effect rootMsg Msg Model
@@ -60,7 +55,7 @@ init =
 
         defaultSelectedController : ControllerExample
         defaultSelectedController =
-            Controllers.controller7_fibonacci_recursive
+            controllers |> List.getAt 0 |> Maybe.withDefault Controllers.controller0_gcd
 
         compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
         compiledMachine =
@@ -76,7 +71,7 @@ init =
             , editorModel = editorModel
             }
         )
-        |> Effect.ooo (Editor.init |> Effect.mapMsg EditorMsg)
+        |> Effect.ooo (Editor.init defaultSelectedController.instructionBlock |> Effect.mapMsg EditorMsg)
         |> Effect.ooo
             (case compiledMachine of
                 Ok ( labelEnv, machine ) ->
@@ -120,6 +115,16 @@ resetRuntime controllerExample =
         )
 
 
+resetEditor : ControllerExample -> Action rootMsg Msg Model
+resetEditor controllerExample =
+    Action.fromEffect
+        (\model ->
+            Editor.init controllerExample.instructionBlock
+                |> Effect.mapMsg EditorMsg
+                |> Effect.map (\editorModel -> { model | editorModel = editorModel })
+        )
+
+
 update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
@@ -145,6 +150,7 @@ update msg =
                 Just controllerExample ->
                     Action.from (\model -> { model | selectedController = controllerExample })
                         |> Action.thenAction (resetRuntime controllerExample)
+                        |> Action.thenAction (resetEditor controllerExample)
 
                 Nothing ->
                     Action.none
@@ -183,13 +189,7 @@ update msg =
 view : Model -> Element Msg
 view model =
     E.column [ E.width E.fill, E.spacing 15 ]
-        [ -- TODO: Remove
-          if shouldDisplayEditor then
-            E.el [ Border.width 1, E.width E.fill ] (Editor.view model.editorModel |> E.map EditorMsg)
-
-          else
-            E.text ""
-        , E.row []
+        [ E.row []
             [ Dropdown.view dropdownConfig model model.controllerDropdownModel
             , Input.button Button.whiteButtonStyle
                 { onPress = Just NewProgramButtonClicked
@@ -198,9 +198,7 @@ view model =
             ]
         , E.row [ E.width E.fill, E.spacing 30 ]
             [ -- ===Instructions===
-              E.column [ E.width E.fill, E.alignTop, E.alignLeft ]
-                [ RegisterMachineUI.viewInstructions model.currentInstructionPointer model.selectedController.instructionBlock
-                ]
+              E.el [ E.width E.fill, E.alignTop, E.alignLeft ] (Editor.view model.currentInstructionPointer model.editorModel |> E.map EditorMsg)
             , -- ===Runtime State===
               case model.runtimeModel of
                 Ok runtimeModel ->

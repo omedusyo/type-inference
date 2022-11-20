@@ -2,7 +2,6 @@ module RegisterMachine.Ui.Editor exposing (..)
 
 import Browser.Events as BE
 import Dict exposing (Dict)
-import Dropdown
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -12,6 +11,8 @@ import Json.Decode as Decode
 import Lib.ZipList as ZipList exposing (ZipList)
 import Lib.ZipListSelection as ZipListSelection exposing (ZipListSelection)
 import List.Nonempty as NonemptyList
+import RegisterMachine.Base as RegisterMachine
+import RegisterMachine.Machine as RegisterMachine
 import RegisterMachine.Ui.Editor.Base as Base
     exposing
         ( HorizontalDirection(..)
@@ -29,7 +30,7 @@ import RegisterMachine.Ui.Editor.Color as Color
 import RegisterMachine.Ui.Editor.EditorToMachineInstructionsTranslator
 import RegisterMachine.Ui.Editor.MachineInstructionsToEditorTranslator
 import RegisterMachine.Ui.Editor.Validation as Validation exposing (validatedInstruction)
-import RegisterMachine.Ui.MachineInstructions
+import RegisterMachine.Ui.MachineInstructions as RegisterMachineUI
 import Ui.Control.Action as Context exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.InputCell as E
@@ -59,7 +60,23 @@ type alias Model =
     , fragmentBoard : FragmentBoard
     , selectedInstructions : Maybe (ZipListSelection Instruction)
     , debugConsole : DebugConsole
+    , instructionBlock : RegisterMachine.InstructionBlock
     }
+
+
+init : RegisterMachine.InstructionBlock -> Effect rootMsg Msg Model
+init instructionBlock =
+    Effect.pure
+        { instructions = ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
+
+        -- TODO: What should be the default mode?
+        -- , instructionMode = TraversingInstructions TraversingNodes
+        , instructionMode = Run
+        , fragmentBoard = initFragmentBoard
+        , selectedInstructions = Nothing
+        , debugConsole = initDebugConsole
+        , instructionBlock = instructionBlock
+        }
 
 
 
@@ -230,17 +247,6 @@ exampleInstruction1 =
 exampleInstruction2 : Instruction
 exampleInstruction2 =
     Instruction LabelKind (ZipList.fromList lbl []) initialInstructionValidity
-
-
-init : Effect rootMsg Msg Model
-init =
-    Effect.pure
-        { instructions = ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
-        , instructionMode = TraversingInstructions TraversingNodes
-        , fragmentBoard = initFragmentBoard
-        , selectedInstructions = Nothing
-        , debugConsole = initDebugConsole
-        }
 
 
 type Msg
@@ -695,8 +701,8 @@ update msg =
             Context.from (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } })
 
 
-view : Model -> Element Msg
-view ({ instructions } as model) =
+view : RegisterMachine.InstructionPointer -> Model -> Element Msg
+view currentInstructionPointer ({ instructions } as model) =
     E.column []
         [ case model.instructionMode of
             TraversingInstructions nodeMode ->
@@ -715,52 +721,56 @@ view ({ instructions } as model) =
 
             Run ->
                 E.el [] (E.text "Running")
-        , E.column []
+        , E.el []
             (case model.instructionMode of
                 Run ->
-                    [ E.text "...compile the instructions..." ]
+                    RegisterMachineUI.viewInstructions currentInstructionPointer model.instructionBlock
 
                 _ ->
-                    let
-                        bgColor =
-                            E.rgb255 215 215 215
-                    in
-                    case model.instructionMode of
-                        SelectingInstructions ->
-                            case model.selectedInstructions of
-                                Just instructionSelection ->
-                                    instructionSelection
-                                        |> ZipListSelection.mapToList
+                    E.column []
+                        [ let
+                            bgColor =
+                                E.rgb255 215 215 215
+                          in
+                          E.column []
+                            (case model.instructionMode of
+                                SelectingInstructions ->
+                                    case model.selectedInstructions of
+                                        Just instructionSelection ->
+                                            instructionSelection
+                                                |> ZipListSelection.mapToList
+                                                    { current =
+                                                        \instruction ->
+                                                            E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = False } model.instructionMode instruction)
+                                                    , others =
+                                                        \instruction ->
+                                                            E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
+                                                    }
+
+                                        Nothing ->
+                                            [ viewKeyword "---should not be ever displayed---" ]
+
+                                _ ->
+                                    instructions
+                                        |> ZipList.mapToList
                                             { current =
                                                 \instruction ->
-                                                    E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = False } model.instructionMode instruction)
+                                                    E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = True } model.instructionMode instruction)
                                             , others =
                                                 \instruction ->
                                                     E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
                                             }
+                            )
 
-                                Nothing ->
-                                    [ viewKeyword "---should not be ever displayed---" ]
+                        -- Fragment Board
+                        , E.el [] (E.text "===Fragment Board===")
+                        , viewFragmentBoard model
 
-                        _ ->
-                            instructions
-                                |> ZipList.mapToList
-                                    { current =
-                                        \instruction ->
-                                            E.el [ Background.color bgColor ] (viewInstruction { isInstructionSelected = True, isNodeSelected = True } model.instructionMode instruction)
-                                    , others =
-                                        \instruction ->
-                                            E.el [] (viewInstruction { isInstructionSelected = False, isNodeSelected = False } model.instructionMode instruction)
-                                    }
+                        -- Debugging
+                        , E.el [] (E.text "===Debugging===")
+                        , viewDebuggingConsole model
+                        ]
             )
-
-        -- Fragment Board
-        , E.el [] (E.text "===Fragment Board===")
-        , viewFragmentBoard model
-
-        -- Debugging
-        , E.el [] (E.text "===Debugging===")
-        , viewDebuggingConsole model
         ]
 
 
@@ -1292,7 +1302,7 @@ subscriptions model =
 
                                 Nothing ->
                                     case keyCode of
-                                        "Escape" ->
+                                        "e" ->
                                             Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
 
                                         _ ->
