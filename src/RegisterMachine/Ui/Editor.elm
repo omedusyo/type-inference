@@ -576,28 +576,28 @@ update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         InstructionMovement direction ->
-            Context.update (moveInstruction direction)
+            Context.from (moveInstruction direction)
 
         SwapInstruction direction ->
-            Context.update (swapInstruction direction)
+            Context.from (swapInstruction direction)
 
         InstructionEdit ->
-            Context.update setModeToInsertInstruction
+            Context.from setModeToInsertInstruction
 
         InstructionInsertion direction ->
-            Context.update (insertFutureInstruction direction >> moveInstruction direction >> setModeToInsertInstruction)
+            Context.from (insertFutureInstruction direction >> moveInstruction direction >> setModeToInsertInstruction)
 
         ChangeInstructionTo instructionKind ->
-            Context.update (changeInstructionWithoutValidationTo instructionKind >> validateCurrentInstruction)
+            Context.from (changeInstructionWithoutValidationTo instructionKind >> validateCurrentInstruction)
 
         NodeMovement direction ->
-            Context.update (traverseNodes direction)
+            Context.from (traverseNodes direction)
 
         DeleteInstruction ->
-            Context.update (\model -> { model | instructions = ZipList.deleteAndFocusRight model.instructions })
+            Context.from (\model -> { model | instructions = ZipList.deleteAndFocusRight model.instructions })
 
         ConvertAssignmentToOperation ->
-            Context.update
+            Context.from
                 (updateCurrentInstructionWithoutValidation
                     (\instruction ->
                         let
@@ -618,42 +618,42 @@ update msg =
                 )
 
         DuplicateInstruction direction ->
-            Context.update (duplicateInstruction direction >> moveInstruction direction)
+            Context.from (duplicateInstruction direction >> moveInstruction direction)
 
         JumpToBoundaryInstruction direction ->
-            Context.update (jumpToBoundaryInstruction direction)
+            Context.from (jumpToBoundaryInstruction direction)
 
         SetModeTo instructionMode ->
             case instructionMode of
                 TraversingInstructions nodeMode ->
                     case nodeMode of
                         TraversingNodes ->
-                            Context.update setModeToTraversing
+                            Context.from setModeToTraversing
 
                         EditingNode ->
-                            Context.update setModeToEditing
+                            Context.from setModeToEditing
 
                 InsertingInstruction ->
-                    Context.update setModeToInsertInstruction
+                    Context.from setModeToInsertInstruction
 
                 SelectingInstructions ->
-                    Context.update setModeToSelectInstructions
+                    Context.from setModeToSelectInstructions
 
                 Run ->
-                    Context.update setModeToRun
+                    Context.from setModeToRun
 
         NodeEdit str ->
             -- TODO: Node validation
-            Context.update (updateCurrentNodeWithoutValidation (\(Node nodeKind nodeValidation nodeExpectation _) -> Node nodeKind nodeValidation nodeExpectation str))
+            Context.from (updateCurrentNodeWithoutValidation (\(Node nodeKind nodeValidation nodeExpectation _) -> Node nodeKind nodeValidation nodeExpectation str))
 
         NodeInsertion direction ->
-            Context.update (insertAndEditNodeWithoutValidation direction)
+            Context.from (insertAndEditNodeWithoutValidation direction)
 
         DeleteNode ->
-            Context.update deleteCurrentNodeWithValidation
+            Context.from deleteCurrentNodeWithValidation
 
         PushFragment ->
-            Context.update
+            Context.from
                 (\model ->
                     let
                         currentInstruction =
@@ -663,22 +663,22 @@ update msg =
                 )
 
         PasteFragment direction ->
-            Context.update (pasteFragment direction)
+            Context.from (pasteFragment direction)
 
         PasteAndPopFragment direction ->
-            Context.update (pasteAndPopFragment direction)
+            Context.from (pasteAndPopFragment direction)
 
         FragmentMovement direction ->
-            Context.update (moveFragment direction)
+            Context.from (moveFragment direction)
 
         SelectionMovement direction ->
-            Context.update (selectionMovement direction)
+            Context.from (selectionMovement direction)
 
         JumpToBoundaryNode direction ->
-            Context.update (jumpToBoundaryNode direction)
+            Context.from (jumpToBoundaryNode direction)
 
         DebugCurrentInstruction ->
-            Context.update
+            Context.from
                 (\({ debugConsole } as model) ->
                     let
                         currentInstruction =
@@ -691,7 +691,7 @@ update msg =
                 )
 
         ResetDebugConsole ->
-            Context.update (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } })
+            Context.from (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } })
 
 
 view : Model -> Element Msg

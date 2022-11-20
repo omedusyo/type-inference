@@ -5,6 +5,7 @@ import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
+import Element.Input as Input
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
@@ -16,6 +17,7 @@ import RegisterMachine.Ui.Runtime as Runtime
 import Ui.Control.Action as Action exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.Element as E
+import Ui.Style.Button as Button
 
 
 type alias Model =
@@ -93,8 +95,29 @@ type Msg
       -- ===Controllers Dropdown===
     | ControllerPicked (Maybe ControllerExample)
     | ControllersDropdownMsg (Dropdown.Msg ControllerExample)
+    | NewProgramButtonClicked
       -- editor
     | EditorMsg Editor.Msg
+
+
+resetRuntime : ControllerExample -> Action rootMsg Msg Model
+resetRuntime controllerExample =
+    Action.fromEffect
+        (\model ->
+            let
+                compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
+                compiledMachine =
+                    RegisterMachine.compileMachineFromControllerExample controllerExample OperationEnvironment.env
+            in
+            case compiledMachine of
+                Ok ( labelEnv, machine ) ->
+                    Runtime.init labelEnv (Continue machine)
+                        |> Effect.mapMsg RuntimeMsg
+                        |> Effect.map (\runtimeModel -> { model | runtimeModel = Ok runtimeModel, currentInstructionPointerResult = Just 0 })
+
+                Err err ->
+                    Effect.pure { model | runtimeModel = Err err, currentInstructionPointerResult = Just 0 }
+        )
 
 
 update : Msg -> Action rootMsg Msg Model
@@ -115,41 +138,38 @@ update msg =
                 _ =
                     Debug.log "INSTRUCTION POINTER CHANGES" instructionPointer
             in
-            Action.update (\model -> { model | currentInstructionPointerResult = Just instructionPointer })
+            Action.from (\model -> { model | currentInstructionPointerResult = Just instructionPointer })
 
         ControllerPicked maybeControllerExample ->
             case maybeControllerExample of
                 Just controllerExample ->
-                    Action.update (\model -> { model | selectedController = controllerExample })
-                        |> Action.updateFromEffect
-                            (\model ->
-                                let
-                                    compiledMachine : Result CompilationError ( LabelEnvironment, ControlledMachineState )
-                                    compiledMachine =
-                                        RegisterMachine.compileMachineFromControllerExample controllerExample OperationEnvironment.env
-                                in
-                                case compiledMachine of
-                                    Ok ( labelEnv, machine ) ->
-                                        Runtime.init labelEnv (Continue machine)
-                                            |> Effect.mapMsg RuntimeMsg
-                                            |> Effect.map (\runtimeModel -> { model | runtimeModel = Ok runtimeModel })
-
-                                    Err err ->
-                                        Effect.pure { model | runtimeModel = Err err }
-                            )
-                        |> Action.updateThen (\model -> { model | currentInstructionPointerResult = Just 0 })
+                    Action.from (\model -> { model | selectedController = controllerExample })
+                        |> Action.thenAction (resetRuntime controllerExample)
 
                 Nothing ->
                     Action.none
 
         ControllersDropdownMsg dropdownMsg ->
-            Action.updateWithCommand
+            Action.fromWithCommand
                 (\model ->
                     let
                         ( newDropdownModel, cmd ) =
                             Dropdown.update dropdownConfig dropdownMsg model model.controllerDropdownModel
                     in
                     ( { model | controllerDropdownModel = newDropdownModel }, cmd )
+                )
+
+        NewProgramButtonClicked ->
+            Action.from
+                (\model ->
+                    let
+                        newController =
+                            RegisterMachine.emptyControllerExample
+                    in
+                    { model
+                        | controllers = newController :: model.controllers
+                        , selectedController = newController
+                    }
                 )
 
         EditorMsg editorMsg ->
@@ -170,7 +190,13 @@ view model =
 
           else
             E.text ""
-        , Dropdown.view dropdownConfig model model.controllerDropdownModel
+        , E.row []
+            [ Dropdown.view dropdownConfig model model.controllerDropdownModel
+            , Input.button Button.whiteButtonStyle
+                { onPress = Just NewProgramButtonClicked
+                , label = E.text "New"
+                }
+            ]
         , E.row [ E.width E.fill, E.spacing 30 ]
             [ -- ===Instructions===
               E.column [ E.width E.fill, E.alignTop, E.alignLeft ]

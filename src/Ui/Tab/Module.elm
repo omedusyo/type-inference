@@ -161,7 +161,7 @@ update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         ModuleInputChanged input ->
-            Context.update
+            Context.from
                 (\model ->
                     { model
                         | moduleInput = input
@@ -172,7 +172,7 @@ update msg =
                 )
 
         ModuleRunButtonClicked ->
-            Context.update
+            Context.from
                 (\model ->
                     { model
                         | evaledTerm = Nothing
@@ -183,7 +183,7 @@ update msg =
                 )
 
         ReplInputChanged input ->
-            Context.update
+            Context.from
                 (\model ->
                     let
                         parsedTerm =
@@ -197,7 +197,7 @@ update msg =
                 )
 
         ReplRunButtonClicked ->
-            Context.update
+            Context.from
                 (\model ->
                     case model.parsedTerm of
                         Just (Ok term) ->

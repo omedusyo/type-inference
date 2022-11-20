@@ -6,13 +6,20 @@ import Lib.Result as Result
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Instruction(..), InstructionPointer, Label, MachineInstruction(..), MemoryPointer, OperationArgument(..), OperationName, Register, Value(..))
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryError, MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
-import Set exposing (Set)
 
 
 type alias ControllerExample =
     { name : String
     , initialRegisters : List ( String, Value )
     , instructionBlock : InstructionBlock
+    }
+
+
+emptyControllerExample : ControllerExample
+emptyControllerExample =
+    { name = "(new)"
+    , initialRegisters = []
+    , instructionBlock = []
     }
 
 

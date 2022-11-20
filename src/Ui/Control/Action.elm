@@ -1,30 +1,25 @@
 module Ui.Control.Action exposing
     ( Action
     , command
-    , compose
+    , thenAction
     , embed
     , embedIfOk
+    , from
+    , fromEffect
+    , fromWithCommand
+    , fromWithRootCommand
     , getConfig
     , ifOk
     , liftMsgToCmd
     , mapMsg
     , none
-    , performCmd
-    , performCmdWithModel
-    , performMsg
-    , performMsgWithModel
-    , performRootCmd
-    , performRootCmdWithModel
-    , performRootMsg
-    , performRootMsgWithModel
     , rootCommand
     , setModelTo
-    , update
-    , updateFromEffect
-    , updateThen
-    , updateWithCommand
-    , updateWithCommandThen
-    , updateWithRootCommand
+    , thenCommand
+    , thenRootCommand
+    , thenEffect
+    , then_
+    , thenWithCommand
     )
 
 import Ui.Control.Base as Base exposing (Config, Effect)
@@ -41,14 +36,14 @@ getConfig f =
         Effect.getConfig (\config -> f config model)
 
 
-update : (model -> model) -> Action rootMsg msg model
-update f =
+from : (model -> model) -> Action rootMsg msg model
+from f =
     \model ->
         Effect.pure (f model)
 
 
-updateWithCommand : (model -> ( model, Cmd msg )) -> Action rootMsg msg model
-updateWithCommand f =
+fromWithCommand : (model -> ( model, Cmd msg )) -> Action rootMsg msg model
+fromWithCommand f =
     \model ->
         let
             ( newModel, cmd ) =
@@ -58,8 +53,13 @@ updateWithCommand f =
             |> Effect.perform cmd
 
 
-updateWithRootCommand : (model -> ( model, Cmd rootMsg )) -> Action rootMsg msg model
-updateWithRootCommand f =
+fromEffect : (model -> Effect rootMsg msg model) -> Action rootMsg msg model
+fromEffect f =
+    f
+
+
+fromWithRootCommand : (model -> ( model, Cmd rootMsg )) -> Action rootMsg msg model
+fromWithRootCommand f =
     \model ->
         let
             ( newModel, rootCmd ) =
@@ -97,65 +97,35 @@ none =
 -- ===Composition===
 
 
-compose : Action rootMsg msg model -> Action rootMsg msg model -> Action rootMsg msg model
-compose actionSecond actionFirst =
+thenAction : Action rootMsg msg model -> Action rootMsg msg model -> Action rootMsg msg model
+thenAction actionSecond actionFirst =
     \model0 ->
         actionFirst model0 |> Effect.andThen actionSecond
 
 
-performCmd : Cmd msg -> Action rootMsg msg model -> Action rootMsg msg model
-performCmd cmd action =
-    action |> compose (command cmd)
+thenCommand : (model -> Cmd msg) -> Action rootMsg msg model -> Action rootMsg msg model
+thenCommand f action =
+    action |> thenAction (\model -> Effect.pure model |> Effect.perform (f model))
 
 
-performRootCmd : Cmd rootMsg -> Action rootMsg msg model -> Action rootMsg msg model
-performRootCmd rootCmd action =
-    action |> compose (rootCommand rootCmd)
+thenRootCommand : (model -> Cmd rootMsg) -> Action rootMsg msg model -> Action rootMsg msg model
+thenRootCommand f action =
+    action |> thenAction (\model -> Effect.pure model |> Effect.performRoot (f model))
 
 
-performCmdWithModel : (model -> Cmd msg) -> Action rootMsg msg model -> Action rootMsg msg model
-performCmdWithModel f action =
-    action |> compose (\model -> Effect.pure model |> Effect.perform (f model))
+then_ : (model -> model) -> Action rootMsg msg model -> Action rootMsg msg model
+then_ f action =
+    action |> thenAction (from f)
 
 
-performRootCmdWithModel : (model -> Cmd rootMsg) -> Action rootMsg msg model -> Action rootMsg msg model
-performRootCmdWithModel f action =
-    action |> compose (\model -> Effect.pure model |> Effect.performRoot (f model))
+thenWithCommand : (model -> ( model, Cmd msg )) -> Action rootMsg msg model -> Action rootMsg msg model
+thenWithCommand f action =
+    action |> thenAction (fromWithCommand f)
 
 
-performRootMsgWithModel : (model -> rootMsg) -> Action rootMsg msg model -> Action rootMsg msg model
-performRootMsgWithModel f =
-    performRootCmdWithModel (Base.msgToCmd << f)
-
-
-performMsgWithModel : (model -> msg) -> Action rootMsg msg model -> Action rootMsg msg model
-performMsgWithModel f =
-    performCmdWithModel (Base.msgToCmd << f)
-
-
-performMsg : msg -> Action rootMsg msg model -> Action rootMsg msg model
-performMsg msg =
-    performCmd (Base.msgToCmd msg)
-
-
-performRootMsg : rootMsg -> Action rootMsg msg model -> Action rootMsg msg model
-performRootMsg rootMsg =
-    performRootCmd (Base.msgToCmd rootMsg)
-
-
-updateThen : (model -> model) -> Action rootMsg msg model -> Action rootMsg msg model
-updateThen f action =
-    action |> compose (update f)
-
-
-updateWithCommandThen : (model -> ( model, Cmd msg )) -> Action rootMsg msg model -> Action rootMsg msg model
-updateWithCommandThen f action =
-    action |> compose (updateWithCommand f)
-
-
-updateFromEffect : (model -> Effect rootMsg msg model) -> Action rootMsg msg model -> Action rootMsg msg model
-updateFromEffect f action =
-    action |> compose f
+thenEffect : (model -> Effect rootMsg msg model) -> Action rootMsg msg model -> Action rootMsg msg model
+thenEffect f action =
+    action |> thenAction f
 
 
 setModelTo : model -> Action rootMsg msg model

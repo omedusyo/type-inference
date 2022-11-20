@@ -142,7 +142,7 @@ update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         InputChanged input ->
-            Context.update
+            Context.from
                 (\model ->
                     { model
                         | input = input
@@ -153,7 +153,7 @@ update msg =
                 )
 
         RunButtonClicked ->
-            Context.update
+            Context.from
                 (\model ->
                     case model.parsedTerm of
                         Just (Ok term) ->
@@ -164,7 +164,7 @@ update msg =
                 )
 
         InferButtonClicked ->
-            Context.update
+            Context.from
                 (\model ->
                     case model.parsedTerm of
                         Just (Ok term) ->

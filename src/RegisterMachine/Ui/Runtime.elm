@@ -99,7 +99,7 @@ update changeCurrentInstructionPointerCmd msg =
     let
         updateRuntime : (ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState) -> Action rootMsg Msg Model
         updateRuntime f =
-            Context.update
+            Context.from
                 (\({ machineResult } as model) ->
                     { model | machineResult = machineResult |> RegisterMachine.andThen f }
                 )
@@ -115,23 +115,23 @@ update changeCurrentInstructionPointerCmd msg =
     in
     case msg of
         Reset ->
-            Context.update reset
-                |> Context.performRootCmdWithModel changeCurrentInstructionPointer
+            Context.from reset
+                |> Context.thenRootCommand changeCurrentInstructionPointer
 
         StepUntilHalted ->
             updateRuntime RegisterMachine.stepUntilHalted
-                |> Context.performRootCmdWithModel changeCurrentInstructionPointer
+                |> Context.thenRootCommand changeCurrentInstructionPointer
 
         StepUntilNextJump ->
             updateRuntime RegisterMachine.stepUntilNextJump
-                |> Context.performRootCmdWithModel changeCurrentInstructionPointer
+                |> Context.thenRootCommand changeCurrentInstructionPointer
 
         Step ->
             updateRuntime RegisterMachine.step
-                |> Context.performRootCmdWithModel changeCurrentInstructionPointer
+                |> Context.thenRootCommand changeCurrentInstructionPointer
 
         MemoryPointerClicked p ->
-            Context.update
+            Context.from
                 (\model ->
                     let
                         newMemoryView =
@@ -144,7 +144,7 @@ update changeCurrentInstructionPointerCmd msg =
                 )
 
         ShiftMemoryViewBy delta ->
-            Context.update
+            Context.from
                 (\model ->
                     let
                         newMemoryView =

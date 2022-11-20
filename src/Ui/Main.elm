@@ -88,7 +88,7 @@ update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         ChangeTab tab ->
-            Context.update (\model -> { model | tab = tab })
+            Context.from (\model -> { model | tab = tab })
 
         HelpMsg helpMsg ->
             Help.update helpMsg
