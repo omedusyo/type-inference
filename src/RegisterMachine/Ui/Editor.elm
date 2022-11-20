@@ -12,7 +12,6 @@ import Json.Decode as Decode
 import Lib.ZipList as ZipList exposing (ZipList)
 import Lib.ZipListSelection as ZipListSelection exposing (ZipListSelection)
 import List.Nonempty as NonemptyList
-import RegisterMachine.Ui.Editor.Translator
 import RegisterMachine.Ui.Editor.Base as Base
     exposing
         ( HorizontalDirection(..)
@@ -27,6 +26,8 @@ import RegisterMachine.Ui.Editor.Base as Base
         , initialInstructionValidity
         )
 import RegisterMachine.Ui.Editor.Color as Color
+import RegisterMachine.Ui.Editor.EditorToMachineInstructionsTranslator
+import RegisterMachine.Ui.Editor.MachineInstructionsToEditorTranslator
 import RegisterMachine.Ui.Editor.Validation as Validation exposing (validatedInstruction)
 import Ui.Control.Action as Context exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)

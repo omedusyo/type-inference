@@ -1,4 +1,4 @@
-module RegisterMachine.Ui.Editor.Translator exposing (translateEditorInstruction, translateEditorInstructions)
+module RegisterMachine.Ui.Editor.EditorToMachineInstructionsTranslator exposing (translateEditorInstruction, translateEditorInstructions)
 
 import Lib.ZipList as ZipList exposing (ZipList)
 import Maybe.Extra as Maybe

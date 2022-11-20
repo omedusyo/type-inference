@@ -116,6 +116,11 @@ emptyNode nodeKind nodeExpectation =
     Node nodeKind UnfinishedNode nodeExpectation ""
 
 
+
+-- TODO: We need to make a distinction between `regularArgumentNode` and `operationArgumenNode` since the latter right now doesn't allow labels.
+--       Or alternativaly expand the operation arguments to include labels.
+
+
 argNode : Node
 argNode =
     emptyNode Dynamic argExpectation

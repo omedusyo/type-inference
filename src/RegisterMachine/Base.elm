@@ -114,7 +114,7 @@ type
     | MarkAsMoved MarkAsMovedInput
     | SwapMemory SwapMemoryInput
       -- dev-mode instructions
-    | Unfinished UninishedInput
+    | Unfinished UnfinishedInput
 
 
 type
@@ -153,7 +153,7 @@ type
     | MMarkAsMoved MarkAsMovedInput
     | MSwapMemory SwapMemoryInput
       -- dev-mode instructions
-    | MUnfinished UninishedInput
+    | MUnfinished UnfinishedInput
 
 
 
@@ -302,5 +302,5 @@ type alias SwapMemoryInput =
 -- dev-mode instructions
 
 
-type alias UninishedInput =
+type alias UnfinishedInput =
     {}

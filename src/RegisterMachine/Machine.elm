@@ -842,7 +842,7 @@ swapMemory _ ({ memory } as machineState) =
     advance { machineState | memory = { memory | memoryInUse = twoFlip memory.memoryInUse } }
 
 
-unfinished : RegisterMachine.UninishedInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+unfinished : RegisterMachine.UnfinishedInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
 unfinished _ machineState =
     -- TODO: What should we do?
     --       For now just increment the instruction pointer.
