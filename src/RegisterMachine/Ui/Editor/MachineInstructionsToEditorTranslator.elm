@@ -25,10 +25,17 @@ translateInstruction instruction =
     let
         -- ===Instructions===
         assign : Editor.Node -> Editor.Node -> Editor.Instruction
-        assign sourceNode targetNode =
+        assign targetNode sourceNode =
             Editor.Instruction
                 Editor.AssignmentKind
-                (ZipList.fromList sourceNode [ targetNode ])
+                (ZipList.fromList targetNode [ sourceNode ])
+                Editor.EveryNodeIsValid
+
+        assignOpApplication : Editor.Node -> Editor.Node -> List Editor.Node -> Editor.Instruction
+        assignOpApplication sourceNode targetNode argNodes =
+            Editor.Instruction
+                Editor.AssignmentKind
+                (ZipList.fromList sourceNode (targetNode :: argNodes))
                 Editor.EveryNodeIsValid
 
         jump : Editor.Node -> Editor.Instruction
@@ -54,9 +61,14 @@ translateInstruction instruction =
 
         -- ===Nodes===
         -- assignment
-        registerNameNode : Editor.NodeKind -> RegisterMachine.Register -> Editor.Node
-        registerNameNode nodeKind register =
-            Editor.Node nodeKind (Editor.ValidNode Editor.RegisterName) Editor.registerExpectation register
+        -- TODO: Why parametrize nodeKind for non-arguments?
+        registerNameNode : RegisterMachine.Register -> Editor.Node
+        registerNameNode register =
+            Editor.Node Editor.Static (Editor.ValidNode Editor.RegisterName) Editor.registerExpectation register
+
+        opNameNode : RegisterMachine.OperationName -> Editor.Node
+        opNameNode opName =
+            Editor.Node Editor.Static (Editor.ValidNode Editor.OperationName) Editor.operationNameExpectation opName
 
         argRegisterUseNode : Editor.NodeKind -> RegisterMachine.Register -> Editor.Node
         argRegisterUseNode nodeKind register =
@@ -91,16 +103,28 @@ translateInstruction instruction =
     in
     case instruction of
         RegisterMachine.AssignRegister input ->
-            assign (registerNameNode Editor.Static input.targetRegister) (argRegisterUseNode Editor.Static input.sourceRegister)
+            assign (registerNameNode input.targetRegister) (argRegisterUseNode Editor.Static input.sourceRegister)
 
         RegisterMachine.AssignLabel input ->
-            assign (registerNameNode Editor.Static input.targetRegister) (argLabelNode Editor.Static input.label)
+            assign (registerNameNode input.targetRegister) (argLabelNode Editor.Static input.label)
 
         RegisterMachine.AssignOperation input ->
-            Debug.todo ""
+            assignOpApplication (registerNameNode input.targetRegister)
+                (opNameNode input.operationApplication.name)
+                (input.operationApplication.arguments
+                    |> List.map
+                        (\argument ->
+                            case argument of
+                                RegisterMachine.Register register ->
+                                    argRegisterUseNode Editor.Dynamic register
+
+                                RegisterMachine.Constant constant ->
+                                    argConstantNode Editor.Dynamic constant
+                        )
+                )
 
         RegisterMachine.AssignConstant input ->
-            assign (registerNameNode Editor.Static input.targetRegister) (argConstantNode Editor.Static input.constant)
+            assign (registerNameNode input.targetRegister) (argConstantNode Editor.Static input.constant)
 
         -- jumping
         RegisterMachine.JumpToLabel input ->
