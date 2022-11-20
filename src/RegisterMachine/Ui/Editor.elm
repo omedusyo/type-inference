@@ -29,6 +29,7 @@ import RegisterMachine.Ui.Editor.Color as Color
 import RegisterMachine.Ui.Editor.EditorToMachineInstructionsTranslator
 import RegisterMachine.Ui.Editor.MachineInstructionsToEditorTranslator
 import RegisterMachine.Ui.Editor.Validation as Validation exposing (validatedInstruction)
+import RegisterMachine.Ui.MachineInstructions
 import Ui.Control.Action as Context exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.InputCell as E
