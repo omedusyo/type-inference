@@ -70,97 +70,104 @@ viewInstructions instructionPointer instructionBlock =
                 opName
                 (arguments |> List.map viewOperationArgument)
 
-        viewInstruction : Bool -> RegisterMachine.Instruction -> Element msg
-        viewInstruction isFocused instruction =
+        viewInstruction : { isCurrentInstruction : Bool } -> RegisterMachine.Instruction -> Element msg
+        viewInstruction { isCurrentInstruction } instruction =
+            let
+                spacingPx =
+                    8
+            in
             E.row
-                (List.concat
-                    [ [ E.spacing 8, paddingLeft 20 ]
-                    , if isFocused then
-                        [ Background.color (E.rgb255 215 215 215) ]
+                [ E.spacing spacingPx ]
+                [ E.el [ E.width (E.px 15) ]
+                    (if isCurrentInstruction then
+                        -- Right Arrow
+                        -- https://unicode-table.com/en/sets/arrow-symbols/#right-arrows
+                        E.text "➢"
 
-                      else
-                        []
-                    ]
-                )
-                (case instruction of
-                    RegisterMachine.AssignRegister { targetRegister, sourceRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewRegisterUse sourceRegister ]
+                     else
+                        E.text ""
+                    )
+                , E.row [ E.spacing spacingPx ]
+                    (case instruction of
+                        RegisterMachine.AssignRegister { targetRegister, sourceRegister } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewRegisterUse sourceRegister ]
 
-                    RegisterMachine.AssignLabel { targetRegister, label } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewLabelUse label ]
+                        RegisterMachine.AssignLabel { targetRegister, label } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewLabelUse label ]
 
-                    RegisterMachine.AssignOperation { targetRegister, operationApplication } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication operationApplication.name operationApplication.arguments ]
+                        RegisterMachine.AssignOperation { targetRegister, operationApplication } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication operationApplication.name operationApplication.arguments ]
 
-                    RegisterMachine.AssignConstant { targetRegister, constant } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewConstant constant ]
+                        RegisterMachine.AssignConstant { targetRegister, constant } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewConstant constant ]
 
-                    RegisterMachine.JumpToLabel { label } ->
-                        [ viewInstructionName "jump", viewLabelUse label ]
+                        RegisterMachine.JumpToLabel { label } ->
+                            [ viewInstructionName "jump", viewLabelUse label ]
 
-                    RegisterMachine.JumpToInstructionPointerAtRegister { instructionPointerRegister } ->
-                        [ viewInstructionName "jump", viewRegisterUse instructionPointerRegister ]
+                        RegisterMachine.JumpToInstructionPointerAtRegister { instructionPointerRegister } ->
+                            [ viewInstructionName "jump", viewRegisterUse instructionPointerRegister ]
 
-                    RegisterMachine.JumpToLabelIf { testRegister, label } ->
-                        [ viewInstructionName "if", viewRegisterUse testRegister, viewInstructionName "jump", viewLabelUse label ]
+                        RegisterMachine.JumpToLabelIf { testRegister, label } ->
+                            [ viewInstructionName "if", viewRegisterUse testRegister, viewInstructionName "jump", viewLabelUse label ]
 
-                    RegisterMachine.JumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } ->
-                        [ viewInstructionName "if", viewRegisterUse testRegister, viewInstructionName "jump", viewRegisterUse instructionPointerRegister ]
+                        RegisterMachine.JumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } ->
+                            [ viewInstructionName "if", viewRegisterUse testRegister, viewInstructionName "jump", viewRegisterUse instructionPointerRegister ]
 
-                    RegisterMachine.Halt _ ->
-                        [ viewInstructionName "halt" ]
+                        RegisterMachine.Halt _ ->
+                            [ viewInstructionName "halt" ]
 
-                    RegisterMachine.PushRegister { sourceRegister } ->
-                        [ viewInstructionName "push", viewRegisterUse sourceRegister ]
+                        RegisterMachine.PushRegister { sourceRegister } ->
+                            [ viewInstructionName "push", viewRegisterUse sourceRegister ]
 
-                    RegisterMachine.PushConstant { constant } ->
-                        [ viewInstructionName "push", viewConstant constant ]
+                        RegisterMachine.PushConstant { constant } ->
+                            [ viewInstructionName "push", viewConstant constant ]
 
-                    RegisterMachine.PushLabel { label } ->
-                        [ viewInstructionName "push", viewLabelUse label ]
+                        RegisterMachine.PushLabel { label } ->
+                            [ viewInstructionName "push", viewLabelUse label ]
 
-                    RegisterMachine.Pop { targetRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "pop-stack" ]
+                        RegisterMachine.Pop { targetRegister } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "pop-stack" ]
 
-                    RegisterMachine.ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "pair" [ operationArgument0, operationArgument1 ] ]
+                        RegisterMachine.ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "pair" [ operationArgument0, operationArgument1 ] ]
 
-                    RegisterMachine.First { targetRegister, sourceRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "first" [ RegisterMachine.Register sourceRegister ] ]
+                        RegisterMachine.First { targetRegister, sourceRegister } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "first" [ RegisterMachine.Register sourceRegister ] ]
 
-                    RegisterMachine.Second { targetRegister, sourceRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "second" [ RegisterMachine.Register sourceRegister ] ]
+                        RegisterMachine.Second { targetRegister, sourceRegister } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "second" [ RegisterMachine.Register sourceRegister ] ]
 
-                    RegisterMachine.SetFirst { targetRegister, operationArgument } ->
-                        [ viewInstructionName "set-first", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
+                        RegisterMachine.SetFirst { targetRegister, operationArgument } ->
+                            [ viewInstructionName "set-first", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
 
-                    RegisterMachine.SetSecond { targetRegister, operationArgument } ->
-                        [ viewInstructionName "set-second", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
+                        RegisterMachine.SetSecond { targetRegister, operationArgument } ->
+                            [ viewInstructionName "set-second", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
 
-                    RegisterMachine.DualFirst { targetRegister, sourceRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "dual-first" [ RegisterMachine.Register sourceRegister ] ]
+                        RegisterMachine.DualFirst { targetRegister, sourceRegister } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "dual-first" [ RegisterMachine.Register sourceRegister ] ]
 
-                    RegisterMachine.DualSecond { targetRegister, sourceRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "dual-second" [ RegisterMachine.Register sourceRegister ] ]
+                        RegisterMachine.DualSecond { targetRegister, sourceRegister } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "dual-second" [ RegisterMachine.Register sourceRegister ] ]
 
-                    RegisterMachine.DualSetFirst { targetRegister, operationArgument } ->
-                        [ viewInstructionName "dual-set-first", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
+                        RegisterMachine.DualSetFirst { targetRegister, operationArgument } ->
+                            [ viewInstructionName "dual-set-first", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
 
-                    RegisterMachine.DualSetSecond { targetRegister, operationArgument } ->
-                        [ viewInstructionName "dual-set-second", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
+                        RegisterMachine.DualSetSecond { targetRegister, operationArgument } ->
+                            [ viewInstructionName "dual-set-second", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
 
-                    RegisterMachine.MoveToDual { targetRegister, sourceRegister } ->
-                        [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "move-to-dual" [ RegisterMachine.Register sourceRegister ] ]
+                        RegisterMachine.MoveToDual { targetRegister, sourceRegister } ->
+                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "move-to-dual" [ RegisterMachine.Register sourceRegister ] ]
 
-                    RegisterMachine.MarkAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } ->
-                        [ viewInstructionName "mark", viewRegisterUse toBeCollectedFromRegister, viewInstructionName "as-moved-to", viewRegisterUse referenceToDualMemoryRegister ]
+                        RegisterMachine.MarkAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } ->
+                            [ viewInstructionName "mark", viewRegisterUse toBeCollectedFromRegister, viewInstructionName "as-moved-to", viewRegisterUse referenceToDualMemoryRegister ]
 
-                    RegisterMachine.SwapMemory _ ->
-                        [ viewInstructionName "swap-memory" ]
+                        RegisterMachine.SwapMemory _ ->
+                            [ viewInstructionName "swap-memory" ]
 
-                    RegisterMachine.Unfinished _ ->
-                        [ viewInstructionName "unfinished" ]
-                )
+                        RegisterMachine.Unfinished _ ->
+                            [ viewInstructionName "unfinished" ]
+                    )
+                ]
     in
     E.column [ E.width E.fill ]
         (instructionBlock
@@ -172,7 +179,7 @@ viewInstructions instructionPointer instructionBlock =
                             viewLabelIntroduction label
 
                         Perform position instruction ->
-                            viewInstruction (instructionPointer == position) instruction
+                            viewInstruction { isCurrentInstruction = instructionPointer == position } instruction
                 )
         )
 
