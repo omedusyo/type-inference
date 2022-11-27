@@ -27,7 +27,7 @@ import RegisterMachine.Ui.Editor.Base as Base
         , initialInstructionValidity
         )
 import RegisterMachine.Ui.Editor.Color as Color
-import RegisterMachine.Ui.Editor.EditorToMachineInstructionsTranslator
+import RegisterMachine.Ui.Editor.EditorToMachineInstructionsTranslator as EditorToMachineInstructionsTranslator
 import RegisterMachine.Ui.Editor.MachineInstructionsToEditorTranslator as MachineInstructionsToEditorTranslator
 import RegisterMachine.Ui.Editor.Validation as Validation exposing (validatedInstruction)
 import RegisterMachine.Ui.MachineInstructions as RegisterMachineUI
@@ -200,8 +200,10 @@ setModeToSelectInstructions model =
 
 setModeToRun : Model -> Model
 setModeToRun model =
-    -- TODO: Here I should compile current editor state into an executable instruction block
-    { model | instructionMode = Run }
+    { model
+        | instructionMode = Run
+        , instructionBlock = EditorToMachineInstructionsTranslator.translateEditorInstructions model.instructions
+    }
 
 
 selectionMovement : VerticalDirection -> Model -> Model

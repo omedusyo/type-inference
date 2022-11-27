@@ -145,13 +145,8 @@ translateEditorInstruction instruction =
                         Editor.JumpIfKind ->
                             case ZipList.toList nodes of
                                 [ testRegisterNode, argNode ] ->
-                                    let
-                                        testRegister : RegisterMachine.Register
-                                        testRegister =
-                                            Editor.nodeInput testRegisterNode
-                                    in
-                                    case parseJumpArgument (Editor.nodeInput argNode) of
-                                        Just arg ->
+                                    Maybe.map2
+                                        (\(TRegisterUse testRegister) arg ->
                                             case arg of
                                                 JLabel label ->
                                                     RegisterMachine.Perform
@@ -164,9 +159,10 @@ translateEditorInstruction instruction =
                                                         (RegisterMachine.JumpToInstructionPointerAtRegisterIf
                                                             { testRegister = testRegister, instructionPointerRegister = register }
                                                         )
-
-                                        Nothing ->
-                                            unfinished
+                                        )
+                                        (parseTestArgument (Editor.nodeInput testRegisterNode))
+                                        (parseJumpArgument (Editor.nodeInput argNode))
+                                        |> Maybe.withDefault unfinished
 
                                 _ ->
                                     unfinished
@@ -265,6 +261,20 @@ parseJumpArgument input0 =
             )
 
 
+parseTestArgument : String -> Maybe TestArgument
+parseTestArgument input0 =
+    String.uncons input0
+        |> Maybe.andThen
+            (\( c, input1 ) ->
+                case c of
+                    '$' ->
+                        Just (TRegisterUse input1)
+
+                    _ ->
+                        Nothing
+            )
+
+
 parseOperationArgument : String -> Maybe OperationArgument
 parseOperationArgument input0 =
     case input0 of
@@ -301,6 +311,10 @@ type OperationArgument
     = ONumber Int
     | ONil
     | ORegisterUse RegisterMachine.Register
+
+
+type TestArgument
+    = TRegisterUse RegisterMachine.Register
 
 
 convertOperationArgument : OperationArgument -> RegisterMachine.OperationArgument
