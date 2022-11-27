@@ -5,6 +5,7 @@ import Element.Background as Background
 import Element.Font as Font
 import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, Value(..))
 import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), RuntimeError(..))
+import Ui.Symbol as Symbol
 
 
 type LabelOrInstruction
@@ -31,8 +32,14 @@ viewInstructions instructionPointer instructionBlock =
                 |> Tuple.second
                 |> List.reverse
 
+        heavyText str =
+            E.el [ Font.heavy ] (E.text str)
+
         viewInstructionName name =
-            E.el [ Font.heavy ] (E.text name)
+            heavyText name
+
+        viewLeftArrow =
+            E.el [] (E.text Symbol.leftArrow)
 
         viewRegisterName name =
             E.el [ Font.color (E.rgb255 0 56 186) ] (E.text name)
@@ -47,7 +54,7 @@ viewInstructions instructionPointer instructionBlock =
             viewLabel (":" ++ label)
 
         viewOperationUse name args =
-            E.row [] [ E.el [] (E.text name), E.text "(", E.row [] (List.intersperse (E.text ", ") args), E.text ")" ]
+            E.row [] [ E.el [] (E.text name), heavyText "(", E.row [] (List.intersperse (heavyText ", ") args), heavyText ")" ]
 
         viewLabelIntroduction label =
             E.row [ E.spacing 8 ] [ E.el [ Font.heavy ] (E.text "label "), E.row [] [ viewLabel label ] ]
@@ -80,9 +87,7 @@ viewInstructions instructionPointer instructionBlock =
                 [ E.spacing spacingPx ]
                 [ E.el [ E.width (E.px 15) ]
                     (if isCurrentInstruction then
-                        -- Right Arrow
-                        -- https://unicode-table.com/en/sets/arrow-symbols/#right-arrows
-                        E.text "➢"
+                        E.text Symbol.rightArrow
 
                      else
                         E.text ""
@@ -90,16 +95,16 @@ viewInstructions instructionPointer instructionBlock =
                 , E.row [ E.spacing spacingPx ]
                     (case instruction of
                         RegisterMachine.AssignRegister { targetRegister, sourceRegister } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewRegisterUse sourceRegister ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewRegisterUse sourceRegister ]
 
                         RegisterMachine.AssignLabel { targetRegister, label } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewLabelUse label ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewLabelUse label ]
 
                         RegisterMachine.AssignOperation { targetRegister, operationApplication } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication operationApplication.name operationApplication.arguments ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewOperationApplication operationApplication.name operationApplication.arguments ]
 
                         RegisterMachine.AssignConstant { targetRegister, constant } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewConstant constant ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewConstant constant ]
 
                         RegisterMachine.JumpToLabel { label } ->
                             [ viewInstructionName "jump", viewLabelUse label ]
@@ -126,16 +131,16 @@ viewInstructions instructionPointer instructionBlock =
                             [ viewInstructionName "push", viewLabelUse label ]
 
                         RegisterMachine.Pop { targetRegister } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewInstructionName "pop-stack" ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewInstructionName "pop-stack" ]
 
                         RegisterMachine.ConstructPair { targetRegister, operationArgument0, operationArgument1 } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "pair" [ operationArgument0, operationArgument1 ] ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewOperationApplication "pair" [ operationArgument0, operationArgument1 ] ]
 
                         RegisterMachine.First { targetRegister, sourceRegister } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "first" [ RegisterMachine.Register sourceRegister ] ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewOperationApplication "first" [ RegisterMachine.Register sourceRegister ] ]
 
                         RegisterMachine.Second { targetRegister, sourceRegister } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "second" [ RegisterMachine.Register sourceRegister ] ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewOperationApplication "second" [ RegisterMachine.Register sourceRegister ] ]
 
                         RegisterMachine.SetFirst { targetRegister, operationArgument } ->
                             [ viewInstructionName "set-first", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
@@ -144,10 +149,10 @@ viewInstructions instructionPointer instructionBlock =
                             [ viewInstructionName "set-second", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
 
                         RegisterMachine.DualFirst { targetRegister, sourceRegister } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "dual-first" [ RegisterMachine.Register sourceRegister ] ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewOperationApplication "dual-first" [ RegisterMachine.Register sourceRegister ] ]
 
                         RegisterMachine.DualSecond { targetRegister, sourceRegister } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "dual-second" [ RegisterMachine.Register sourceRegister ] ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewOperationApplication "dual-second" [ RegisterMachine.Register sourceRegister ] ]
 
                         RegisterMachine.DualSetFirst { targetRegister, operationArgument } ->
                             [ viewInstructionName "dual-set-first", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
@@ -156,7 +161,7 @@ viewInstructions instructionPointer instructionBlock =
                             [ viewInstructionName "dual-set-second", viewRegisterName targetRegister, viewOperationArgument operationArgument ]
 
                         RegisterMachine.MoveToDual { targetRegister, sourceRegister } ->
-                            [ viewRegisterName targetRegister, viewInstructionName "<-", viewOperationApplication "move-to-dual" [ RegisterMachine.Register sourceRegister ] ]
+                            [ viewRegisterName targetRegister, viewLeftArrow, viewOperationApplication "move-to-dual" [ RegisterMachine.Register sourceRegister ] ]
 
                         RegisterMachine.MarkAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } ->
                             [ viewInstructionName "mark", viewRegisterUse toBeCollectedFromRegister, viewInstructionName "as-moved-to", viewRegisterUse referenceToDualMemoryRegister ]
