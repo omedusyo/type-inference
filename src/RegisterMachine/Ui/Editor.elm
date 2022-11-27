@@ -1247,6 +1247,7 @@ runModeKeyBindings =
         , ( "f", RegisterMachineExecutionKeyPress PublicRegisterMachineMsg.StepUntilNextJump )
         , ( "c", RegisterMachineExecutionKeyPress PublicRegisterMachineMsg.StepUntilHalted )
         , ( "z", RegisterMachineExecutionKeyPress PublicRegisterMachineMsg.Reset )
+        , ( "e", SetModeTo (TraversingInstructions TraversingNodes) )
         ]
 
 
@@ -1311,11 +1312,6 @@ subscriptions model =
                                     Decode.succeed msg
 
                                 Nothing ->
-                                    case keyCode of
-                                        "e" ->
-                                            Decode.succeed (SetModeTo (TraversingInstructions TraversingNodes))
-
-                                        _ ->
-                                            Decode.fail ""
+                                    Decode.fail ""
                 )
         )
