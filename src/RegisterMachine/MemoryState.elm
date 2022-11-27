@@ -2,7 +2,7 @@ module RegisterMachine.MemoryState exposing (..)
 
 import Array exposing (Array)
 import Array.Extra as Array
-import RegisterMachine.Base as RegisterMachine exposing (MemoryAddress, Value)
+import RegisterMachine.Base as RegisterMachine exposing (MemoryPointer, Value)
 
 
 
@@ -16,16 +16,16 @@ type alias MemoryCell =
 type alias MemoryState =
     { memory : Array MemoryCell
     , maxSize : Int
-    , nextFreePointer : MemoryAddress
+    , nextFreePointer : MemoryPointer
     }
 
 
 type MemoryError
     = MemoryExceeded
-    | InvalidMemoryAccessAt MemoryAddress
-    | ExpectedNumAt MemoryAddress
-    | ExpectedPairAt MemoryAddress
-    | ExpectedNilAt MemoryAddress
+    | InvalidMemoryAccessAt MemoryPointer
+    | ExpectedNumAt MemoryPointer
+    | ExpectedPairAt MemoryPointer
+    | ExpectedNilAt MemoryPointer
 
 
 empty : Int -> MemoryState
@@ -36,7 +36,7 @@ empty maxSize =
     }
 
 
-get : MemoryAddress -> MemoryState -> Result MemoryError MemoryCell
+get : MemoryPointer -> MemoryState -> Result MemoryError MemoryCell
 get pointer ({ memory } as memoryState) =
     case memory |> Array.get pointer of
         Just memoryCell ->
@@ -46,21 +46,21 @@ get pointer ({ memory } as memoryState) =
             Err (InvalidMemoryAccessAt pointer)
 
 
-set : MemoryAddress -> MemoryCell -> MemoryState -> MemoryState
+set : MemoryPointer -> MemoryCell -> MemoryState -> MemoryState
 set pointer cell ({ memory } as memoryState) =
     { memoryState
         | memory = memory |> Array.set pointer cell
     }
 
 
-update : MemoryAddress -> (MemoryCell -> MemoryCell) -> MemoryState -> MemoryState
+update : MemoryPointer -> (MemoryCell -> MemoryCell) -> MemoryState -> MemoryState
 update pointer f ({ memory } as memoryState) =
     { memoryState
         | memory = memory |> Array.update pointer f
     }
 
 
-new : MemoryCell -> MemoryState -> Result MemoryError ( MemoryAddress, MemoryState )
+new : MemoryCell -> MemoryState -> Result MemoryError ( MemoryPointer, MemoryState )
 new memoryCell ({ memory, maxSize, nextFreePointer } as memoryState) =
     if nextFreePointer + 1 < maxSize then
         Ok

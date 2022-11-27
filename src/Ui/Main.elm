@@ -1,12 +1,10 @@
-module Ui.Main exposing (Model, Msg, init, update, view)
+module Ui.Main exposing (Model, Msg, init, subscriptions, update, view)
 
 import Element as E exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
 import Element.Input as Input
-import Ui.Control.Context as Context exposing (Config, Context)
-import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Control.Action as Context exposing (Action)
+import Ui.Control.Effect as Effect exposing (Effect)
+import Ui.Control.Config exposing (Config)
 import Ui.Style.Button as Button
 import Ui.Tab.Help as Help
 import Ui.Tab.Module as Module
@@ -58,9 +56,9 @@ type alias Model =
     }
 
 
-init : InitContext Model Msg
+init : Effect rootMsg Msg Model
 init =
-    InitContext.setModelTo
+    Effect.pure
         (\programModel moduleModel helpModel registerMachineModel ->
             { tab = initTab
 
@@ -71,10 +69,10 @@ init =
             , registerMachineModel = registerMachineModel
             }
         )
-        |> InitContext.ooo (Program.init |> InitContext.mapCmd ProgramMsg)
-        |> InitContext.ooo (Module.init |> InitContext.mapCmd ModuleMsg)
-        |> InitContext.ooo (Help.init |> InitContext.mapCmd HelpMsg)
-        |> InitContext.ooo (RegisterMachine.init |> InitContext.mapCmd RegisterMachineMsg)
+        |> Effect.ooo (Program.init |> Effect.mapMsg ProgramMsg)
+        |> Effect.ooo (Module.init |> Effect.mapMsg ModuleMsg)
+        |> Effect.ooo (Help.init |> Effect.mapMsg HelpMsg)
+        |> Effect.ooo (RegisterMachine.init |> Effect.mapMsg RegisterMachineMsg)
 
 
 type Msg
@@ -86,39 +84,43 @@ type Msg
     | RegisterMachineMsg RegisterMachine.Msg
 
 
-update : Msg -> Context Model msg
+update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         ChangeTab tab ->
-            Context.update (\model -> { model | tab = tab })
+            Context.from (\model -> { model | tab = tab })
 
         HelpMsg helpMsg ->
             Help.update helpMsg
                 |> Context.embed
+                    HelpMsg
                     .helpModel
                     (\model helpModel -> { model | helpModel = helpModel })
 
         ModuleMsg moduleMsg ->
             Module.update moduleMsg
                 |> Context.embed
+                    ModuleMsg
                     .moduleModel
                     (\model moduleModel -> { model | moduleModel = moduleModel })
 
         ProgramMsg programMsg ->
             Program.update programMsg
                 |> Context.embed
+                    ProgramMsg
                     .programModel
                     (\model programModel -> { model | programModel = programModel })
 
         RegisterMachineMsg registerMachineMsg ->
             RegisterMachine.update registerMachineMsg
                 |> Context.embed
+                    RegisterMachineMsg
                     .registerMachineModel
                     (\model registerMachineModel -> { model | registerMachineModel = registerMachineModel })
 
 
-view : Config -> Model -> Element Msg
-view config model =
+view : Model -> Element Msg
+view model =
     E.column [ E.width E.fill, E.padding 10 ]
         [ E.row []
             (tabs
@@ -132,14 +134,20 @@ view config model =
             )
         , case model.tab of
             ProgramTab ->
-                Program.view config model.programModel |> E.map ProgramMsg
+                Program.view model.programModel |> E.map ProgramMsg
 
             ModuleTab ->
-                Module.view config model.moduleModel |> E.map ModuleMsg
+                Module.view model.moduleModel |> E.map ModuleMsg
 
             HelpTab ->
-                Help.view config model.helpModel |> E.map HelpMsg
+                Help.view model.helpModel |> E.map HelpMsg
 
             RegisterMachineTab ->
-                RegisterMachine.view config model.registerMachineModel |> E.map RegisterMachineMsg
+                RegisterMachine.view model.registerMachineModel |> E.map RegisterMachineMsg
         ]
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    RegisterMachine.subscriptions model.registerMachineModel
+        |> Sub.map RegisterMachineMsg

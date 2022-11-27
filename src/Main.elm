@@ -5,7 +5,8 @@ import Calculus.Example
 import Element as E exposing (Element)
 import Lib.State.StatefulReader as StatefulReader exposing (StatefulReader)
 import RegisterMachine.Base as RMachineBase
-import Ui.Control.Context as Context exposing (Context)
+import Ui.Control.Action as Context exposing (Action)
+import Ui.Control.Config as Config exposing (Config)
 import Ui.Main as LambdaUi
 
 
@@ -14,15 +15,15 @@ import Ui.Main as LambdaUi
 
 
 type alias Model =
-    { lambdaUiState : Context.State LambdaUi.Model
+    { lambdaUiState : LambdaUi.Model
     }
 
 
 initModel : ( Model, Cmd Msg )
 initModel =
     let
-        ( lambdaUiState, lambdaUiCmd ) =
-            LambdaUi.init Context.initConfig
+        ( lambdaUiState, lambdaUiCmd, notifications ) =
+            LambdaUi.init Config.init
     in
     ( { lambdaUiState = lambdaUiState }
     , lambdaUiCmd |> Cmd.map LambdaUiMsg
@@ -42,15 +43,15 @@ update msg model =
     case msg of
         LambdaUiMsg lambdaUiMsg ->
             let
-                ( lambdaUiState, cmd ) =
-                    StatefulReader.run (LambdaUi.update lambdaUiMsg) Context.initConfig model.lambdaUiState
+                ( lambdaUiState, cmd, notifications ) =
+                    LambdaUi.update lambdaUiMsg model.lambdaUiState (Config.init |> Config.contraMap LambdaUiMsg)
             in
             ( { model | lambdaUiState = lambdaUiState }, cmd )
 
 
 view : Model -> Element Msg
 view model =
-    LambdaUi.view Context.initConfig model.lambdaUiState.model |> E.map LambdaUiMsg
+    LambdaUi.view model.lambdaUiState |> E.map LambdaUiMsg
 
 
 
@@ -71,6 +72,7 @@ main =
 -- ===SUBSCRIPTIONS===
 
 
-subscriptions : Model -> Sub msg
+subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
+    LambdaUi.subscriptions model.lambdaUiState
+        |> Sub.map LambdaUiMsg
