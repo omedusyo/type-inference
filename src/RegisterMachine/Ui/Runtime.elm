@@ -18,6 +18,7 @@ import Ui.Control.Action as Context exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.Element as E
 import Ui.Style.Button as Button
+import Ui.Tab.PublicRegisterMachineMsg as PublicRegisterMachineMsg exposing (PublicRegisterMachineMsg)
 
 
 type alias Model =
@@ -77,12 +78,9 @@ centerAt p memoryView =
 
 
 type Msg
-    = Reset
-    | StepUntilHalted
-    | StepUntilNextJump
-    | Step
-    | MemoryPointerClicked MemoryPointer
+    = MemoryPointerClicked MemoryPointer
     | ShiftMemoryViewBy Int
+    | PublicRegisterMachineMsg PublicRegisterMachineMsg
 
 
 reset : Model -> Model
@@ -114,22 +112,6 @@ update changeCurrentInstructionPointerCmd msg =
                     Cmd.none
     in
     case msg of
-        Reset ->
-            Context.from reset
-                |> Context.thenRootCommand changeCurrentInstructionPointer
-
-        StepUntilHalted ->
-            updateRuntime RegisterMachine.stepUntilHalted
-                |> Context.thenRootCommand changeCurrentInstructionPointer
-
-        StepUntilNextJump ->
-            updateRuntime RegisterMachine.stepUntilNextJump
-                |> Context.thenRootCommand changeCurrentInstructionPointer
-
-        Step ->
-            updateRuntime RegisterMachine.step
-                |> Context.thenRootCommand changeCurrentInstructionPointer
-
         MemoryPointerClicked p ->
             Context.from
                 (\model ->
@@ -155,6 +137,24 @@ update changeCurrentInstructionPointerCmd msg =
                     }
                 )
 
+        PublicRegisterMachineMsg publicMsg ->
+            case publicMsg of
+                PublicRegisterMachineMsg.StepUntilHalted ->
+                    updateRuntime RegisterMachine.stepUntilHalted
+                        |> Context.thenRootCommand changeCurrentInstructionPointer
+
+                PublicRegisterMachineMsg.StepUntilNextJump ->
+                    updateRuntime RegisterMachine.stepUntilNextJump
+                        |> Context.thenRootCommand changeCurrentInstructionPointer
+
+                PublicRegisterMachineMsg.Step ->
+                    updateRuntime RegisterMachine.step
+                        |> Context.thenRootCommand changeCurrentInstructionPointer
+
+                PublicRegisterMachineMsg.Reset ->
+                    Context.from reset
+                        |> Context.thenRootCommand changeCurrentInstructionPointer
+
 
 view : Model -> Element Msg
 view model =
@@ -164,22 +164,22 @@ view model =
         [ E.row []
             [ Input.button Button.buttonStyle
                 { onPress =
-                    Just Reset
+                    Just (PublicRegisterMachineMsg PublicRegisterMachineMsg.Reset)
                 , label = E.text "Reset"
                 }
             , Input.button Button.buttonStyle
                 { onPress =
-                    Just StepUntilHalted
+                    Just (PublicRegisterMachineMsg PublicRegisterMachineMsg.StepUntilHalted)
                 , label = E.text "Step until halted"
                 }
             , Input.button Button.buttonStyle
                 { onPress =
-                    Just StepUntilNextJump
+                    Just (PublicRegisterMachineMsg PublicRegisterMachineMsg.StepUntilNextJump)
                 , label = E.text "Step until next jump"
                 }
             , Input.button Button.buttonStyle
                 { onPress =
-                    Just Step
+                    Just (PublicRegisterMachineMsg PublicRegisterMachineMsg.Step)
                 , label = E.text "Step"
                 }
             ]

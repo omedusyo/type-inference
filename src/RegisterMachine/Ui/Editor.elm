@@ -35,6 +35,7 @@ import Ui.Control.Action as Context exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.InputCell as E
 import Ui.Style.Button as Button
+import Ui.Tab.PublicRegisterMachineMsg as PublicRegisterMachineMsg exposing (PublicRegisterMachineMsg)
 
 
 
@@ -277,6 +278,8 @@ type Msg
       -- Debugging
     | DebugCurrentInstruction
     | ResetDebugConsole
+      -- Execution
+    | RegisterMachineExecutionKeyPress PublicRegisterMachineMsg
 
 
 moveInstruction : VerticalDirection -> Model -> Model
@@ -579,8 +582,8 @@ validateCurrentInstruction =
         )
 
 
-update : Msg -> Action rootMsg Msg Model
-update msg =
+update : (PublicRegisterMachineMsg -> Cmd rootMsg) -> Msg -> Action rootMsg Msg Model
+update triggerRegisterMachineMsg msg =
     case msg of
         InstructionMovement direction ->
             Context.from (moveInstruction direction)
@@ -699,6 +702,9 @@ update msg =
 
         ResetDebugConsole ->
             Context.from (\({ debugConsole } as model) -> { model | debugConsole = { debugConsole | instructionsRev = [] } })
+
+        RegisterMachineExecutionKeyPress publicRegisterMachineMsg ->
+            Context.rootCommand (triggerRegisterMachineMsg publicRegisterMachineMsg)
 
 
 view : RegisterMachine.InstructionPointer -> Model -> Element Msg
@@ -1237,7 +1243,11 @@ selectionModeKeyBindings =
 runModeKeyBindings : Dict KeyCode Msg
 runModeKeyBindings =
     Dict.fromList
-        []
+        [ ( "r", RegisterMachineExecutionKeyPress PublicRegisterMachineMsg.Step )
+        , ( "f", RegisterMachineExecutionKeyPress PublicRegisterMachineMsg.StepUntilNextJump )
+        , ( "c", RegisterMachineExecutionKeyPress PublicRegisterMachineMsg.StepUntilHalted )
+        , ( "z", RegisterMachineExecutionKeyPress PublicRegisterMachineMsg.Reset )
+        ]
 
 
 subscriptions : Model -> Sub Msg

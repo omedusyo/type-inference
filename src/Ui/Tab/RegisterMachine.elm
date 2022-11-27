@@ -6,8 +6,8 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, Value(..))
 import List.Extra as List
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), InstructionPointer, Value(..))
 import RegisterMachine.Controllers as Controllers
 import RegisterMachine.GarbageCollector as GarbageCollector
 import RegisterMachine.Machine as RegisterMachine exposing (CompilationError(..), ComputationStep(..), ControlledMachineState, ControllerExample, LabelEnvironment, RuntimeError(..))
@@ -19,6 +19,7 @@ import Ui.Control.Action as Action exposing (Action)
 import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.Element as E
 import Ui.Style.Button as Button
+import Ui.Tab.PublicRegisterMachineMsg exposing (PublicRegisterMachineMsg)
 
 
 type alias Model =
@@ -179,11 +180,16 @@ update msg =
                 )
 
         EditorMsg editorMsg ->
-            Editor.update editorMsg
-                |> Action.embed
-                    EditorMsg
-                    .editorModel
-                    (\model editorModel -> { model | editorModel = editorModel })
+            Action.liftMsgToCmd
+                (\lift ->
+                    Editor.update
+                        (\publicRegisterMachineMsg -> lift (RuntimeMsg (Runtime.PublicRegisterMachineMsg publicRegisterMachineMsg)))
+                        editorMsg
+                        |> Action.embed
+                            EditorMsg
+                            .editorModel
+                            (\model editorModel -> { model | editorModel = editorModel })
+                )
 
 
 view : Model -> Element Msg
