@@ -50,7 +50,7 @@ viewInstructions instructionPointer instructionBlock =
             E.row [] [ E.el [] (E.text name), E.text "(", E.row [] (List.intersperse (E.text ", ") args), E.text ")" ]
 
         viewLabelIntroduction label =
-            E.row [ E.spacing 8 ] [ E.text "label ", E.row [] [ viewLabel label ] ]
+            E.row [ E.spacing 8 ] [ E.el [ Font.heavy ] (E.text "label "), E.row [] [ viewLabel label ] ]
 
         paddingLeft px =
             E.paddingEach { left = px, top = 0, right = 0, bottom = 0 }

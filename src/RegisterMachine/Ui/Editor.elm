@@ -28,7 +28,7 @@ import RegisterMachine.Ui.Editor.Base as Base
         )
 import RegisterMachine.Ui.Editor.Color as Color
 import RegisterMachine.Ui.Editor.EditorToMachineInstructionsTranslator
-import RegisterMachine.Ui.Editor.MachineInstructionsToEditorTranslator
+import RegisterMachine.Ui.Editor.MachineInstructionsToEditorTranslator as MachineInstructionsToEditorTranslator
 import RegisterMachine.Ui.Editor.Validation as Validation exposing (validatedInstruction)
 import RegisterMachine.Ui.MachineInstructions as RegisterMachineUI
 import Ui.Control.Action as Context exposing (Action)
@@ -68,7 +68,15 @@ type alias Model =
 init : RegisterMachine.InstructionBlock -> Effect rootMsg Msg Model
 init instructionBlock =
     Effect.pure
-        { instructions = ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
+        { -- TODO: I should compile the `instructionBlock` into editor instructions
+          instructions =
+            -- ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
+            case MachineInstructionsToEditorTranslator.translateInstructionBlock instructionBlock of
+                [] ->
+                    Debug.todo ""
+
+                instruction :: instructions ->
+                    ZipList.fromList instruction instructions
 
         -- TODO: What should be the default mode?
         -- , instructionMode = TraversingInstructions TraversingNodes
@@ -192,6 +200,7 @@ setModeToSelectInstructions model =
 
 setModeToRun : Model -> Model
 setModeToRun model =
+    -- TODO: Here I should compile current editor state into an executable instruction block
     { model | instructionMode = Run }
 
 
@@ -875,7 +884,7 @@ viewDebuggingConsole model =
                                             , E.el [ Font.bold ] (E.text "]")
                                             ]
                                 in
-                                E.row [ E.spacing 10 ]
+                                E.row []
                                     [ E.el [ Font.bold, Font.color (E.rgb 0 0 1) ] <|
                                         E.text <|
                                             case instructionKind of
@@ -924,7 +933,7 @@ viewDebuggingConsole model =
                                                     , String.fromInt received
                                                     , ")"
                                                     ]
-                                    , E.row [ E.spacing 10 ]
+                                    , E.row []
                                         (List.concat
                                             [ revLeftNodes
                                                 |> List.reverse
@@ -966,85 +975,108 @@ viewInstruction { isInstructionSelected, isNodeSelected } instructionMode instru
 
                 Instruction kind nodes validation ->
                     -- TODO: Display the validation information
-                    case kind of
-                        LabelKind ->
-                            E.row []
-                                [ viewKeyword "label ", viewNode isNodeSelected isInstructionSelected nodeMode (ZipList.current nodes), viewKeyword ":" ]
+                    let
+                        spacingPx =
+                            8
+                    in
+                    E.row [ E.spacing spacingPx ]
+                        [ E.el
+                            (case kind of
+                                LabelKind ->
+                                    []
 
-                        OperationApplicationKind ->
-                            E.row []
-                                (case ZipList.mapToTaggedList nodes of
-                                    ( isSourceSelected, source ) :: ( isOperationNameSelected, operationName ) :: arguments ->
-                                        List.concat
-                                            [ [ viewNode (isSourceSelected && isNodeSelected) isInstructionSelected nodeMode source
-                                              , viewKeyword " <- "
-                                              , viewNode (isOperationNameSelected && isNodeSelected) isInstructionSelected nodeMode operationName
-                                              , viewKeyword "("
-                                              ]
-                                            , arguments
-                                                |> List.map (\( isArgSelected, arg ) -> viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg)
-                                                |> List.intersperse (viewKeyword ", ")
-                                            , [ viewKeyword ")" ]
+                                _ ->
+                                    [ E.width (E.px 15) ]
+                            )
+                            (E.text "")
+                        , case kind of
+                            LabelKind ->
+                                E.row
+                                    [ E.spacing spacingPx ]
+                                    [ viewKeyword "label ", viewNode isNodeSelected isInstructionSelected nodeMode (ZipList.current nodes) ]
+
+                            OperationApplicationKind ->
+                                E.row
+                                    []
+                                    (case ZipList.mapToTaggedList nodes of
+                                        ( isSourceSelected, source ) :: ( isOperationNameSelected, operationName ) :: arguments ->
+                                            [ viewNode (isSourceSelected && isNodeSelected) isInstructionSelected nodeMode source
+                                            , viewKeyword " <- "
+                                            , viewNode (isOperationNameSelected && isNodeSelected) isInstructionSelected nodeMode operationName
+                                            , E.row []
+                                                (List.concat
+                                                    [ [ viewKeyword "(" ]
+                                                    , arguments
+                                                        |> List.map (\( isArgSelected, arg ) -> viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg)
+                                                        |> List.intersperse (viewKeyword ", ")
+                                                    , [ viewKeyword ")" ]
+                                                    ]
+                                                )
                                             ]
 
-                                    _ ->
-                                        [ E.text "error when viewing OperationApplicationKind" ]
-                                )
+                                        _ ->
+                                            [ E.text "error when viewing OperationApplicationKind" ]
+                                    )
 
-                        AssignmentKind ->
-                            E.row []
-                                (case ZipList.mapToTaggedList nodes of
-                                    ( isSourceSelected, source ) :: ( isTargetSelected, target ) :: [] ->
-                                        [ viewNode (isSourceSelected && isNodeSelected) isInstructionSelected nodeMode source
-                                        , viewKeyword " <- "
-                                        , viewNode (isTargetSelected && isNodeSelected) isInstructionSelected nodeMode target
-                                        ]
+                            AssignmentKind ->
+                                E.row
+                                    [ E.spacing spacingPx ]
+                                    (case ZipList.mapToTaggedList nodes of
+                                        ( isSourceSelected, source ) :: ( isTargetSelected, target ) :: [] ->
+                                            [ viewNode (isSourceSelected && isNodeSelected) isInstructionSelected nodeMode source
+                                            , viewKeyword "<-"
+                                            , viewNode (isTargetSelected && isNodeSelected) isInstructionSelected nodeMode target
+                                            ]
 
-                                    _ ->
-                                        [ E.text "error when viewing AssignmentKind" ]
-                                )
+                                        _ ->
+                                            [ E.text "error when viewing AssignmentKind" ]
+                                    )
 
-                        JumpKind ->
-                            E.row []
-                                (case ZipList.mapToTaggedList nodes of
-                                    ( isArgSelected, arg ) :: [] ->
-                                        [ viewKeyword "jump "
-                                        , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
-                                        ]
+                            JumpKind ->
+                                E.row
+                                    [ E.spacing spacingPx ]
+                                    (case ZipList.mapToTaggedList nodes of
+                                        ( isArgSelected, arg ) :: [] ->
+                                            [ viewKeyword "jump "
+                                            , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
+                                            ]
 
-                                    _ ->
-                                        [ E.text "error when viewing JumpKind" ]
-                                )
+                                        _ ->
+                                            [ E.text "error when viewing JumpKind" ]
+                                    )
 
-                        JumpIfKind ->
-                            E.row []
-                                (case ZipList.mapToTaggedList nodes of
-                                    ( isTestSelected, test ) :: ( isArgSelected, arg ) :: [] ->
-                                        [ viewKeyword "if "
-                                        , viewNode (isTestSelected && isNodeSelected) isInstructionSelected nodeMode test
-                                        , viewKeyword " jump "
-                                        , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
-                                        ]
+                            JumpIfKind ->
+                                E.row
+                                    [ E.spacing spacingPx ]
+                                    (case ZipList.mapToTaggedList nodes of
+                                        ( isTestSelected, test ) :: ( isArgSelected, arg ) :: [] ->
+                                            [ viewKeyword "if "
+                                            , viewNode (isTestSelected && isNodeSelected) isInstructionSelected nodeMode test
+                                            , viewKeyword " jump "
+                                            , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
+                                            ]
 
-                                    _ ->
-                                        [ E.text "error when viewing JumpIfKind" ]
-                                )
+                                        _ ->
+                                            [ E.text "error when viewing JumpIfKind" ]
+                                    )
 
-                        HaltKind ->
-                            -- TODO: remove
-                            viewKeyword "Halt"
+                            HaltKind ->
+                                -- TODO: remove
+                                viewKeyword "Halt"
 
-                        PushKind ->
-                            E.row []
-                                (case ZipList.mapToTaggedList nodes of
-                                    ( isArgSelected, arg ) :: [] ->
-                                        [ viewKeyword "push "
-                                        , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
-                                        ]
+                            PushKind ->
+                                E.row
+                                    [ E.spacing spacingPx ]
+                                    (case ZipList.mapToTaggedList nodes of
+                                        ( isArgSelected, arg ) :: [] ->
+                                            [ viewKeyword "push "
+                                            , viewNode (isArgSelected && isNodeSelected) isInstructionSelected nodeMode arg
+                                            ]
 
-                                    _ ->
-                                        [ E.text "error when viewing JumpKind" ]
-                                )
+                                        _ ->
+                                            [ E.text "error when viewing JumpKind" ]
+                                    )
+                        ]
     in
     case instructionMode of
         InsertingInstruction ->
@@ -1136,7 +1168,7 @@ viewLabelUse label =
 
 
 viewLabelIntroduction label =
-    E.row [ E.spacing 8 ] [ E.text "label ", E.row [] [ viewLabel label ] ]
+    E.row [] [ viewKeyword "label ", E.row [] [ viewLabel label ] ]
 
 
 viewHole : Element Msg

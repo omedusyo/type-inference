@@ -34,7 +34,7 @@ translateInstruction instruction =
         assignOpApplication : Editor.Node -> Editor.Node -> List Editor.Node -> Editor.Instruction
         assignOpApplication sourceNode targetNode argNodes =
             Editor.Instruction
-                Editor.AssignmentKind
+                Editor.OperationApplicationKind
                 (ZipList.fromList sourceNode (targetNode :: argNodes))
                 Editor.EveryNodeIsValid
 
@@ -72,7 +72,7 @@ translateInstruction instruction =
 
         argRegisterUseNode : Editor.NodeKind -> RegisterMachine.Register -> Editor.Node
         argRegisterUseNode nodeKind register =
-            Editor.Node nodeKind (Editor.ValidNode Editor.RegisterUse) Editor.argExpectation register
+            Editor.Node nodeKind (Editor.ValidNode Editor.RegisterUse) Editor.argExpectation ("$" ++ register)
 
         argConstantNode : Editor.NodeKind -> RegisterMachine.Constant -> Editor.Node
         argConstantNode nodeKind constant =
@@ -85,21 +85,21 @@ translateInstruction instruction =
 
         argLabelNode : Editor.NodeKind -> RegisterMachine.Label -> Editor.Node
         argLabelNode nodeKind label =
-            Editor.Node nodeKind (Editor.ValidNode Editor.Label) Editor.argExpectation label
+            Editor.Node nodeKind (Editor.ValidNode Editor.Label) Editor.argExpectation (":" ++ label)
 
         -- jumping
         testRegisterUseNode : RegisterMachine.Register -> Editor.Node
         testRegisterUseNode register =
             -- This is used only for if $reg jump ...
-            Editor.Node Editor.Static (Editor.ValidNode Editor.RegisterUse) Editor.registerUseExpectation register
+            Editor.Node Editor.Static (Editor.ValidNode Editor.RegisterUse) Editor.registerUseExpectation ("$" ++ register)
 
         jumpArgLabelNode : RegisterMachine.Label -> Editor.Node
         jumpArgLabelNode label =
-            Editor.Node Editor.Static (Editor.ValidNode Editor.Label) Editor.jumpArgExpectation label
+            Editor.Node Editor.Static (Editor.ValidNode Editor.Label) Editor.jumpArgExpectation (":" ++ label)
 
         jumpArgRegisterNode : RegisterMachine.Register -> Editor.Node
         jumpArgRegisterNode register =
-            Editor.Node Editor.Static (Editor.ValidNode Editor.RegisterUse) Editor.jumpArgExpectation register
+            Editor.Node Editor.Static (Editor.ValidNode Editor.RegisterUse) Editor.jumpArgExpectation ("$" ++ register)
     in
     case instruction of
         RegisterMachine.AssignRegister input ->
