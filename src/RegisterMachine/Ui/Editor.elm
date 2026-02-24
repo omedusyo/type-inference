@@ -69,15 +69,17 @@ type alias Model =
 init : RegisterMachine.InstructionBlock -> Effect rootMsg Msg Model
 init instructionBlock =
     Effect.pure
-        { -- TODO: I should compile the `instructionBlock` into editor instructions
-          instructions =
-            -- ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
-            case MachineInstructionsToEditorTranslator.translateInstructionBlock instructionBlock of
-                [] ->
-                    Debug.todo ""
+        { instructions = ZipList.singleton Halt
 
-                instruction :: instructions ->
-                    ZipList.fromList instruction instructions
+        -- { -- TODO: I should compile the `instructionBlock` into editor instructions
+        --   instructions =
+        --     -- ZipList.fromList exampleInstruction0 [ exampleInstruction1, exampleInstruction2, Halt ]
+        --     case MachineInstructionsToEditorTranslator.translateInstructionBlock instructionBlock of
+        --         [] ->
+        --             Debug.todo ""
+
+        --         instruction :: instructions ->
+        --             ZipList.fromList instruction instructions
 
         -- TODO: What should be the default mode?
         -- , instructionMode = TraversingInstructions TraversingNodes
@@ -203,7 +205,8 @@ setModeToRun : Model -> Model
 setModeToRun model =
     { model
         | instructionMode = Run
-        , instructionBlock = EditorToMachineInstructionsTranslator.translateEditorInstructions model.instructions
+        -- TODO
+        -- , instructionBlock = EditorToMachineInstructionsTranslator.translateEditorInstructions model.instructions
     }
 
 
