@@ -2,7 +2,7 @@
 Implementation of Typed (Polymorphic) Lambda Calculus together with type inference. I'm just trying to understand how the sausage is made, and it's fascinating.
 
 What is implemented so far:
-* Product, Sum, Arrow, Nat, Bool types, List (List : Type -> Type), and their constructors/eliminator (folds)
+* `Product, Sum, Arrow, Nat, Bool` types, `List (List : Type -> Type)`, and their constructors/eliminator (folds)
 * Type inference (with let polymorphism, which so far was the hardest bit in all of this)
 * Rudimentary module system
 * Very basic UI (REPL) <https://omedusyo.github.io/type_inference/index.html>
