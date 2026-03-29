@@ -8,8 +8,9 @@ import Calculus.Show as L
 import Element as E exposing (Element)
 import Element.Input as Input
 import Lib.Parser.Error as PError
-import Ui.Control.Context as Context exposing (Config, Context)
-import Ui.Control.InitContext as InitContext exposing (InitContext)
+import Ui.Control.Action as Context exposing (Action)
+import Ui.Control.Config exposing (Config)
+import Ui.Control.Effect as Effect exposing (Effect)
 import Ui.Style.Button as Button
 
 
@@ -78,7 +79,7 @@ type alias Model =
     }
 
 
-init : InitContext Model Msg
+init : Effect rootMsg Msg Model
 init =
     let
         input1 =
@@ -134,7 +135,7 @@ init =
         input =
             input1
     in
-    InitContext.setModelTo
+    Effect.pure
         ({ moduleInput = input
          , parsedModule = Nothing
          , evaledModule = Nothing
@@ -156,11 +157,11 @@ type Msg
     | ReplRunButtonClicked
 
 
-update : Msg -> Context Model msg
+update : Msg -> Action rootMsg Msg Model
 update msg =
     case msg of
         ModuleInputChanged input ->
-            Context.update
+            Context.from
                 (\model ->
                     { model
                         | moduleInput = input
@@ -171,7 +172,7 @@ update msg =
                 )
 
         ModuleRunButtonClicked ->
-            Context.update
+            Context.from
                 (\model ->
                     { model
                         | evaledTerm = Nothing
@@ -182,7 +183,7 @@ update msg =
                 )
 
         ReplInputChanged input ->
-            Context.update
+            Context.from
                 (\model ->
                     let
                         parsedTerm =
@@ -196,7 +197,7 @@ update msg =
                 )
 
         ReplRunButtonClicked ->
-            Context.update
+            Context.from
                 (\model ->
                     case model.parsedTerm of
                         Just (Ok term) ->
@@ -207,8 +208,8 @@ update msg =
                 )
 
 
-view : Config -> Model -> Element Msg
-view config model =
+view : Model -> Element Msg
+view model =
     E.column [ E.width E.fill ]
         [ E.column [ E.width E.fill ]
             [ Input.button Button.buttonStyle

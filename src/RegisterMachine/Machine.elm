@@ -3,26 +3,68 @@ module RegisterMachine.Machine exposing (..)
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Lib.Result as Result
-import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Instruction(..), InstructionAddress, Label, MemoryAddress, OperationApplication(..), OperationArgument(..), OperationName, Register, Value(..))
+import RegisterMachine.Base as RegisterMachine exposing (Constant(..), Instruction(..), InstructionPointer, Label, MachineInstruction(..), MemoryPointer, OperationArgument(..), OperationName, Register, Value(..))
 import RegisterMachine.MemoryState as MemoryState exposing (MemoryError, MemoryState)
 import RegisterMachine.Stack as Stack exposing (Stack)
-import Set exposing (Set)
 
 
-type alias Machine =
-    { env : RegisterEnvironment
-    , stack : Stack
-    , memory : MachineMemory
-    , operationEnv : OperationEnvironment
-    , instructionPointer : InstructionAddress
-    , instructions : MachineInstructions
+type alias ControllerExample =
+    { name : String
+    , initialRegisters : List ( String, Value )
+    , instructionBlock : InstructionBlock
     }
 
 
-type alias MachineInstructions =
-    { labels : Set Label
-    , labelToPosition : Dict Label InstructionAddress
-    , instructions : Array Instruction
+emptyControllerExample : ControllerExample
+emptyControllerExample =
+    { name = "(new)"
+    , initialRegisters = []
+    , instructionBlock = []
+    }
+
+
+type alias ControlledMachineState =
+    { machineState : MachineState
+    , controllerState : ControllerState
+    }
+
+
+type alias ControllerState =
+    { instructions : Array MachineInstruction
+    , currentInstructionPointer : InstructionPointer
+    }
+
+
+type ControllerChange
+    = AdvanceInstructionPointer
+    | JumpTo InstructionPointer
+
+
+controllerChangeAction : ControllerChange -> ControllerState -> ControllerState
+controllerChangeAction change state =
+    case change of
+        AdvanceInstructionPointer ->
+            { state | currentInstructionPointer = state.currentInstructionPointer + 1 }
+
+        JumpTo instructionPointer ->
+            { state | currentInstructionPointer = instructionPointer }
+
+
+fetchInstruction : ControllerState -> ComputationStep r MachineInstruction
+fetchInstruction { instructions, currentInstructionPointer } =
+    case Array.get currentInstructionPointer instructions of
+        Just instruction ->
+            Continue instruction
+
+        Nothing ->
+            RuntimeError (InstructionPointerOutOfBounds { instructionPointer = currentInstructionPointer, numberOfInstructions = Array.length instructions })
+
+
+type alias MachineState =
+    { registerEnv : RegisterEnvironment
+    , stack : Stack
+    , memory : MachineMemory
+    , operationEnv : OperationEnvironment
     }
 
 
@@ -39,6 +81,11 @@ type alias RegisterEnvironment =
     Dict Register Value
 
 
+type alias LabelEnvironment =
+    -- Poor's man invertible dictionary
+    ( Dict Label InstructionPointer, Dict InstructionPointer Label )
+
+
 type alias Operation =
     List Value -> Result RuntimeError Value
 
@@ -47,9 +94,41 @@ type alias OperationEnvironment =
     Dict OperationName Operation
 
 
+emptyLabelEnv : LabelEnvironment
+emptyLabelEnv =
+    ( Dict.empty, Dict.empty )
+
+
+instructionPointerFromLabel : Label -> LabelEnvironment -> Maybe InstructionPointer
+instructionPointerFromLabel label ( labelToInstructionPointer, _ ) =
+    Dict.get label labelToInstructionPointer
+
+
+labelFromInstructionPointer : InstructionPointer -> LabelEnvironment -> Maybe Label
+labelFromInstructionPointer instructionPointer ( _, instructionPointerToLabel ) =
+    Dict.get instructionPointer instructionPointerToLabel
+
+
+bindLabel : Label -> InstructionPointer -> LabelEnvironment -> LabelEnvironment
+bindLabel label instructionPointer ( labelToInstructionPointer, instructionPointerToLabel ) =
+    ( Dict.insert label instructionPointer labelToInstructionPointer
+    , Dict.insert instructionPointer label instructionPointerToLabel
+    )
+
+
 type Two
     = Zero
     | One
+
+
+twoFlip : Two -> Two
+twoFlip twoVal =
+    case twoVal of
+        Zero ->
+            One
+
+        One ->
+            Zero
 
 
 type alias MachineMemory =
@@ -69,24 +148,15 @@ type MemoryType
     | Dual
 
 
-type TranslationError
+type CompilationError
     = LabelUsedMoreThanOnce Label
+    | LabelDoesNotExist Label
     | UnknownRegister Register
 
 
 
 -- A controller is a description of a register machine.
 -- Given a controller, we should be able to construct a register machine that is governed by said controller.
-
-
-type alias Controller =
-    -- TODO: Should we have typed registers? Int/Bool? This will complicate the operations though...
-    { registers : Set Register
-    , instructions : InstructionBlock
-    }
-
-
-
 -- ===Machine Construction===
 -- helper
 
@@ -97,187 +167,184 @@ foldlMayFail update state actions0 =
         [] ->
             Ok state
 
-        action :: actions1 ->
-            update action state
+        a :: actions1 ->
+            update a state
                 |> Result.andThen (\newState -> foldlMayFail update newState actions1)
 
 
-checkRegisters : List Register -> List OperationArgument -> Controller -> Result TranslationError ()
-checkRegisters registers arguments controller =
+
+-- ===Compilation===
+
+
+translateLabelToInstructionPointer : LabelEnvironment -> Label -> Result CompilationError InstructionPointer
+translateLabelToInstructionPointer labelEnv label =
+    instructionPointerFromLabel label labelEnv
+        |> Result.fromMaybe (LabelDoesNotExist label)
+
+
+translateInstructionToMachineInstruction : LabelEnvironment -> Instruction -> Result CompilationError MachineInstruction
+translateInstructionToMachineInstruction labelEnv instruction =
+    case instruction of
+        AssignRegister input ->
+            Ok (MAssignRegister input)
+
+        AssignLabel { targetRegister, label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MAssignInstructionPointer { targetRegister = targetRegister, instructionPointer = instructionPointer })
+
+        AssignOperation input ->
+            Ok (MAssignOperation input)
+
+        AssignConstant input ->
+            Ok (MAssignConstant input)
+
+        JumpToLabel { label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MJumpToInstructionPointer { instructionPointer = instructionPointer })
+
+        JumpToInstructionPointerAtRegister input ->
+            Ok (MJumpToInstructionPointerAtRegister input)
+
+        JumpToLabelIf { testRegister, label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MJumpToInstructionPointerIf { testRegister = testRegister, instructionPointer = instructionPointer })
+
+        JumpToInstructionPointerAtRegisterIf input ->
+            Ok (MJumpToInstructionPointerAtRegisterIf input)
+
+        Halt input ->
+            Ok (MHalt input)
+
+        PushRegister input ->
+            Ok (MPushRegister input)
+
+        PushConstant input ->
+            Ok (MPushConstant input)
+
+        PushLabel { label } ->
+            translateLabelToInstructionPointer labelEnv label
+                |> Result.map (\instructionPointer -> MPushInstructionPointer { instructionPointer = instructionPointer })
+
+        Pop input ->
+            Ok (MPop input)
+
+        ConstructPair input ->
+            Ok (MConstructPair input)
+
+        First input ->
+            Ok (MFirst input)
+
+        Second input ->
+            Ok (MSecond input)
+
+        SetFirst input ->
+            Ok (MSetFirst input)
+
+        SetSecond input ->
+            Ok (MSetSecond input)
+
+        DualFirst input ->
+            Ok (MDualFirst input)
+
+        DualSecond input ->
+            Ok (MDualSecond input)
+
+        DualSetFirst input ->
+            Ok (MDualSetFirst input)
+
+        DualSetSecond input ->
+            Ok (MDualSetSecond input)
+
+        MoveToDual input ->
+            Ok (MMoveToDual input)
+
+        MarkAsMoved input ->
+            Ok (MMarkAsMoved input)
+
+        SwapMemory input ->
+            Ok (MSwapMemory input)
+
+        Unfinished input ->
+            Ok (MUnfinished input)
+
+
+translateInstructionsToMachineInstructions : InstructionBlock -> Result CompilationError ( LabelEnvironment, Array MachineInstruction )
+translateInstructionsToMachineInstructions instructionBlock =
     let
-        checkRegister : Register -> Result TranslationError ()
-        checkRegister register =
-            if Set.member register controller.registers then
-                Ok ()
+        -- Note that the list of instructiosn returned is in a reversed order
+        constructLabelEnvironmentAndFilterOutLabels : InstructionPointer -> InstructionBlock -> LabelEnvironment -> List Instruction -> Result CompilationError ( LabelEnvironment, List Instruction )
+        constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock0 labelEnv filteredInstructionsReversed =
+            case instructionBlock0 of
+                [] ->
+                    Ok ( labelEnv, filteredInstructionsReversed )
 
-            else
-                Err (UnknownRegister register)
+                labelOrInstruction :: instructionBlock1 ->
+                    case labelOrInstruction of
+                        Perform instruction ->
+                            constructLabelEnvironmentAndFilterOutLabels (nextInstructionPointer + 1) instructionBlock1 labelEnv (instruction :: filteredInstructionsReversed)
 
-        checkArg : OperationArgument -> Result TranslationError ()
-        checkArg arg =
-            case arg of
-                Register register ->
-                    checkRegister register
+                        Label label ->
+                            constructLabelEnvironmentAndFilterOutLabels nextInstructionPointer instructionBlock1 (labelEnv |> bindLabel label nextInstructionPointer) filteredInstructionsReversed
 
-                _ ->
-                    Ok ()
+        -- Note that this assumes the instructions reversed as input
+        translate : LabelEnvironment -> List Instruction -> Result CompilationError (List MachineInstruction)
+        translate labelEnv instructionsReversed =
+            foldlMayFail
+                (\instruction machineInstructions ->
+                    translateInstructionToMachineInstruction labelEnv instruction
+                        |> Result.map (\machineInstruction -> machineInstruction :: machineInstructions)
+                )
+                []
+                instructionsReversed
     in
-    Result.tuple2
-        (registers |> List.map checkRegister |> Result.sequence)
-        (arguments |> List.map checkArg |> Result.sequence)
-        |> Result.ignore
-
-
-parse : Controller -> Result TranslationError MachineInstructions
-parse controller =
-    let
-        checkRegisterUse : Instruction -> Result TranslationError ()
-        checkRegisterUse instruction =
-            case instruction of
-                AssignRegister target source ->
-                    controller |> checkRegisters [ target, source ] []
-
-                AssignLabel target _ ->
-                    controller |> checkRegisters [ target ] []
-
-                AssignOperation target (Operation _ arguments) ->
-                    controller |> checkRegisters [] arguments
-
-                AssignConstant target _ ->
-                    controller |> checkRegisters [ target ] []
-
-                JumpToLabel label ->
-                    Ok ()
-
-                JumpToLabelAtRegister target ->
-                    controller |> checkRegisters [ target ] []
-
-                JumpToLabelIf testRegister _ ->
-                    controller |> checkRegisters [ testRegister ] []
-
-                JumpToLabelAtRegisterIf testRegister target ->
-                    controller |> checkRegisters [ testRegister, target ] []
-
-                Halt ->
-                    Ok ()
-
-                PushRegister register ->
-                    controller |> checkRegisters [ register ] []
-
-                PushConstant _ ->
-                    Ok ()
-
-                PushLabel label ->
-                    Ok ()
-
-                Pop target ->
-                    controller |> checkRegisters [ target ] []
-
-                AssignCallAtLabel target _ ->
-                    controller |> checkRegisters [ target ] []
-
-                AssignCallAtRegister target labelRegister ->
-                    controller |> checkRegisters [ target, labelRegister ] []
-
-                ConstructPair target arg0 arg1 ->
-                    controller |> checkRegisters [ target ] [ arg0, arg1 ]
-
-                First target source ->
-                    controller |> checkRegisters [ target, source ] []
-
-                Second target source ->
-                    controller |> checkRegisters [ target, source ] []
-
-                SetFirst target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
-
-                SetSecond target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
-
-                DualFirst target source ->
-                    controller |> checkRegisters [ target, source ] []
-
-                DualSecond target source ->
-                    controller |> checkRegisters [ target, source ] []
-
-                DualSetFirst target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
-
-                DualSetSecond target arg ->
-                    controller |> checkRegisters [ target ] [ arg ]
-
-                MoveToDual target source ->
-                    controller |> checkRegisters [ target, source ] []
-
-                MarkAsMoved toBeCollected referenceToDualMemory ->
-                    controller |> checkRegisters [ toBeCollected, referenceToDualMemory ] []
-
-                SwapMemory ->
-                    Ok ()
-
-        initMachineInstructions : ( InstructionAddress, MachineInstructions )
-        initMachineInstructions =
-            ( 0
-            , { labels = Set.empty
-              , labelToPosition = Dict.empty
-              , instructions = Array.empty
-              }
+    constructLabelEnvironmentAndFilterOutLabels 0 instructionBlock emptyLabelEnv []
+        |> Result.andThen
+            (\( labelEnv, reversedInstructions ) ->
+                translate labelEnv reversedInstructions
+                    |> Result.map (\machineInstructions -> ( labelEnv, machineInstructions |> Array.fromList ))
             )
 
-        update : LabelOrInstruction -> ( InstructionAddress, MachineInstructions ) -> Result TranslationError ( InstructionAddress, MachineInstructions )
-        update labelOrInstruction ( pointer, machineInstructions ) =
-            case labelOrInstruction of
-                Label label ->
-                    if Set.member label machineInstructions.labels then
-                        Err (LabelUsedMoreThanOnce label)
 
-                    else
-                        Ok
-                            ( pointer
-                            , { machineInstructions
-                                | labels = Set.insert label machineInstructions.labels
-                                , labelToPosition =
-                                    Dict.insert label pointer machineInstructions.labelToPosition
-                              }
-                            )
-
-                Perform instruction ->
-                    Ok
-                        ( pointer + 1
-                        , { machineInstructions
-                            | instructions =
-                                Array.push instruction machineInstructions.instructions
-                          }
-                        )
-    in
-    foldlMayFail update initMachineInstructions controller.instructions
-        |> Result.map Tuple.second
-
-
-makeMachine : Controller -> RegisterEnvironment -> OperationEnvironment -> Result TranslationError Machine
-makeMachine controller env operationsEnv =
-    parse controller
-        |> Result.map
-            (\instructions ->
-                { env = env
-                , operationEnv = operationsEnv
-                , memory =
-                    -- TODO
-                    { memoryState0 = MemoryState.empty 4096
-
-                    -- MemoryState.example0
-                    , memoryState1 = MemoryState.empty 4096
-                    , memoryInUse = Zero
-                    }
-                , stack = Stack.empty
-                , instructionPointer = 0
-                , instructions = instructions
-                }
+compileMachine : InstructionBlock -> List ( Register, Value ) -> OperationEnvironment -> Result CompilationError ( LabelEnvironment, ControlledMachineState )
+compileMachine instructionBlock initialRegisters operationEnv =
+    translateInstructionsToMachineInstructions instructionBlock
+        |> Result.andThen
+            (\( labelEnv, machineInstructions ) ->
+                -- TODO: Here you should check that the machineInstructions use the registers in the initial register environment
+                --       Do that after you replace Register Names with a special RegisterPointers
+                Ok
+                    ( labelEnv
+                    , { machineState =
+                            { registerEnv = Dict.fromList initialRegisters
+                            , operationEnv = operationEnv
+                            , memory =
+                                let
+                                    memorySize =
+                                        4096
+                                in
+                                { memoryState0 = MemoryState.empty memorySize
+                                , memoryState1 = MemoryState.empty memorySize
+                                , memoryInUse = Zero
+                                }
+                            , stack = Stack.empty
+                            }
+                      , controllerState =
+                            { instructions = machineInstructions
+                            , currentInstructionPointer = 0
+                            }
+                      }
+                    )
             )
+
+
+compileMachineFromControllerExample : ControllerExample -> OperationEnvironment -> Result CompilationError ( LabelEnvironment, ControlledMachineState )
+compileMachineFromControllerExample { instructionBlock, initialRegisters } operationEnv =
+    compileMachine instructionBlock initialRegisters operationEnv
 
 
 
 -- === Machine ===
+-- =Operations=
 
 
 makeOperation2 : (Value -> Value -> Result RuntimeError Value) -> Operation
@@ -328,21 +395,13 @@ makeNumOperation1 op =
         )
 
 
-getInstruction : Machine -> Maybe Instruction
-getInstruction machine =
-    Array.get machine.instructionPointer machine.instructions.instructions
+
+-- =MachineState=
 
 
-advanceInstructionPointer : Machine -> Machine
-advanceInstructionPointer machine =
-    { machine
-        | instructionPointer = machine.instructionPointer + 1
-    }
-
-
-getRegister : Register -> Machine -> Result RuntimeError Value
+getRegister : Register -> MachineState -> Result RuntimeError Value
 getRegister register machine =
-    case Dict.get register machine.env of
+    case Dict.get register machine.registerEnv of
         Just val ->
             Ok val
 
@@ -350,7 +409,7 @@ getRegister register machine =
             Err (UndefinedRegister register)
 
 
-getValueFromArgument : OperationArgument -> Machine -> Result RuntimeError Value
+getValueFromArgument : OperationArgument -> MachineState -> Result RuntimeError Value
 getValueFromArgument argument machine =
     case argument of
         Register register ->
@@ -360,23 +419,23 @@ getValueFromArgument argument machine =
             Ok (ConstantValue val)
 
 
-getInstructionAddressAtRegister : Register -> Machine -> Result RuntimeError InstructionAddress
-getInstructionAddressAtRegister register machine =
+getInstructionPointerAtRegister : Register -> MachineState -> Result RuntimeError InstructionPointer
+getInstructionPointerAtRegister register machine =
     machine
         |> getRegister register
         |> Result.andThen
             (\value ->
                 case value of
-                    InstructionAddress pointer ->
+                    InstructionPointer pointer ->
                         Ok pointer
 
                     _ ->
-                        Err ExpectedInstructionAddressInRegister
+                        Err ExpectedInstructionPointerInRegister
             )
 
 
-getMemoryAddressAtRegister : Register -> Machine -> Result RuntimeError MemoryAddress
-getMemoryAddressAtRegister register machine =
+getMemoryPointerAtRegister : Register -> MachineState -> Result RuntimeError MemoryPointer
+getMemoryPointerAtRegister register machine =
     machine
         |> getRegister register
         |> Result.andThen
@@ -390,14 +449,35 @@ getMemoryAddressAtRegister register machine =
             )
 
 
-updateRegister : Register -> Value -> Machine -> Machine
+updateRegister : Register -> Value -> MachineState -> MachineState
 updateRegister register val machine =
-    { machine
-        | env = Dict.insert register val machine.env
-    }
+    { machine | registerEnv = Dict.insert register val machine.registerEnv }
 
 
-setMemoryStateOfMachine : MemoryType -> MemoryState -> Machine -> Machine
+getOperation : OperationName -> MachineState -> Result RuntimeError (List Value -> Result RuntimeError Value)
+getOperation operationName machine =
+    case Dict.get operationName machine.operationEnv of
+        Just op ->
+            Ok op
+
+        Nothing ->
+            Err (UndefinedOperation operationName)
+
+
+
+-- =Stack=
+
+
+push : Value -> MachineState -> MachineState
+push val machine =
+    { machine | stack = Stack.push val machine.stack }
+
+
+
+-- =Memory=
+
+
+setMemoryStateOfMachine : MemoryType -> MemoryState -> MachineState -> MachineState
 setMemoryStateOfMachine memoryType memoryState ({ memory } as machine) =
     case ( memoryType, memory.memoryInUse ) of
         ( Main, Zero ) ->
@@ -413,7 +493,7 @@ setMemoryStateOfMachine memoryType memoryState ({ memory } as machine) =
             { machine | memory = { memory | memoryState0 = memoryState } }
 
 
-setDualMemoryStateOfMachine : MemoryState -> Machine -> Machine
+setDualMemoryStateOfMachine : MemoryState -> MachineState -> MachineState
 setDualMemoryStateOfMachine memoryState ({ memory } as machine) =
     case memory.memoryInUse of
         Zero ->
@@ -423,61 +503,7 @@ setDualMemoryStateOfMachine memoryState ({ memory } as machine) =
             { machine | memory = { memory | memoryState0 = memoryState } }
 
 
-accessPair : MemoryCellComponent -> MemoryType -> Register -> Register -> Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
-accessPair memoryCellComponent memoryType target source machine =
-    machine
-        |> getMemoryAddressAtRegister source
-        |> Result.andThen
-            (\pointer ->
-                machine
-                    |> currentMemoryState memoryType
-                    |> MemoryState.get pointer
-                    |> Result.mapError MemoryError
-                    |> Result.map
-                        (\( a, b ) ->
-                            { isFinished = False
-                            , machine =
-                                machine
-                                    |> (case memoryCellComponent of
-                                            FirstComponent ->
-                                                updateRegister target a
-
-                                            SecondComponent ->
-                                                updateRegister target b
-                                       )
-                                    |> advanceInstructionPointer
-                            }
-                        )
-            )
-
-
-setPair : MemoryCellComponent -> MemoryType -> Register -> OperationArgument -> Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
-setPair memoryCellComponent memoryType register arg machine =
-    Result.tuple2 (machine |> getValueFromArgument arg) (machine |> getMemoryAddressAtRegister register)
-        |> Result.map
-            (\( val, pointer ) ->
-                { isFinished = False
-                , machine =
-                    machine
-                        |> setMemoryStateOfMachine
-                            memoryType
-                            (MemoryState.update pointer
-                                (\( a, b ) ->
-                                    case memoryCellComponent of
-                                        FirstComponent ->
-                                            ( val, b )
-
-                                        SecondComponent ->
-                                            ( a, val )
-                                )
-                                (machine |> currentMemoryState memoryType)
-                            )
-                        |> advanceInstructionPointer
-                }
-            )
-
-
-currentMemoryState : MemoryType -> Machine -> MemoryState
+currentMemoryState : MemoryType -> MachineState -> MemoryState
 currentMemoryState memoryType machine =
     case ( memoryType, machine.memory.memoryInUse ) of
         ( Main, Zero ) ->
@@ -493,74 +519,8 @@ currentMemoryState memoryType machine =
             machine.memory.memoryState0
 
 
-getOperation : OperationName -> Machine -> Result RuntimeError (List Value -> Result RuntimeError Value)
-getOperation operationName machine =
-    case Dict.get operationName machine.operationEnv of
-        Just op ->
-            Ok op
 
-        Nothing ->
-            Err (UndefinedOperation operationName)
-
-
-getLabelPosition : Label -> Machine -> Maybe InstructionAddress
-getLabelPosition label machine =
-    Dict.get label machine.instructions.labelToPosition
-
-
-jump : Label -> Machine -> Machine
-jump label machine =
-    case getLabelPosition label machine of
-        Just pointer ->
-            pointerJump pointer machine
-
-        Nothing ->
-            machine
-
-
-pointerJump : InstructionAddress -> Machine -> Machine
-pointerJump pointer machine =
-    { machine
-        | instructionPointer = pointer
-    }
-
-
-halt : Machine -> { isFinished : Bool, machine : Machine }
-halt machine =
-    { isFinished = True, machine = machine }
-
-
-push : Value -> Machine -> Machine
-push val machine =
-    { machine
-        | stack = Stack.push val machine.stack
-    }
-
-
-pop : Machine -> Result RuntimeError ( Value, Machine )
-pop machine =
-    case Stack.pop machine.stack of
-        Just ( val, stack ) ->
-            Ok ( val, { machine | stack = stack } )
-
-        Nothing ->
-            Err PoppingEmptyStack
-
-
-swapMemory : Machine -> Machine
-swapMemory ({ memory } as machine) =
-    { machine
-        | memory =
-            { memory
-                | memoryInUse =
-                    case memory.memoryInUse of
-                        Zero ->
-                            One
-
-                        One ->
-                            Zero
-            }
-    }
+-- ===Running the Machine===
 
 
 type RuntimeError
@@ -568,316 +528,487 @@ type RuntimeError
     | UndefinedOperation OperationName
     | WrongNumberOfArgumentsGivenToOperationExpected Int
     | TheOperationExpectsIntegerArguments
-    | LabelPointsToNothing Label
     | PoppingEmptyStack
-    | ExpectedInstructionAddressInRegister
+    | ExpectedInstructionPointerInRegister
     | ExpectedPairInRegister
     | MemoryError MemoryError
+    | InstructionPointerOutOfBounds { instructionPointer : InstructionPointer, numberOfInstructions : Int }
 
 
-runOneStep : Machine -> Result RuntimeError { isFinished : Bool, machine : Machine }
-runOneStep machine =
-    case getInstruction machine of
-        Just instruction ->
-            case instruction of
-                AssignRegister target source ->
-                    getRegister source machine
-                        |> Result.map
-                            (\val ->
-                                { isFinished = False
-                                , machine =
-                                    machine
-                                        |> updateRegister target val
-                                        |> advanceInstructionPointer
-                                }
-                            )
-
-                AssignLabel target label ->
-                    -- TODO: There could be an off-by-one error, where the label points to Nothing, but actually it is the halting label?
-                    case getLabelPosition label machine of
-                        Just pointer ->
-                            Ok
-                                { isFinished = False
-                                , machine =
-                                    machine
-                                        |> updateRegister target (InstructionAddress pointer)
-                                        |> advanceInstructionPointer
-                                }
-
-                        Nothing ->
-                            Err (LabelPointsToNothing label)
-
-                AssignOperation target (Operation opName args) ->
-                    let
-                        applyOp : Operation -> Result RuntimeError { isFinished : Bool, machine : Machine }
-                        applyOp op =
-                            args
-                                |> List.map (\argument -> machine |> getValueFromArgument argument)
-                                |> Result.sequence
-                                |> Result.andThen op
-                                |> Result.map
-                                    (\output ->
-                                        { isFinished = False
-                                        , machine =
-                                            machine
-                                                |> updateRegister target output
-                                                |> advanceInstructionPointer
-                                        }
-                                    )
-                    in
-                    getOperation opName machine
-                        |> Result.andThen applyOp
-
-                AssignConstant target x ->
-                    Ok
-                        { isFinished = False
-                        , machine =
-                            machine
-                                |> updateRegister target (ConstantValue x)
-                                |> advanceInstructionPointer
-                        }
-
-                JumpToLabel label ->
-                    Ok { isFinished = False, machine = jump label machine }
-
-                JumpToLabelAtRegister register ->
-                    getInstructionAddressAtRegister register machine
-                        |> Result.map
-                            (\pointer ->
-                                { isFinished = False
-                                , machine = pointerJump pointer machine
-                                }
-                            )
-
-                JumpToLabelIf testRegister label ->
-                    getRegister testRegister machine
-                        |> Result.map
-                            (\val ->
-                                { isFinished = False
-                                , machine =
-                                    if val == ConstantValue (Num 1) then
-                                        jump label machine
-
-                                    else
-                                        advanceInstructionPointer machine
-                                }
-                            )
-
-                JumpToLabelAtRegisterIf testRegister target ->
-                    getRegister testRegister machine
-                        |> Result.andThen
-                            (\val ->
-                                if val == ConstantValue (Num 1) then
-                                    getInstructionAddressAtRegister target machine
-                                        |> Result.map
-                                            (\pointer ->
-                                                { isFinished = False
-                                                , machine = pointerJump pointer machine
-                                                }
-                                            )
-
-                                else
-                                    Ok
-                                        { isFinished = False
-                                        , machine = advanceInstructionPointer machine
-                                        }
-                            )
-
-                Halt ->
-                    Ok (halt machine)
-
-                PushRegister register ->
-                    getRegister register machine
-                        |> Result.map
-                            (\val ->
-                                { isFinished = False
-                                , machine =
-                                    machine
-                                        |> push val
-                                        |> advanceInstructionPointer
-                                }
-                            )
-
-                PushConstant val ->
-                    Ok
-                        { isFinished = False
-                        , machine =
-                            machine
-                                |> push (ConstantValue val)
-                                |> advanceInstructionPointer
-                        }
-
-                PushLabel label ->
-                    case getLabelPosition label machine of
-                        Just pointer ->
-                            Ok
-                                { isFinished = False
-                                , machine =
-                                    machine
-                                        |> push (InstructionAddress pointer)
-                                        |> advanceInstructionPointer
-                                }
-
-                        Nothing ->
-                            Err (LabelPointsToNothing label)
-
-                Pop target ->
-                    pop machine
-                        |> Result.map
-                            (\( val, newMachine ) ->
-                                { isFinished = False
-                                , machine =
-                                    newMachine
-                                        |> updateRegister target val
-                                        |> advanceInstructionPointer
-                                }
-                            )
-
-                AssignCallAtLabel target label ->
-                    -- target <- $ip + 1
-                    -- ip <- :label
-                    Ok
-                        { isFinished = False
-                        , machine =
-                            machine
-                                |> updateRegister target (InstructionAddress (machine.instructionPointer + 1))
-                                |> jump label
-                        }
-
-                AssignCallAtRegister target labelRegister ->
-                    -- target <- $ip + 1
-                    -- ip <- $labelRegister
-                    getInstructionAddressAtRegister labelRegister machine
-                        |> Result.map
-                            (\pointer ->
-                                { isFinished = False
-                                , machine =
-                                    machine
-                                        |> updateRegister target (InstructionAddress (machine.instructionPointer + 1))
-                                        |> pointerJump pointer
-                                }
-                            )
-
-                ConstructPair target arg0 arg1 ->
-                    Result.tuple2 (machine |> getValueFromArgument arg0) (machine |> getValueFromArgument arg1)
-                        |> Result.andThen
-                            (\( value0, value1 ) ->
-                                (machine |> currentMemoryState Main |> MemoryState.new ( value0, value1 ))
-                                    |> Result.mapError MemoryError
-                                    |> Result.map
-                                        (\( newPairAddress, newMemoryState ) ->
-                                            { isFinished = False
-                                            , machine =
-                                                machine
-                                                    |> setMemoryStateOfMachine Main newMemoryState
-                                                    |> updateRegister target (Pair newPairAddress)
-                                                    |> advanceInstructionPointer
-                                            }
-                                        )
-                            )
-
-                First target source ->
-                    machine |> accessPair FirstComponent Main target source
-
-                Second target source ->
-                    machine |> accessPair SecondComponent Main target source
-
-                SetFirst register arg ->
-                    machine |> setPair FirstComponent Main register arg
-
-                SetSecond register arg ->
-                    machine |> setPair SecondComponent Main register arg
-
-                DualFirst target source ->
-                    machine |> accessPair FirstComponent Dual target source
-
-                DualSecond target source ->
-                    machine |> accessPair SecondComponent Dual target source
-
-                DualSetFirst register arg ->
-                    machine |> setPair FirstComponent Dual register arg
-
-                DualSetSecond register arg ->
-                    machine |> setPair SecondComponent Dual register arg
-
-                MoveToDual target source ->
-                    machine
-                        |> getMemoryAddressAtRegister source
-                        |> Result.andThen
-                            (\sourceAddress ->
-                                machine
-                                    |> currentMemoryState Main
-                                    |> MemoryState.get sourceAddress
-                                    |> Result.mapError MemoryError
-                                    |> Result.andThen
-                                        (\memoryCell ->
-                                            machine
-                                                |> currentMemoryState Dual
-                                                |> MemoryState.new memoryCell
-                                                |> Result.mapError MemoryError
-                                        )
-                                    |> Result.map
-                                        (\( addressOfNewPair, newDualMemoryState ) ->
-                                            { isFinished = False
-                                            , machine =
-                                                machine
-                                                    |> setDualMemoryStateOfMachine newDualMemoryState
-                                                    |> updateRegister target (Pair addressOfNewPair)
-                                                    |> advanceInstructionPointer
-                                            }
-                                        )
-                            )
-
-                MarkAsMoved toBeCollected referenceToDualMemory ->
-                    Result.tuple2 (machine |> getMemoryAddressAtRegister toBeCollected) (machine |> getMemoryAddressAtRegister referenceToDualMemory)
-                        |> Result.map
-                            (\( addressToBeCollected, addressToDualMemory ) ->
-                                { isFinished = False
-                                , machine =
-                                    machine
-                                        |> setMemoryStateOfMachine Main
-                                            (machine
-                                                |> currentMemoryState Main
-                                                |> MemoryState.set addressToBeCollected ( Moved, Pair addressToDualMemory )
-                                            )
-                                        |> advanceInstructionPointer
-                                }
-                            )
-
-                SwapMemory ->
-                    Ok
-                        { isFinished = False
-                        , machine =
-                            machine
-                                |> swapMemory
-                                |> advanceInstructionPointer
-                        }
-
-        Nothing ->
-            Ok (halt machine)
+type ComputationStep r a
+    = RuntimeError RuntimeError
+    | Halted r
+    | Continue a
 
 
-evolve : Int -> Machine -> Result RuntimeError Machine
-evolve n machine0 =
-    if n == 0 then
-        Ok machine0
-
-    else
-        runOneStep machine0
-            |> Result.andThen
-                (\{ machine } ->
-                    evolve (n - 1) machine
-                )
+advance : MachineState -> ComputationStep r ( MachineState, ControllerChange )
+advance machineState =
+    Continue ( machineState, AdvanceInstructionPointer )
 
 
-start : Machine -> Result RuntimeError Machine
-start machine0 =
-    runOneStep machine0
-        |> Result.andThen
-            (\{ isFinished, machine } ->
-                if isFinished then
-                    Ok machine
+jumpTo : InstructionPointer -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+jumpTo instructionPointer machineState =
+    Continue ( machineState, JumpTo instructionPointer )
+
+
+fromResultAndThen : (a -> ComputationStep r b) -> Result RuntimeError a -> ComputationStep r b
+fromResultAndThen f result =
+    case result of
+        Ok a ->
+            f a
+
+        Err e ->
+            RuntimeError e
+
+
+andThen : (a -> ComputationStep r b) -> ComputationStep r a -> ComputationStep r b
+andThen f result =
+    case result of
+        RuntimeError e ->
+            RuntimeError e
+
+        Halted r ->
+            Halted r
+
+        Continue a ->
+            f a
+
+
+map : (a -> b) -> ComputationStep r a -> ComputationStep r b
+map f result =
+    andThen (f >> Continue) result
+
+
+mapHalted : (r0 -> r1) -> ComputationStep r0 a -> ComputationStep r1 a
+mapHalted f result =
+    case result of
+        RuntimeError e ->
+            RuntimeError e
+
+        Halted r ->
+            Halted (f r)
+
+        Continue a ->
+            Continue a
+
+
+
+-- ===START individual actions===
+-- assignment
+
+
+assignRegister : RegisterMachine.AssignRegisterInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+assignRegister { targetRegister, sourceRegister } machineState =
+    getRegister sourceRegister machineState
+        |> fromResultAndThen (\val -> advance (machineState |> updateRegister targetRegister val))
+
+
+assignInstructionPointer : RegisterMachine.AssignInstructionPointerInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+assignInstructionPointer { targetRegister, instructionPointer } machineState =
+    advance (machineState |> updateRegister targetRegister (InstructionPointer instructionPointer))
+
+
+assignOperation : RegisterMachine.AssignOperationInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+assignOperation { targetRegister, operationApplication } machineState =
+    getOperation operationApplication.name machineState
+        |> fromResultAndThen
+            (\op ->
+                operationApplication.arguments
+                    |> List.map (\argument -> machineState |> getValueFromArgument argument)
+                    |> Result.sequence
+                    |> Result.andThen op
+                    |> fromResultAndThen (\output -> advance (machineState |> updateRegister targetRegister output))
+            )
+
+
+assignConstant : RegisterMachine.AssignConstantInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+assignConstant { targetRegister, constant } machineState =
+    advance (machineState |> updateRegister targetRegister (ConstantValue constant))
+
+
+
+-- jumping
+
+
+jumpToInstructionPointer : RegisterMachine.JumpToInstructionPointerInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+jumpToInstructionPointer { instructionPointer } machineState =
+    jumpTo instructionPointer machineState
+
+
+jumpToInstructionPointerAtRegister : RegisterMachine.JumpToInstructionPointerAtRegisterInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+jumpToInstructionPointerAtRegister { instructionPointerRegister } machineState =
+    getInstructionPointerAtRegister instructionPointerRegister machineState
+        |> fromResultAndThen (\pointer -> jumpTo pointer machineState)
+
+
+jumpToInstructionPointerIf : RegisterMachine.JumpToInstructionPointerIfInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+jumpToInstructionPointerIf { testRegister, instructionPointer } machineState =
+    getRegister testRegister machineState
+        |> fromResultAndThen
+            (\val ->
+                if val == ConstantValue (Num 1) then
+                    jumpTo instructionPointer machineState
 
                 else
-                    start machine
+                    advance machineState
             )
+
+
+jumpToInstructionPointerAtRegisterIf : RegisterMachine.JumpToInstructionPointerAtRegisterIfInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+jumpToInstructionPointerAtRegisterIf { testRegister, instructionPointerRegister } machineState =
+    getRegister testRegister machineState
+        |> fromResultAndThen
+            (\val ->
+                if val == ConstantValue (Num 1) then
+                    getInstructionPointerAtRegister instructionPointerRegister machineState
+                        |> fromResultAndThen (\instructionPointer -> jumpTo instructionPointer machineState)
+
+                else
+                    advance machineState
+            )
+
+
+halt : RegisterMachine.HaltInput -> MachineState -> ComputationStep MachineState a
+halt _ machineState =
+    Halted machineState
+
+
+
+-- stack
+
+
+pushRegister : RegisterMachine.PushRegisterInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+pushRegister { sourceRegister } machineState =
+    getRegister sourceRegister machineState
+        |> fromResultAndThen (\val -> advance (machineState |> push val))
+
+
+pushConstant : RegisterMachine.PushConstantInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+pushConstant { constant } machineState =
+    advance (machineState |> push (ConstantValue constant))
+
+
+pushInstructionPointer : RegisterMachine.PushInstructionPointerInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+pushInstructionPointer { instructionPointer } machineState =
+    advance (machineState |> push (InstructionPointer instructionPointer))
+
+
+pop : RegisterMachine.PopInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+pop { targetRegister } machineState =
+    Stack.pop machineState.stack
+        |> Result.fromMaybe PoppingEmptyStack
+        |> fromResultAndThen (\( val, stack ) -> advance ({ machineState | stack = stack } |> updateRegister targetRegister val))
+
+
+
+-- memory
+
+
+constructPair : RegisterMachine.ConstructPairInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+constructPair { targetRegister, operationArgument0, operationArgument1 } memoryType machineState =
+    Result.tuple2 (machineState |> getValueFromArgument operationArgument0) (machineState |> getValueFromArgument operationArgument1)
+        |> fromResultAndThen
+            (\( value0, value1 ) ->
+                (currentMemoryState Main machineState |> MemoryState.new ( value0, value1 ))
+                    |> Result.mapError MemoryError
+                    |> fromResultAndThen
+                        (\( newPairPointer, newMemoryState ) ->
+                            advance
+                                (machineState
+                                    |> setMemoryStateOfMachine memoryType newMemoryState
+                                    |> updateRegister targetRegister (Pair newPairPointer)
+                                )
+                        )
+            )
+
+
+accessPair : MemoryCellComponent -> MemoryType -> Register -> Register -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+accessPair memoryCellComponent memoryType target source machineState =
+    machineState
+        |> getMemoryPointerAtRegister source
+        |> fromResultAndThen
+            (\pointer ->
+                machineState
+                    |> currentMemoryState memoryType
+                    |> MemoryState.get pointer
+                    |> Result.mapError MemoryError
+                    |> fromResultAndThen
+                        (\( a, b ) ->
+                            advance
+                                (machineState
+                                    |> (case memoryCellComponent of
+                                            FirstComponent ->
+                                                updateRegister target a
+
+                                            SecondComponent ->
+                                                updateRegister target b
+                                       )
+                                )
+                        )
+            )
+
+
+setPair : MemoryCellComponent -> MemoryType -> Register -> OperationArgument -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+setPair memoryCellComponent memoryType register arg machineState =
+    Result.tuple2 (machineState |> getValueFromArgument arg) (machineState |> getMemoryPointerAtRegister register)
+        |> fromResultAndThen
+            (\( val, pointer ) ->
+                advance
+                    (machineState
+                        |> setMemoryStateOfMachine
+                            memoryType
+                            (MemoryState.update pointer
+                                (\( a, b ) ->
+                                    case memoryCellComponent of
+                                        FirstComponent ->
+                                            ( val, b )
+
+                                        SecondComponent ->
+                                            ( a, val )
+                                )
+                                (machineState |> currentMemoryState memoryType)
+                            )
+                    )
+            )
+
+
+
+-- memory
+
+
+first : RegisterMachine.FirstInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+first { targetRegister, sourceRegister } memoryType machineState =
+    machineState |> accessPair FirstComponent memoryType targetRegister sourceRegister
+
+
+second : RegisterMachine.SecondInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+second { targetRegister, sourceRegister } memoryType machineState =
+    machineState |> accessPair SecondComponent memoryType targetRegister sourceRegister
+
+
+setFirst : RegisterMachine.SetFirstInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+setFirst { targetRegister, operationArgument } memoryType machineState =
+    machineState |> setPair FirstComponent memoryType targetRegister operationArgument
+
+
+setSecond : RegisterMachine.SetSecondInput -> MemoryType -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+setSecond { targetRegister, operationArgument } memoryType machineState =
+    machineState |> setPair SecondComponent memoryType targetRegister operationArgument
+
+
+
+-- garbage collection
+
+
+moveToDual : RegisterMachine.MoveToDualInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+moveToDual { targetRegister, sourceRegister } machineState =
+    machineState
+        |> getMemoryPointerAtRegister sourceRegister
+        |> fromResultAndThen
+            (\sourcePointer ->
+                machineState
+                    |> currentMemoryState Main
+                    |> MemoryState.get sourcePointer
+                    |> Result.mapError MemoryError
+                    |> Result.andThen
+                        (\memoryCell ->
+                            machineState
+                                |> currentMemoryState Dual
+                                |> MemoryState.new memoryCell
+                                |> Result.mapError MemoryError
+                        )
+                    |> fromResultAndThen
+                        (\( newPairPointer, newDualMemoryState ) ->
+                            advance
+                                (machineState
+                                    |> setDualMemoryStateOfMachine newDualMemoryState
+                                    |> updateRegister targetRegister (Pair newPairPointer)
+                                )
+                        )
+            )
+
+
+markAsMoved : RegisterMachine.MarkAsMovedInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+markAsMoved { toBeCollectedFromRegister, referenceToDualMemoryRegister } machineState =
+    Result.tuple2 (machineState |> getMemoryPointerAtRegister toBeCollectedFromRegister) (machineState |> getMemoryPointerAtRegister referenceToDualMemoryRegister)
+        |> fromResultAndThen
+            (\( pointerToBeCollected, pointerToDualMemory ) ->
+                advance
+                    (machineState
+                        |> setMemoryStateOfMachine Main
+                            (machineState
+                                |> currentMemoryState Main
+                                |> MemoryState.set pointerToBeCollected ( Moved, Pair pointerToDualMemory )
+                            )
+                    )
+            )
+
+
+swapMemory : RegisterMachine.SwapMemoryInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+swapMemory _ ({ memory } as machineState) =
+    advance { machineState | memory = { memory | memoryInUse = twoFlip memory.memoryInUse } }
+
+
+unfinished : RegisterMachine.UnfinishedInput -> MachineState -> ComputationStep r ( MachineState, ControllerChange )
+unfinished _ machineState =
+    -- TODO: What should we do?
+    --       For now just increment the instruction pointer.
+    advance machineState
+
+
+
+-- ===END individual actions===
+
+
+instructionAction : MachineInstruction -> MachineState -> ComputationStep MachineState ( MachineState, ControllerChange )
+instructionAction instruction machineState =
+    case instruction of
+        MAssignRegister input ->
+            assignRegister input machineState
+
+        MAssignInstructionPointer input ->
+            assignInstructionPointer input machineState
+
+        MAssignOperation input ->
+            assignOperation input machineState
+
+        MAssignConstant input ->
+            assignConstant input machineState
+
+        MJumpToInstructionPointer input ->
+            jumpToInstructionPointer input machineState
+
+        MJumpToInstructionPointerAtRegister input ->
+            jumpToInstructionPointerAtRegister input machineState
+
+        MJumpToInstructionPointerIf input ->
+            jumpToInstructionPointerIf input machineState
+
+        MJumpToInstructionPointerAtRegisterIf input ->
+            jumpToInstructionPointerAtRegisterIf input machineState
+
+        MHalt input ->
+            halt input machineState
+
+        MPushRegister input ->
+            pushRegister input machineState
+
+        MPushConstant input ->
+            pushConstant input machineState
+
+        MPushInstructionPointer input ->
+            pushInstructionPointer input machineState
+
+        MPop input ->
+            pop input machineState
+
+        MConstructPair input ->
+            constructPair input Main machineState
+
+        MFirst input ->
+            first input Main machineState
+
+        MSecond input ->
+            second input Main machineState
+
+        MSetFirst input ->
+            setFirst input Main machineState
+
+        MSetSecond input ->
+            setSecond input Main machineState
+
+        MDualFirst input ->
+            first input Dual machineState
+
+        MDualSecond input ->
+            second input Dual machineState
+
+        MDualSetFirst input ->
+            setFirst input Dual machineState
+
+        MDualSetSecond input ->
+            setSecond input Dual machineState
+
+        MMoveToDual input ->
+            moveToDual input machineState
+
+        MMarkAsMoved input ->
+            markAsMoved input machineState
+
+        MSwapMemory input ->
+            swapMemory input machineState
+
+        MUnfinished input ->
+            unfinished input machineState
+
+
+step : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState
+step ({ machineState, controllerState } as machine) =
+    fetchInstruction controllerState
+        |> andThen
+            (\instruction ->
+                instructionAction instruction machineState
+                    |> mapHalted
+                        (\_ -> machine)
+                    |> map
+                        (\( newMachineState, controllerChange ) ->
+                            { machine
+                                | machineState = newMachineState
+                                , controllerState = controllerChangeAction controllerChange controllerState
+                            }
+                        )
+            )
+
+
+isJumpInstruction : MachineInstruction -> Bool
+isJumpInstruction instruction =
+    case instruction of
+        MJumpToInstructionPointer _ ->
+            True
+
+        MJumpToInstructionPointerAtRegister _ ->
+            True
+
+        MJumpToInstructionPointerIf _ ->
+            True
+
+        MJumpToInstructionPointerAtRegisterIf _ ->
+            True
+
+        _ ->
+            False
+
+
+stepUntilNextJump : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState
+stepUntilNextJump machine0 =
+    step machine0
+        |> andThen
+            (\({ controllerState } as machine1) ->
+                fetchInstruction controllerState
+                    |> andThen
+                        (\instruction ->
+                            if isJumpInstruction instruction then
+                                Continue machine1
+
+                            else
+                                stepUntilNextJump machine1
+                        )
+            )
+
+
+stepUntilHalted : ControlledMachineState -> ComputationStep ControlledMachineState ControlledMachineState
+stepUntilHalted machine0 =
+    step machine0 |> andThen (\machine1 -> stepUntilHalted machine1)
+
+
+currentInstructionPointerFromComputationStep : ComputationStep ControlledMachineState ControlledMachineState -> Maybe InstructionPointer
+currentInstructionPointerFromComputationStep result =
+    case result of
+        Continue machine ->
+            Just machine.controllerState.currentInstructionPointer
+
+        Halted machine ->
+            Just machine.controllerState.currentInstructionPointer
+
+        _ ->
+            Nothing
